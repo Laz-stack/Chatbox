@@ -1,4 +1,4 @@
-import { S, activeConnection, lastMessage, textOf, named, departures, logbook, character, interchange, latestChat } from '../store.js';
+import { S, activeConnection, lastMessage, textOf, named, departures, logbook, character, interchange, latestChat, personaFor } from '../store.js';
 import { esc, ago, agoLong, plain, inkOn, luminance, boardTime, formatMessage } from '../util.js';
 import { avatarTile } from '../avatar.js';
 import { title2, bullet, avatarBullet, tabbar, icon, arrow } from '../ui.js';
@@ -14,7 +14,7 @@ export function homeView() {
     const chat = latestChat(featured.id);
     const n = chat ? chat.messages.length : 0;
     const dots = Math.max(2, Math.min(6, n));
-    const preview = plain(named(textOf(lastMessage(chat)), featured) || featured.tagline || 'Start the conversation');
+    const preview = plain(named(textOf(lastMessage(chat)), featured, 'you', personaFor(chat)) || featured.tagline || 'Start the conversation');
     // The hero is painted in the character's own line colour, with ink that reads on it.
     const lc = featured.line?.color || '#2EAA67';
     hero = `<a class="hero press" href="#/chat/${featured.id}" style="--line:${lc};--on:${inkOn(lc)};--ring:${luminance(lc) > 0.55 ? '#0A0A0A' : '#FFFFFF'}" aria-label="${started[0] ? 'Continue chatting with' : 'Start chatting with'} ${esc(featured.name)}">

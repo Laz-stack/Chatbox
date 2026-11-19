@@ -25,7 +25,9 @@ const DEFAULT_SETTINGS = {
 
 export const S = {
   settings: { ...DEFAULT_SETTINGS },
-  persona: { name: '', about: '', avatarImage: null, preset: 'kai', color: '#065BFE', useEverywhere: true },
+  // The default persona (who you are unless a chat picks someone else); all personas live in `personas`.
+  persona: { id: 'me', name: '', about: '', avatarImage: null, preset: 'kai', color: '#065BFE', useEverywhere: true },
+  personas: [],
   connections: [],
   characters: [],
   chats: new Map(),
@@ -100,6 +102,7 @@ export async function load() {
   const all = new Map(await db.entries());
   if (all.has('settings')) S.settings = { ...DEFAULT_SETTINGS, ...all.get('settings') };
   if (all.has('persona')) S.persona = { ...S.persona, ...all.get('persona') };
+  setupPersonas(all.get('personas'));
   if (all.has('fares')) S.fares = { months: {}, ...all.get('fares') };
   S.interchanges = all.get('interchanges') || [];
   S.lore = all.get('lore') || [];
@@ -143,7 +146,42 @@ async function giveChatsOwnIds() {
 }
 
 export const saveSettings = () => db.set('settings', S.settings);
-export const savePersona = () => db.set('persona', S.persona);
+export const savePersona = () => Promise.all([db.set('persona', S.persona), db.set('personas', S.personas)]);
+
+// ---------- Personas: who you play. One is the default; a chat can pick another. ----------
+function setupPersonas(list) {
+  S.persona.id ||= 'me';
+  S.personas = list?.length ? list : [S.persona];
+  S.persona = S.personas.find((p) => p.id === (S.settings.personaId || S.persona.id)) || S.personas[0];
+}
+export const personaById = (id) => S.personas.find((p) => p.id === id) || null;
+// Who you are in this chat.
+export const personaFor = (chat) => (chat?.personaId && personaById(chat.personaId)) || S.persona;
+export function newPersona() {
+  const n = S.personas.length;
+  return { id: 'p-' + uid(), name: '', about: '', avatarImage: null, preset: ['haru', 'sora', 'yui', 'ren', 'mika', 'kai'][n % 6], color: ['#065BFE', '#FB4DAA', '#2EAA67', '#B8ACFE', '#FE6500', '#E70404'][n % 6], useEverywhere: true };
+}
+export async function savePersonaEntry(p) {
+  const i = S.personas.findIndex((x) => x.id === p.id);
+  if (i >= 0) Object.assign(S.personas[i], p);
+  else S.personas.push(p);
+  await savePersona();
+}
+export async function setDefaultPersona(id) {
+  const p = personaById(id);
+  if (!p) return;
+  S.persona = p;
+  S.settings.personaId = id;
+  await Promise.all([saveSettings(), savePersona()]);
+}
+export async function deletePersona(id) {
+  if (S.personas.length < 2) return;
+  S.personas = S.personas.filter((p) => p.id !== id);
+  if (S.persona.id === id) (S.persona = S.personas[0]), (S.settings.personaId = S.persona.id);
+  const touched = [...S.chats.values()].filter((c) => c.personaId === id);
+  touched.forEach((c) => delete c.personaId);
+  await Promise.all([saveSettings(), savePersona(), ...touched.map((c) => saveChat(c, false))]);
+}
 export const saveConnections = () => db.set('connections', S.connections);
 export const saveCharacters = () => db.set('characters', S.characters);
 export const saveFares = () => db.set('fares', S.fares);
@@ -269,8 +307,8 @@ export const textOf = (m) => (m ? m.alts[m.alt] ?? '' : '');
 
 // Fill {{char}} and {{user}} (any case, spaces allowed) with real names, for showing a message.
 // Messages keep the placeholders, so renaming yourself later still shows the new name.
-export const named = (text, ch, userFallback = 'you') =>
-  (text || '').replace(/\{\{\s*char\s*\}\}/gi, ch?.name || 'Character').replace(/\{\{\s*user\s*\}\}/gi, S.persona?.name?.trim() || userFallback);
+export const named = (text, ch, userFallback = 'you', persona = S.persona) =>
+  (text || '').replace(/\{\{\s*char\s*\}\}/gi, ch?.name || 'Character').replace(/\{\{\s*user\s*\}\}/gi, persona?.name?.trim() || userFallback);
 // The shown text of a message.
 export const shownText = (m, ch) => named(textOf(m), ch);
 
@@ -363,6 +401,7 @@ export function snapshot({ includeKeys = true } = {}) {
     exportedAt: new Date().toISOString(),
     settings: S.settings,
     persona: S.persona,
+    personas: S.personas,
     connections: S.connections.map((c) => (includeKeys ? c : { ...c, apiKey: '' })),
     characters: S.characters,
     chats: [...S.chats.values()],
@@ -378,6 +417,7 @@ export async function restore(data) {
   await db.set('seeded', true);
   S.settings = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };
   S.persona = { ...S.persona, ...(data.persona || {}) };
+  setupPersonas(data.personas);
   S.connections = data.connections || [];
   S.characters = data.characters || [];
   S.fares = { months: {}, ...(data.fares || {}) };

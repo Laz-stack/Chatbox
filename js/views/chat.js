@@ -1,4 +1,4 @@
-import { S, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, named, resetChat, recordFare, interchange, isInterchangeId, chatsFor, startNewChat, deleteChat, blankCharacter, saveInterchange } from '../store.js';
+import { S, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, named, resetChat, recordFare, interchange, isInterchangeId, chatsFor, startNewChat, deleteChat, blankCharacter, saveInterchange, personaFor, personaById } from '../store.js';
 import { STEER, parseScene, resolveSpeaker, passengersIn, demoScene } from '../scene.js';
 import { complete, PROVIDERS } from '../providers.js';
 import { buildPrompt } from '../prompt.js';
@@ -57,7 +57,9 @@ export async function chatView(id, focusId = null) {
   if (!ch) return null;
   const speakerOf = (m) => (ix ? ix.people.find((p) => p.id === m?.speaker) || ix.people[0] : ch);
   const group = ix ? { people: ix.people, scene: ix.scene, mode: ix.mode || 'turns', passengers: ix.passengers !== false } : null;
-  const youWho = () => ({ name: S.persona.name?.trim() || 'You', preset: S.persona.preset, avatarImage: S.persona.avatarImage, line: { color: '#FDCD15' } });
+  // Who you are in this chat (its own pick, else your default persona).
+  const me = () => personaFor(chat);
+  const youWho = () => ({ name: me().name?.trim() || 'You', preset: me().preset, avatarImage: me().avatarImage, line: { color: '#FDCD15' } });
   const chat = await getChat(id);
   if (!chat) return null;
   let ctl = null;
@@ -118,7 +120,7 @@ export async function chatView(id, focusId = null) {
       return pager || read || lore ? `<div class="msg-tools">${pager}${read}${lore}</div>` : '';
     }
     // ---------- Carriage: the story layout ----------
-    const fillS = (t, who) => named(t, who || ix.people[0]);
+    const fillS = (t, who) => named(t, who || ix.people[0], 'you', me());
     // One block's markup; data-k lets the streamer update a block in place instead of rebuilding it.
     function blockHTML(r, text, { by = false, save = false } = {}) {
       if (r.kind === 'narr') return `<p class="scn-narr" data-k="narr">${formatMessage(fillS(text))}</p>`;
@@ -132,7 +134,7 @@ export async function chatView(id, focusId = null) {
       const shown = new Set();
       return parseScene(text).map((b) => {
         if (b.kind === 'narr') return blockHTML({ kind: 'narr' }, b.text);
-        const r = resolveSpeaker(b.name, ix.people, S.persona.name);
+        const r = resolveSpeaker(b.name, ix.people, me().name);
         let save = false;
         if (r.kind === 'passenger' && m) {
           const key = r.name.toLowerCase();
@@ -192,10 +194,10 @@ export async function chatView(id, focusId = null) {
       if (scene) return sceneMsgHTML(m, i, enter);
       const cls = `msg ${m.role === 'user' ? 'user' : 'ai'}${enter ? ' enter' : ''}`;
       const star = m.star ? `<span class="star-b" title="In your Logbook">${icon('star', 13)}</span>` : '';
-      if (m.role === 'user') return `<div class="${cls}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="bubble">${formatMessage(named(textOf(m), ch))}${star}</div></div>`;
+      if (m.role === 'user') return `<div class="${cls}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="bubble">${formatMessage(named(textOf(m), ch, 'you', me()))}${star}</div></div>`;
       const sp = speakerOf(m);
       const tag = ix ? `<span class="spk-tag" style="--c:${sp.line?.color || '#2EAA67'};--ink:${inkOn(sp.line?.color || '#2EAA67')}">${esc(sp.name)}</span>` : '';
-      return `<div class="${cls}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}">${avatarTile(sp, 30, { expr: m.mood || 'happy', radius: 10, cls: 'msg-av' })}<div class="msg-col"><div class="bubble">${tag}${formatMessage(named(textOf(m), sp))}${star}</div>${toolsHTML(m, i)}</div></div>`;
+      return `<div class="${cls}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}">${avatarTile(sp, 30, { expr: m.mood || 'happy', radius: 10, cls: 'msg-av' })}<div class="msg-col"><div class="bubble">${tag}${formatMessage(named(textOf(m), sp, 'you', me()))}${star}</div>${toolsHTML(m, i)}</div></div>`;
     }
     function renderAll() {
       const cut = chat.summary?.upto || 0;
@@ -279,7 +281,7 @@ export async function chatView(id, focusId = null) {
     function updateTokens() {
       const c = connectionFor(ch);
       const who = ix ? speakerOf({ speaker: chat.next && chat.next !== 'either' ? chat.next : ix.people[0].id }) : ch;
-      const b = buildPrompt({ char: who, chat, conn: c, settings: S.settings, persona: S.persona, group });
+      const b = buildPrompt({ char: who, chat, conn: c, settings: S.settings, persona: me(), group });
       root.querySelector('#tokN').textContent = fmtNum(b.total);
     }
     function setBusy(v) {
@@ -316,7 +318,7 @@ export async function chatView(id, focusId = null) {
       const sp = speakerOf(target);
       // In demo mode a Carriage gets a canned scene in the right format.
       const asked = scene ? { ...sp, name: ix.title, demoText: (last) => demoScene(ix.people.map((p) => p.name), last) } : sp;
-      const built = buildPrompt({ char: sp, chat, conn, settings: S.settings, persona: S.persona, upto, mode, group });
+      const built = buildPrompt({ char: sp, chat, conn, settings: S.settings, persona: me(), upto, mode, group });
 
       // Prepare the bubble.
       let el = log.querySelector(`.msg[data-i="${idx}"]`);
@@ -401,7 +403,7 @@ export async function chatView(id, focusId = null) {
         if (scene) {
           // Side characters who spoke for the first time become passengers (they can be saved as lines).
           chat.passengers ||= [];
-          for (const n of passengersIn(text, ix.people, S.persona.name))
+          for (const n of passengersIn(text, ix.people, me().name))
             if (!chat.passengers.some((x) => x.name.toLowerCase() === n.toLowerCase())) chat.passengers.push({ name: n, first: target.id });
           renderAboard();
         }
@@ -431,7 +433,7 @@ export async function chatView(id, focusId = null) {
       if (!ix && !error && S.settings.autoSummary && shouldSummarize(chat, conn)) {
         setStatus('summary');
         try {
-          await summarize({ chat, char: ch, conn, persona: S.persona });
+          await summarize({ chat, char: ch, conn, persona: me() });
           if (!destroyed) renderAll(), toBottom();
         } catch (e) {
           console.warn('summary failed', e);
@@ -651,6 +653,7 @@ export async function chatView(id, focusId = null) {
               { icon: 'layers', label: 'Final prompt', on: () => (location.hash = `#/final/${chat.id}`) },
               { icon: 'download', label: 'Export card (PNG)', on: async () => download(await exportCardPng(ch), slug(ch.name) + '.card.png') },
             ]),
+        { icon: 'user', label: `You: ${me().name?.trim() || 'You'}`, on: personaSheet },
         '-',
         ...(ix
           ? []
@@ -688,6 +691,39 @@ export async function chatView(id, focusId = null) {
         }]),
       ])
     );
+
+    // ---------- who you are in this chat ----------
+    function personaSheet() {
+      const rows = () =>
+        S.personas
+          .map((p) => {
+            const on = p.id === me().id;
+            return `<button type="button" class="rider prow pick-p press${on ? ' on' : ''}" role="radio" aria-checked="${on}" data-pid="${p.id}">${avatarBullet(p, 44)}<span class="nm">${esc(p.name || 'You')}<small>${p.id === S.persona.id ? 'Your default · follows if you change it' : esc(p.about?.trim().slice(0, 50) || 'Persona')}</small></span>${on ? `<span class="def-chip">${icon('check', 14)}This chat</span>` : ''}</button>`;
+          })
+          .join('');
+      openSheet({
+        label: 'Who you are in this chat',
+        html: `<h2 class="sheet-title">Who you are here</h2><p class="sheet-p">Characters in this chat see this persona. Other chats keep their own.</p><div class="plist" role="radiogroup" aria-label="Persona" id="pl">${rows()}</div><a class="dashed press" href="#/persona" data-close style="margin-top:12px">${icon('user', 20)}Manage personas</a>`,
+        onMount(s, close) {
+          s.querySelector('[data-close]').addEventListener('click', () => close());
+          s.querySelector('#pl').addEventListener('click', async (e) => {
+            const b = e.target.closest('[data-pid]');
+            if (!b) return;
+            const id = b.dataset.pid;
+            if (id === S.persona.id) delete chat.personaId;
+            else chat.personaId = id;
+            await saveChat(chat, false);
+            s.querySelector('#pl').innerHTML = rows();
+            renderAll();
+            renderAboard();
+            setSpeakAs?.(speakAs);
+            updateTokens();
+            close();
+            toast(`You’re ${me().name?.trim() || 'yourself'} in this chat.`);
+          });
+        },
+      });
+    }
 
     // ---------- several chats with one character ----------
     async function newChatHere() {

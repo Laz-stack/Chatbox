@@ -1,4 +1,4 @@
-import { S, activeConnection, saveSettings, savePersona, snapshot, restore, saveCharacter, newChat, saveChat, isPersistent } from '../store.js';
+import { S, activeConnection, saveSettings, savePersona, personaById, newPersona, savePersonaEntry, setDefaultPersona, deletePersona, snapshot, restore, saveCharacter, newChat, saveChat, isPersistent } from '../store.js';
 import { readCardFile, exportAllCardsJson } from '../cards.js';
 import { esc, download, resizeImage } from '../util.js';
 import { avatarTile, avatarSVG, PRESETS, PRESET_KEYS } from '../avatar.js';
@@ -35,7 +35,7 @@ export function settingsView() {
   const v = ttsSupported ? voices().find((x) => x.voiceURI === S.settings.voiceURI) : null;
   const html = `<div class="screen">
     ${title2('Depot', 'Your setup')}
-    <a class="rider press" href="#/persona" style="margin-top:16px">${avatarTile(S.persona, 62, { radius: 18, rot: -3 })}<span class="nm">${esc(S.persona.name || 'You')}<small>Your persona in every chat</small></span>${bullet(arrow(20, '#ECECEC'), '#0A0A0A', '#ECECEC', 44)}</a>
+    <a class="rider press" href="#/persona" style="margin-top:16px">${avatarTile(S.persona, 62, { radius: 18, rot: -3 })}<span class="nm">${esc(S.persona.name || 'You')}<small>${S.personas.length > 1 ? `Default · ${S.personas.length} personas` : 'Your persona in every chat'}</small></span>${bullet(arrow(20, '#ECECEC'), '#0A0A0A', '#ECECEC', 44)}</a>
     <h2 class="sec">AI</h2>
     ${group(
       row({ href: '#/connections', ic: 'link', title: 'Connections', sub: conn ? `${esc(conn.name)} · ${esc(conn.provider === 'demo' ? 'demo replies' : conn.model)}` : 'None yet' }),
@@ -80,10 +80,35 @@ export function settingsView() {
   };
 }
 
-export function personaView() {
-  const d = structuredClone(S.persona);
+// Everyone you can play. The default is used in every chat that hasn't picked someone else.
+export function personasView() {
+  const used = (id) => [...S.chats.values()].filter((c) => c.personaId === id).length;
+  const card = (p) => {
+    const def = p.id === S.persona.id;
+    const n = used(p.id);
+    const about = p.about?.trim().slice(0, 60);
+    const sub = def ? about || 'Used in every chat' : [n ? `In ${n} chat${n === 1 ? '' : 's'}` : 'Not in any chat yet', about].filter(Boolean).join(' · ');
+    return `<a class="rider prow press" href="#/persona/${p.id}">${avatarTile(p, 56, { radius: 16, rot: -3 })}<span class="nm">${esc(p.name || 'You')}<small>${esc(sub)}</small></span>${def ? '<span class="def-chip">Default</span>' : ''}${icon('chev', 20)}</a>`;
+  };
   const html = `<div class="screen no-tab">
-    ${topbar({ back: '#/settings', title: 'Your persona' })}
+    ${topbar({ back: '#/settings', right: `<a class="ibtn yellow press" href="#/persona/new" aria-label="New persona">${icon('plus')}</a>` })}
+    ${title2('Riders', 'Your personas')}
+    <p class="lore-intro">Each chat uses your default persona unless you pick another from the chat's menu.</p>
+    <div class="plist">${S.personas.map(card).join('')}</div>
+    <a class="dashed press" href="#/persona/new" style="margin-top:12px">${icon('plus', 20)}New persona</a>
+  </div>`;
+  return { html, depth: 1 };
+}
+
+export function personaView(id = S.persona.id) {
+  const isNew = id === 'new';
+  const src = isNew ? newPersona() : personaById(id);
+  if (!src) return null;
+  const d = structuredClone(src);
+  const wasDefault = !isNew && d.id === S.persona.id;
+  let makeDefault = wasDefault;
+  const html = `<div class="screen no-tab">
+    ${topbar({ back: '#/persona', title: isNew ? 'New persona' : 'Persona', right: !isNew && S.personas.length > 1 ? `<button type="button" class="ibtn press" id="delP" aria-label="Delete persona">${icon('trash')}</button>` : '' })}
     <div class="stack" style="gap:16px">
       <div class="pcard">
         <span class="deco">${arrow(170, '#0A0A0A', 90)}</span>
@@ -92,9 +117,10 @@ export function personaView() {
       </div>
       ${field('pNameIn', 'Name', d.name, { ph: 'What characters call you', attrs: 'maxlength="40" autocomplete="off"' })}
       ${area('pAbout', 'About you', d.about, { rows: 4, ph: 'A quiet student who studies at the cafe by the window…', right: '<span class="counter" id="pCount"></span>' })}
-      ${toggleRow('tEvery', 'Use in every chat', 'Characters learn your name and description', d.useEverywhere)}
+      <div class="${wasDefault ? 'locked-row' : ''}">${toggleRow('tDefault', 'Default persona', wasDefault ? 'This is your default. To change it, open another persona and make it the default.' : 'Make this who you are in every chat that hasn’t picked someone else.', makeDefault)}</div><div>
+      ${toggleRow('tEvery', 'Tell characters about me', 'Send your name and description with each reply.', d.useEverywhere)}</div>
     </div>
-    <div class="sticky-cta"><button type="button" class="btn-primary press" id="saveBtn"><span>Save persona</span>${arrow(30)}</button></div>
+    <div class="sticky-cta"><button type="button" class="btn-primary press" id="saveBtn"><span>${isNew ? 'Add persona' : 'Save persona'}</span>${arrow(30)}</button></div>
   </div>`;
   return {
     html,
@@ -110,6 +136,17 @@ export function personaView() {
       });
       $('#pAbout').addEventListener('input', (e) => ((d.about = e.target.value), cnt()));
       bindSwitch($('#tEvery'), (v) => (d.useEverywhere = v));
+      // The default can't be switched off here; another persona takes over by becoming the default.
+      if (wasDefault) $('#tDefault').setAttribute('aria-disabled', 'true');
+      else bindSwitch($('#tDefault'), (v) => (makeDefault = v));
+      $('#delP')?.addEventListener('click', async () => {
+        if (wasDefault) return toast('This is your default. Make another persona the default first.', { kind: 'err' });
+        const n = [...S.chats.values()].filter((c) => c.personaId === d.id).length;
+        if (!(await confirmSheet({ title: `Delete ${esc(d.name || 'this persona')}?`, body: n ? `${n} chat${n === 1 ? '' : 's'} will switch to your default persona.` : 'No chats use this persona.', ok: 'Delete', danger: true }))) return;
+        await deletePersona(d.id);
+        toast('Persona deleted');
+        location.hash = '#/persona';
+      });
       $('#avBtn').addEventListener('click', () =>
         openSheet({
           label: 'Picture',
@@ -135,10 +172,11 @@ export function personaView() {
       );
       $('#saveBtn').addEventListener('click', async () => {
         d.name = d.name.trim();
-        Object.assign(S.persona, d);
-        await savePersona();
-        toast('Persona saved');
-        location.hash = '#/settings';
+        if (!d.name && S.personas.length > (isNew ? 0 : 1)) return toast('Give this persona a name so you can tell them apart.', { kind: 'err' });
+        await savePersonaEntry(d);
+        if (makeDefault && !wasDefault) await setDefaultPersona(d.id);
+        toast(isNew ? 'Persona added' : 'Persona saved');
+        location.hash = '#/persona';
       });
     },
   };
