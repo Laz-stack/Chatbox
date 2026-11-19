@@ -4,7 +4,7 @@ import { compileSheet } from './blueprint.js';
 // and writes V2 cards as JSON or as a PNG with the card embedded.
 import { blankCharacter, LINE_COLORS, S } from './store.js';
 import { resizeImage } from './util.js';
-import { avatarSVG } from './avatar.js';
+import { avatarSVG, faceSVG } from './avatar.js';
 
 const CRC = (() => {
   const t = new Uint32Array(256);
@@ -143,7 +143,7 @@ export async function readCardFile(file) {
 }
 
 async function avatarPngBlob(ch, size = 512) {
-  const src = ch.avatarImage || 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(avatarSVG(ch.preset, size, 'happy', ch.line.color));
+  const src = ch.avatarImage || 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(faceSVG(ch, size, 'happy', ch.line.color));
   const img = await new Promise((res, rej) => {
     const i = new Image();
     i.onload = () => res(i);
