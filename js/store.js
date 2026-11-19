@@ -17,7 +17,9 @@ const DEFAULT_SETTINGS = {
   voiceURI: '',
   remindBackup: true,
   lastBackup: null,
-  includeKeysInBackup: true,
+  includeKeysInBackup: false,
+  seenChatTips: false,
+  migrated: 0,
 };
 
 export const S = {
@@ -101,6 +103,13 @@ export async function load() {
     if (!S.characters.length) S.characters = [seedCharacter()];
     S.settings.activeConnectionId = S.connections[0].id;
     await Promise.all([saveConnections(), saveCharacters(), saveSettings(), db.set('seeded', true)]);
+  }
+  // One-time: API keys used to go into backups by default. Turn that off for existing data too
+  // (it can be switched back on in Backup); people share backup files more often than they think.
+  if ((S.settings.migrated || 0) < 1) {
+    S.settings.includeKeysInBackup = false;
+    S.settings.migrated = 1;
+    await saveSettings();
   }
   if (!S.connections.find((c) => c.id === S.settings.activeConnectionId)) {
     S.settings.activeConnectionId = S.connections[0]?.id || null;

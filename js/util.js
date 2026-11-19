@@ -58,6 +58,13 @@ export const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
 export const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+// Element.animate that does nothing (but still resolves) when the user asks for reduced motion.
+export function motion(el, frames, opts) {
+  if (!el || reducedMotion()) return { finished: Promise.resolve() };
+  return el.animate(frames, opts);
+}
+export const EASE_OUT = 'cubic-bezier(.16,1,.3,1)';
+
 // Roleplay formatting: *actions* in italics, line breaks kept.
 export function formatMessage(text) {
   return esc(text || '')
@@ -91,6 +98,9 @@ export function luminance(hex) {
 }
 // Text colour that reads on a given background.
 export const inkOn = (bg) => (luminance(bg) > 0.22 ? '#0A0A0A' : '#FFFFFF');
+// Accent for small marks (caret, status dot) drawn on the cream bubble or the black ground:
+// the character's line colour, unless it is too pale to see against cream.
+export const lineAccent = (c) => (c && luminance(c) < 0.45 ? c : '#E70404');
 
 export function hashStr(s) {
   let h = 2166136261;

@@ -5,6 +5,31 @@ import { avatarTile, avatarSVG, PRESETS, PRESET_KEYS } from '../avatar.js';
 import { ttsSupported, voices, speak } from '../tts.js';
 import { title2, topbar, group, row, sw, bindSwitch, field, area, toggleRow, bullet, icon, arrow, tabbar, openSheet, openMenu, toast, confirmSheet } from '../ui.js';
 
+// Import character cards (PNG or JSON) from a file input; used on Home and on Backup.
+export async function importCardFiles(input) {
+  const added = [];
+  for (const f of input.files) {
+    try {
+      const r = await readCardFile(f);
+      for (const ch of [].concat(r)) {
+        await saveCharacter(ch);
+        await saveChat(newChat(ch.id));
+        added.push(ch);
+      }
+    } catch (err) {
+      toast(`${f.name}: ${err.message}`, { kind: 'err', ms: 5000 });
+    }
+  }
+  input.value = '';
+  if (added.length === 1) {
+    toast(`${added[0].name} imported`);
+    location.hash = `#/edit/${added[0].id}`;
+  } else if (added.length) {
+    toast(`${added.length} characters imported`);
+    if (location.hash === '#/' || !location.hash) dispatchEvent(new HashChangeEvent('hashchange'));
+  }
+}
+
 export function settingsView() {
   const conn = activeConnection();
   const v = ttsSupported ? voices().find((x) => x.voiceURI === S.settings.voiceURI) : null;
@@ -125,7 +150,7 @@ export function backupView() {
     <div class="stack">
       <button type="button" class="exitsign press" id="exportAll"><span class="big">Export<span>everything</span></span>${arrow(78, '#FFFFFF', 135)}<span class="sz num">${kb >= 1024 ? (kb / 1024).toFixed(1) + ' MB' : kb + ' KB'}</span></button>
       <div style="display:flex;justify-content:space-between;padding:0 4px" class="small"><span>${S.settings.lastBackup ? 'Last backup ' + new Date(S.settings.lastBackup).toLocaleString() : 'No backup yet'}</span><span>Chats, cards, settings</span></div>
-      ${toggleRow('tKeys', 'Include API keys', 'Turn off before sharing the file with anyone', S.settings.includeKeysInBackup)}
+      ${toggleRow('tKeys', 'Include API keys', 'Off by default. Turn on only for a copy you keep to yourself.', S.settings.includeKeysInBackup)}
       <div class="note">${icon('shield', 18)}<span>Everything lives only in this browser. Clearing site data erases it, so export a backup now and then.</span></div>
       <div><div class="hrow"><h2 class="h">Restore</h2></div>
         <label class="drop" id="drop">${bullet(arrow(18, '#0A0A0A', -45), '#FDCD15', '#0A0A0A', 40)}<b>Drop a backup file here</b><span class="pill">Choose file</span><input type="file" accept=".json,application/json" id="restoreIn" class="vh"></label></div>
@@ -147,11 +172,11 @@ export function backupView() {
       bindSwitch($('#tKeys'), (v) => ((S.settings.includeKeysInBackup = v), saveSettings()));
       bindSwitch($('#tRemind'), (v) => ((S.settings.remindBackup = v), saveSettings()));
       $('#exportAll').addEventListener('click', async () => {
-        S.settings.lastBackup = Date.now();
-        await saveSettings();
         const data = snapshot({ includeKeys: S.settings.includeKeysInBackup });
         download(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), `chatbox-backup-${new Date().toISOString().slice(0, 10)}.json`);
-        toast('Backup downloaded');
+        S.settings.lastBackup = Date.now();
+        await saveSettings();
+        toast(S.settings.includeKeysInBackup ? 'Backup downloaded, with API keys' : 'Backup downloaded (API keys left out)');
       });
       $('#exportCards').addEventListener('click', () => download(exportAllCardsJson(), 'chatbox-cards.json'));
 
@@ -183,26 +208,7 @@ export function backupView() {
         if (f) doRestore(f);
       });
 
-      $('#cardIn').addEventListener('change', async (e) => {
-        let added = [];
-        for (const f of e.target.files) {
-          try {
-            const r = await readCardFile(f);
-            for (const ch of [].concat(r)) {
-              await saveCharacter(ch);
-              await saveChat(newChat(ch.id));
-              added.push(ch);
-            }
-          } catch (err) {
-            toast(`${f.name}: ${err.message}`, { kind: 'err', ms: 5000 });
-          }
-        }
-        if (added.length === 1) {
-          toast(`${added[0].name} imported`);
-          location.hash = `#/edit/${added[0].id}`;
-        } else if (added.length) toast(`${added.length} characters imported`);
-        e.target.value = '';
-      });
+      $('#cardIn').addEventListener('change', (e) => importCardFiles(e.target));
     },
   };
 }
