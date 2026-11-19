@@ -31,6 +31,7 @@ export const S = {
   chats: new Map(),
   fares: { months: {} },
   interchanges: [],
+  lore: [],
 };
 
 export function newConnection(provider = 'anthropic') {
@@ -101,6 +102,7 @@ export async function load() {
   if (all.has('persona')) S.persona = { ...S.persona, ...all.get('persona') };
   if (all.has('fares')) S.fares = { months: {}, ...all.get('fares') };
   S.interchanges = all.get('interchanges') || [];
+  S.lore = all.get('lore') || [];
   S.connections = all.get('connections') || [];
   S.characters = all.get('characters') || [];
   S.chats = new Map();
@@ -146,6 +148,32 @@ export const saveConnections = () => db.set('connections', S.connections);
 export const saveCharacters = () => db.set('characters', S.characters);
 export const saveFares = () => db.set('fares', S.fares);
 export const saveInterchanges = () => db.set('interchanges', S.interchanges);
+export const saveLore = () => db.set('lore', S.lore);
+
+// ---------- Lorebook: world info that joins the prompt when its keywords come up ----------
+export const newLore = () => ({ id: 'lore-' + uid(), title: '', keys: [], text: '', scope: 'all', lines: [], always: false, on: true, createdAt: Date.now() });
+export const loreEntry = (id) => S.lore.find((e) => e.id === id) || null;
+export async function saveLoreEntry(e) {
+  const i = S.lore.findIndex((x) => x.id === e.id);
+  if (i >= 0) S.lore[i] = e;
+  else S.lore.unshift(e);
+  await saveLore();
+}
+export async function deleteLoreEntry(id) {
+  S.lore = S.lore.filter((e) => e.id !== id);
+  await saveLore();
+}
+const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// Entries for these characters whose keywords appear in `text` (whole words, any case), plus always-on ones.
+export function matchLore(text, lineIds) {
+  const t = (text || '').toLowerCase();
+  return S.lore.filter((e) => {
+    if (!e.on || !e.text?.trim()) return false;
+    if (e.scope === 'lines' && !e.lines.some((id) => lineIds.includes(id))) return false;
+    if (e.always) return true;
+    return e.keys.some((k) => k.trim() && new RegExp(`(^|[^\\p{L}\\p{N}])${escRe(k.trim().toLowerCase())}($|[^\\p{L}\\p{N}])`, 'u').test(t));
+  });
+}
 
 // ---------- Interchanges: group chats where 2–3 lines meet ----------
 export const isInterchangeId = (id) => typeof id === 'string' && id.startsWith('ix-');
@@ -340,6 +368,7 @@ export function snapshot({ includeKeys = true } = {}) {
     chats: [...S.chats.values()],
     fares: S.fares,
     interchanges: S.interchanges,
+    lore: S.lore,
   };
 }
 
@@ -353,6 +382,7 @@ export async function restore(data) {
   S.characters = data.characters || [];
   S.fares = { months: {}, ...(data.fares || {}) };
   S.interchanges = data.interchanges || [];
+  S.lore = data.lore || [];
   S.chats = new Map();
   for (const c of data.chats || []) S.chats.set((c.id ||= c.characterId), c);
   for (const c of [...S.chats.values()])
@@ -364,6 +394,7 @@ export async function restore(data) {
     saveCharacters(),
     saveFares(),
     saveInterchanges(),
+    saveLore(),
     ...[...S.chats.values()].map((c) => db.set('chat:' + c.id, c)),
   ]);
 }

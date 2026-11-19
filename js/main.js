@@ -9,6 +9,7 @@ import { settingsView, personaView, backupView } from './views/settings.js';
 import { linesView } from './views/lines.js';
 import { faresView } from './views/fares.js';
 import { interchangeView } from './views/interchange.js';
+import { loreListView, loreEditView } from './views/lore.js';
 import { openBuildSheet } from './build.js';
 import { reducedMotion } from './util.js';
 import { toast, closeOverlays } from './ui.js';
@@ -20,6 +21,8 @@ const routes = [
   [/^#\/chat\/([^/]+)(?:\/m\/([^/]+))?$/, (id, m) => chatView(decodeURIComponent(id), m && decodeURIComponent(m))],
   [/^#\/lines(?:\/(\w+))?$/, (f) => linesView(f)],
   [/^#\/fares$/, () => faresView()],
+  [/^#\/lore$/, () => loreListView()],
+  [/^#\/lore\/([^/]+)$/, (id) => loreEditView(decodeURIComponent(id))],
   [/^#\/interchange\/([^/]+)$/, (id) => interchangeView(decodeURIComponent(id))],
   [/^#\/edit\/([^/]+)$/, (id) => editorView(decodeURIComponent(id))],
   [/^#\/settings$/, () => settingsView()],

@@ -2,7 +2,7 @@
 // 1 Global prompt, 2 Connection prompt, 3 Character persona, 4 Your persona,
 // 5 Notes and summary, then the chat history (trimmed to fit the context size).
 import { estimateTokens } from './util.js';
-import { textOf } from './store.js';
+import { textOf, matchLore } from './store.js';
 import { PROVIDERS } from './providers.js';
 import { compileSheet } from './blueprint.js';
 
@@ -39,6 +39,13 @@ export function buildPrompt({ char, chat, conn, settings, persona, upto = null, 
       text: `You are talking with ${persona.name?.trim() || 'the user'}.` + (persona.about?.trim() ? ` About them: ${m(persona.about)}` : ''),
     });
   }
+
+  // Lorebook: entries whose keywords appear in the recent chat (or that are always on).
+  const end0 = upto == null ? chat.messages.length : upto;
+  const recent = chat.messages.slice(Math.max(0, end0 - 8), end0).map((x) => textOf(x)).join('\n');
+  const lineIds = group ? group.people.map((p) => p.id) : [char.id];
+  const lore = matchLore(recent, lineIds).slice(0, 12);
+  if (lore.length) layers.push({ key: 'lore', name: 'Lorebook', text: lore.map((e) => (e.title?.trim() ? `${e.title.trim()}: ` : '') + m(e.text)).join('\n\n') });
 
   const memory = [];
   if (chat.summary?.text) memory.push('Story so far:\n' + chat.summary.text.trim());
@@ -100,6 +107,7 @@ export function buildPrompt({ char, chat, conn, settings, persona, upto = null, 
     messages: merged,
     layers,
     histTokens,
+    loreIds: lore.map((e) => e.id),
     histCount: merged.length,
     total: sysTokens + histTokens,
   };
