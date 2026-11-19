@@ -1,6 +1,6 @@
 // Lines: every character (and later every Interchange), all departures, the full Logbook,
 // and a search across names, taglines and every message in every chat.
-import { S, textOf, departures, logbook, character, lastMessage, interchange, latestChat, chatsFor } from '../store.js';
+import { S, textOf, named, departures, logbook, character, lastMessage, interchange, latestChat, chatsFor } from '../store.js';
 import { esc, ago, agoLong, plain, inkOn, debounce, formatMessage } from '../util.js';
 import { title2, avatarBullet, tabbar, icon } from '../ui.js';
 
@@ -31,13 +31,13 @@ function ixRow(ix) {
 
 function departureRow({ c, chat, ix }) {
   if (ix) return ixRow(ix);
-  return `<a class="ix press" href="#/chat/${chat.id}" style="${colorVars(c)}" aria-label="Chat with ${esc(c.name)}">${avatarBullet(c, 44, '', `line:${c.id}`)}<span class="row-tx"><span class="row-t">${esc(c.name)}</span><span class="row-s">${esc(plain(textOf(lastMessage(chat))))}</span></span><span class="ix-t num">${ago(chat.updatedAt)}</span></a>`;
+  return `<a class="ix press" href="#/chat/${chat.id}" style="${colorVars(c)}" aria-label="Chat with ${esc(c.name)}">${avatarBullet(c, 44, '', `line:${c.id}`)}<span class="row-tx"><span class="row-t">${esc(c.name)}</span><span class="row-s">${esc(plain(named(textOf(lastMessage(chat)), c)))}</span></span><span class="ix-t num">${ago(chat.updatedAt)}</span></a>`;
 }
 
 function starRow({ chat, m }) {
   const c = character(m.speaker) || character(chat.characterId) || interchange(chat.characterId)?.people[0];
   if (!c) return '';
-  const t = textOf(m);
+  const t = named(textOf(m), c);
   return `<a class="stub press" href="#/chat/${chat.id}/m/${m.id}" style="${colorVars(c)}"><span class="stub-l">${avatarBullet(c, 32)}</span><span class="stub-r"><span class="stub-m"><b>${esc(c.name)}</b><span>${agoLong(m.star)}</span></span><span class="stub-p">${formatMessage(t.length > 240 ? t.slice(0, 237) + '…' : t)}</span></span></a>`;
 }
 
@@ -61,7 +61,7 @@ function searchResults(q) {
     const r = { id: chat.id, c: character(chat.characterId), ix: ixr };
     if (!r.c && !r.ix) continue;
     for (const m of chat.messages) {
-      const t = textOf(m);
+      const t = named(textOf(m), r.c || character(m.speaker) || r.ix?.people[0]);
       if (!t.toLowerCase().includes(ql)) continue;
       const c = r.c || character(m.speaker) || r.ix.people[0];
       hits.push({ c, m, t, room: r.id, where: r.ix ? r.ix.title : c.name });

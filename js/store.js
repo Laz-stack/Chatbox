@@ -236,6 +236,13 @@ export async function deleteConnection(id) {
 // Messages keep every alternate reply in `alts`; `alt` is the one shown.
 export const textOf = (m) => (m ? m.alts[m.alt] ?? '' : '');
 
+// Fill {{char}} and {{user}} (any case, spaces allowed) with real names, for showing a message.
+// Messages keep the placeholders, so renaming yourself later still shows the new name.
+export const named = (text, ch, userFallback = 'you') =>
+  (text || '').replace(/\{\{\s*char\s*\}\}/gi, ch?.name || 'Character').replace(/\{\{\s*user\s*\}\}/gi, S.persona?.name?.trim() || userFallback);
+// The shown text of a message.
+export const shownText = (m, ch) => named(textOf(m), ch);
+
 // A character can have many chats, each "<characterId>~<random>", so a character id always means
 // "their most recent chat" and a chat id always means that exact chat. An interchange's chat keeps its id.
 export function newChat(charId, id = charId.startsWith('ix-') ? charId : `${charId}~${uid()}`) {

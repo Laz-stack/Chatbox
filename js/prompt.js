@@ -6,7 +6,7 @@ import { textOf } from './store.js';
 import { PROVIDERS } from './providers.js';
 
 export const macro = (t, ch, persona) =>
-  (t || '').replaceAll('{{char}}', ch?.name || 'Character').replaceAll('{{user}}', persona?.name?.trim() || 'the user');
+  (t || '').replace(/\{\{\s*char\s*\}\}/gi, ch?.name || 'Character').replace(/\{\{\s*user\s*\}\}/gi, persona?.name?.trim() || 'the user');
 
 // group: { people: [characters], scene: '' } when this reply is one speaker inside an Interchange.
 export function buildPrompt({ char, chat, conn, settings, persona, upto = null, mode = 'reply', group = null }) {
@@ -57,9 +57,11 @@ export function buildPrompt({ char, chat, conn, settings, persona, upto = null, 
     .slice(start, end)
     .filter((x) => !x.error)
     .map((x) => {
-      if (!group) return { role: x.role, content: textOf(x) };
-      if (x.role === 'assistant' && x.speaker === char.id) return { role: 'assistant', content: textOf(x) };
-      return { role: 'user', content: `${x.role === 'user' ? you : nameOf(x.speaker)}: ${textOf(x)}` };
+      const own = group?.people.find((p) => p.id === x.speaker) || char;
+      const t = macro(textOf(x), own, persona);
+      if (!group) return { role: x.role, content: t };
+      if (x.role === 'assistant' && x.speaker === char.id) return { role: 'assistant', content: t };
+      return { role: 'user', content: `${x.role === 'user' ? you : nameOf(x.speaker)}: ${t}` };
     });
 
   const budget = Math.max(1000, (conn?.context || 16000) - (conn?.maxTokens || 600) - sysTokens);
