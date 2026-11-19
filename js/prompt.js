@@ -4,6 +4,7 @@
 import { estimateTokens } from './util.js';
 import { textOf } from './store.js';
 import { PROVIDERS } from './providers.js';
+import { compileSheet } from './blueprint.js';
 
 export const macro = (t, ch, persona) =>
   (t || '').replace(/\{\{\s*char\s*\}\}/gi, ch?.name || 'Character').replace(/\{\{\s*user\s*\}\}/gi, persona?.name?.trim() || 'the user');
@@ -17,7 +18,8 @@ export function buildPrompt({ char, chat, conn, settings, persona, upto = null, 
   if (useGlobal && settings.globalPrompt?.trim()) layers.push({ key: 'global', name: 'Global prompt', text: m(settings.globalPrompt) });
   if (conn?.prompt?.trim()) layers.push({ key: 'connection', name: 'Connection prompt', text: m(conn.prompt) });
 
-  const personaText = [m(char.persona) || `You are ${char.name}.`, char.tagline ? `${char.name} in a few words: ${char.tagline}.` : '']
+  // The Blueprint sheet (if filled) plus Extra notes; older characters are just their prompt text.
+  const personaText = [m(compileSheet(char)) || `You are ${char.name}.`, char.tagline ? `${char.name} in a few words: ${char.tagline}.` : '']
     .filter(Boolean)
     .join('\n');
   let groupText = '';
