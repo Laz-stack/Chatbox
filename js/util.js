@@ -26,6 +26,8 @@ export function ago(t) {
   return Math.floor(s / 604800) + 'w';
 }
 
+export const agoLong = (t) => (ago(t) === 'now' ? 'just now' : ago(t) + ' ago');
+
 export function debounce(fn, ms = 400) {
   let t;
   return (...a) => {
@@ -55,6 +57,15 @@ export const fileToDataURL = (f) =>
   });
 
 export const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+// Departure-board time: "21:04" today, "Tue" this week, else "12 Nov".
+export function boardTime(ts) {
+  const d = new Date(ts);
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  if (now - d < 6 * 864e5) return d.toLocaleDateString([], { weekday: 'short' });
+  return d.toLocaleDateString([], { day: 'numeric', month: 'short' });
+}
 
 export const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 

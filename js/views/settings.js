@@ -34,7 +34,7 @@ export function settingsView() {
   const conn = activeConnection();
   const v = ttsSupported ? voices().find((x) => x.voiceURI === S.settings.voiceURI) : null;
   const html = `<div class="screen">
-    ${title2('Settings', `${esc(S.persona.name || 'Your')}${S.persona.name ? '’s' : ''} station`)}
+    ${title2('Depot', 'Your setup')}
     <a class="rider press" href="#/persona" style="margin-top:16px">${avatarTile(S.persona, 62, { radius: 18, rot: -3 })}<span class="nm">${esc(S.persona.name || 'You')}<small>Your persona in every chat</small></span>${bullet(arrow(20, '#ECECEC'), '#0A0A0A', '#ECECEC', 44)}</a>
     <h2 class="sec">AI</h2>
     ${group(

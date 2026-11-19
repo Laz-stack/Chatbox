@@ -8,7 +8,8 @@ import { PROVIDERS } from './providers.js';
 export const macro = (t, ch, persona) =>
   (t || '').replaceAll('{{char}}', ch?.name || 'Character').replaceAll('{{user}}', persona?.name?.trim() || 'the user');
 
-export function buildPrompt({ char, chat, conn, settings, persona, upto = null, mode = 'reply' }) {
+// group: { people: [characters], scene: '' } when this reply is one speaker inside an Interchange.
+export function buildPrompt({ char, chat, conn, settings, persona, upto = null, mode = 'reply', group = null }) {
   const layers = [];
   const m = (t) => macro(t, char, persona).trim();
   const useGlobal = settings.globalOn && char.useGlobal !== false && !conn?.replaceGlobal;
@@ -19,7 +20,15 @@ export function buildPrompt({ char, chat, conn, settings, persona, upto = null, 
   const personaText = [m(char.persona) || `You are ${char.name}.`, char.tagline ? `${char.name} in a few words: ${char.tagline}.` : '']
     .filter(Boolean)
     .join('\n');
-  layers.push({ key: 'persona', name: 'Character persona', text: personaText });
+  let groupText = '';
+  if (group) {
+    const others = group.people.filter((p) => p.id !== char.id);
+    groupText =
+      `\n\nThis is a group scene (an Interchange). Also present: ${others.map((p) => p.name + (p.tagline ? ` (${p.tagline})` : '')).join('; ')}.` +
+      (group.scene?.trim() ? `\nScene: ${m(group.scene)}` : '') +
+      `\nOther characters' lines arrive prefixed with their names. Write only ${char.name}'s next message. Never write dialogue or actions for ${others.map((p) => p.name).join(' or ')}, or for ${persona?.name?.trim() || 'the user'}.`;
+  }
+  layers.push({ key: 'persona', name: 'Character persona', text: personaText + groupText });
 
   if (persona.useEverywhere && (persona.about?.trim() || persona.name?.trim())) {
     layers.push({
@@ -41,7 +50,17 @@ export function buildPrompt({ char, chat, conn, settings, persona, upto = null, 
   // History after the summary, up to (not including) `upto`.
   const end = upto == null ? chat.messages.length : upto;
   const start = Math.min(chat.summary?.upto || 0, end);
-  let hist = chat.messages.slice(start, end).filter((x) => !x.error).map((x) => ({ role: x.role, content: textOf(x) }));
+  const you = persona?.name?.trim() || 'User';
+  const nameOf = (id) => group?.people.find((p) => p.id === id)?.name || 'Someone';
+  // In a group, only this speaker's own lines are "assistant"; everyone else's arrive as named user lines.
+  let hist = chat.messages
+    .slice(start, end)
+    .filter((x) => !x.error)
+    .map((x) => {
+      if (!group) return { role: x.role, content: textOf(x) };
+      if (x.role === 'assistant' && x.speaker === char.id) return { role: 'assistant', content: textOf(x) };
+      return { role: 'user', content: `${x.role === 'user' ? you : nameOf(x.speaker)}: ${textOf(x)}` };
+    });
 
   const budget = Math.max(1000, (conn?.context || 16000) - (conn?.maxTokens || 600) - sysTokens);
   let used = hist.reduce((a, x) => a + estimateTokens(x.content), 0);

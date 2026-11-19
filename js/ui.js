@@ -68,16 +68,17 @@ export const primary = (text, { id = '', href = '', cls = '', rot = 0, attrs = '
     ? `<a class="btn-primary press ${cls}" href="${href}" ${attrs}><span>${text}</span>${arrow(30, 'currentColor', rot)}</a>`
     : `<button type="button" class="btn-primary press ${cls}" ${id ? `id="${id}"` : ''} ${attrs}><span>${text}</span>${arrow(30, 'currentColor', rot)}</button>`;
 
-// Bottom navigation as a route line: three stops on one line. The active stop wears the
+// Bottom navigation as a route line: five stops on one line. The active stop wears the
 // yellow "you are here" ring, which travels along the line between tab screens (see main.js / app.css).
+// Build is not a screen: its red stop opens the Build sheet (js/build.js).
 export function tabbar(active) {
   const stop = (label, href, key) =>
     `<a class="stop-link press" href="${href}" ${key === active ? 'aria-current="page"' : ''}><span class="stop" aria-hidden="true">${key === active ? '<span class="here"></span>' : ''}</span><span class="stop-name">${label}</span></a>`;
   return (
     '<div class="tabfade" aria-hidden="true"></div>' +
-    `<nav class="tabbar" aria-label="Main">${stop('Home', '#/', 'home')}` +
-    `<a class="stop-link stop-new press" href="#/edit/new"><span class="stop" aria-hidden="true">${icon('plus', 24)}</span><span class="stop-name">New line</span></a>` +
-    `${stop('Settings', '#/settings', 'settings')}</nav>`
+    `<nav class="tabbar" aria-label="Main">${stop('Platform', '#/', 'home')}${stop('Lines', '#/lines', 'lines')}` +
+    `<button type="button" class="stop-link stop-new press" data-build aria-haspopup="dialog"><span class="stop" aria-hidden="true">${icon('track', 26)}</span><span class="stop-name">Build</span></button>` +
+    `${stop('Fares', '#/fares', 'fares')}${stop('Depot', '#/settings', 'settings')}</nav>`
   );
 }
 

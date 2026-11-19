@@ -1,8 +1,8 @@
-import { S, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, resetChat } from '../store.js';
+import { S, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, resetChat, recordFare, interchange, isInterchangeId } from '../store.js';
 import { complete, PROVIDERS } from '../providers.js';
 import { buildPrompt } from '../prompt.js';
 import { shouldSummarize, summarize } from '../memory.js';
-import { esc, uid, formatMessage, fmtNum, detectMood, copyText, download, slug, reducedMotion, motion, lineAccent, EASE_OUT } from '../util.js';
+import { esc, uid, formatMessage, fmtNum, estimateTokens, inkOn, detectMood, copyText, download, slug, reducedMotion, motion, lineAccent, EASE_OUT } from '../util.js';
 import { avatarTile } from '../avatar.js';
 import { sceneSVG } from '../scenes.js';
 import { sceneSheet as openSceneSheet } from '../scenepicker.js';
@@ -44,9 +44,14 @@ class StreamRenderer {
   }
 }
 
-export async function chatView(id) {
-  const ch = character(id);
+export async function chatView(id, focusId = null) {
+  const ix = isInterchangeId(id) ? interchange(id) : null;
+  // In an Interchange `ch` stands for the room (title, first member's scene and colour);
+  // each reply's own speaker comes from speakerOf().
+  const ch = ix ? { ...ix.people[0], id: ix.id, name: ix.title, tagline: `Interchange · ${ix.people.length} lines`, connectionId: null } : character(id);
   if (!ch) return null;
+  const speakerOf = (m) => (ix ? ix.people.find((p) => p.id === m?.speaker) || ix.people[0] : ch);
+  const group = ix ? { people: ix.people, scene: ix.scene } : null;
   const chat = await getChat(id);
   let ctl = null;
   let busy = false;
@@ -55,21 +60,22 @@ export async function chatView(id) {
   const conn0 = connectionFor(ch);
   const connText = (c) => (!c ? 'No connection' : c.provider === 'demo' ? 'Demo replies' : c.model || c.name);
   // Short placeholder: a long name would wrap the composer onto several lines.
-  const callName = ch.name.length > 14 ? ch.name.split(/\s+/)[0].slice(0, 14) : ch.name;
+  const callName = ix ? 'the interchange' : ch.name.length > 14 ? ch.name.split(/\s+/)[0].slice(0, 14) : ch.name;
   const html = `<div class="chat" id="chat" style="--blur:${ch.sceneBlur ?? 4}px;--dim:${(ch.sceneDim ?? 60) / 100};--accent:${lineAccent(ch.line?.color)}">
     <div class="chat-scene" id="scene" aria-hidden="true">${ch.scene && ch.scene !== 'none' ? sceneSVG(ch.scene) : ''}</div>
     <header class="chat-head">
       ${ibtn('back', 'Back to home', { href: '#/' })}
-      <a class="chat-who press" href="#/edit/${ch.id}" aria-label="Edit ${esc(ch.name)}">${avatarBullet(ch, 42, '', `head:${ch.id}`)}<span class="who-tx"><span class="who-n">${esc(ch.name)}</span><span class="who-s" id="status">${esc(ch.tagline || 'Online')}</span></span></a>
+      <a class="chat-who press" href="${ix ? `#/interchange/${ix.id}` : `#/edit/${ch.id}`}" aria-label="Edit ${esc(ch.name)}">${ix ? `<span class="meet">${ix.people.map((p, i) => avatarBullet(p, 38, i ? 'margin-left:-12px' : '')).join('')}</span>` : avatarBullet(ch, 42, '', `head:${ch.id}`)}<span class="who-tx"><span class="who-n">${esc(ch.name)}</span><span class="who-s" id="status">${esc(ch.tagline || 'Online')}</span></span></a>
       ${ibtn('more', 'Chat options', { id: 'moreBtn' })}
     </header>
     <div class="chat-meta">
       <a class="pill press" href="#/connections" aria-label="Connection: ${esc(connText(conn0))}. Tap to switch."><span class="dot${conn0?.provider === 'demo' ? ' demo' : ''}" id="connDot"></span><span class="ell" id="connName">${esc(connText(conn0))}</span></a>
       <span class="pill muted" id="tokPill" ${S.settings.showCounter ? '' : 'hidden'} title="Estimated tokens sent with the next reply">${icon('layers', 14)}<span><span class="num" id="tokN">…</span> tokens</span></span>
-      <a class="pill y press end" href="#/memory/${ch.id}">${icon('pin', 15)}<span id="noteN">${chat.notes.length}</span>&nbsp;note${chat.notes.length === 1 ? '' : 's'}</a>
+      <a class="pill y press end" href="#/memory/${ch.id}" ${ix ? 'hidden' : ''}>${icon('pin', 15)}<span id="noteN">${chat.notes.length}</span>&nbsp;note${chat.notes.length === 1 ? '' : 's'}</a>
     </div>
     <div class="log" id="log" role="log" aria-live="polite" aria-relevant="additions" aria-label="Chat with ${esc(ch.name)}"></div>
     <div class="chips" id="chips"></div>
+    ${ix ? '<div class="nextbar" id="nextbar" role="radiogroup" aria-label="Who answers next"></div>' : ''}
     <form class="composer" id="composer">
       ${ibtn('asterisk', 'Add an *action*', { id: 'actBtn', attrs: 'title="Add an *action*: wraps the selection in asterisks"' })}
       <textarea id="input" rows="1" placeholder="Message ${esc(callName)}…" aria-label="Message ${esc(ch.name)}" enterkeyhint="send"></textarea>
@@ -102,8 +108,11 @@ export async function chatView(id) {
     }
     function msgHTML(m, i, enter = false) {
       const cls = `msg ${m.role === 'user' ? 'user' : 'ai'}${enter ? ' enter' : ''}`;
-      if (m.role === 'user') return `<div class="${cls}" data-i="${i}" data-id="${m.id}"><div class="bubble">${formatMessage(textOf(m))}</div></div>`;
-      return `<div class="${cls}" data-i="${i}" data-id="${m.id}">${avatarTile(ch, 30, { expr: m.mood || 'happy', radius: 10, cls: 'msg-av' })}<div class="msg-col"><div class="bubble">${formatMessage(textOf(m))}</div>${toolsHTML(m, i)}</div></div>`;
+      const star = m.star ? `<span class="star-b" title="In your Logbook">${icon('star', 13)}</span>` : '';
+      if (m.role === 'user') return `<div class="${cls}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="bubble">${formatMessage(textOf(m))}${star}</div></div>`;
+      const sp = speakerOf(m);
+      const tag = ix ? `<span class="spk-tag" style="--c:${sp.line?.color || '#2EAA67'};--ink:${inkOn(sp.line?.color || '#2EAA67')}">${esc(sp.name)}</span>` : '';
+      return `<div class="${cls}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}">${avatarTile(sp, 30, { expr: m.mood || 'happy', radius: 10, cls: 'msg-av' })}<div class="msg-col"><div class="bubble">${tag}${formatMessage(textOf(m))}${star}</div>${toolsHTML(m, i)}</div></div>`;
     }
     function renderAll() {
       const cut = chat.summary?.upto || 0;
@@ -112,7 +121,10 @@ export async function chatView(id) {
         if (cut && i === cut) h += `<a class="stop-line" href="#/memory/${ch.id}">${icon('spark', 14)} Earlier stops summarized</a>`;
         h += msgHTML(m, i);
       });
-      if (!chat.messages.length) h = `<div class="empty">Say hello to ${esc(ch.name)}. Wrap actions in *asterisks*.</div>`;
+      if (!chat.messages.length)
+        h = ix
+          ? `<div class="empty">${ix.scene?.trim() ? `<b class="ix-scene">${esc(ix.scene.trim())}</b>` : ''}${esc(ix.people.map((p) => p.name).join(' and '))} are here. Say something, and pick who answers below.</div>`
+          : `<div class="empty">Say hello to ${esc(ch.name)}. Wrap actions in *asterisks*.</div>`;
       log.innerHTML = h;
       renderChips();
     }
@@ -126,9 +138,39 @@ export async function chatView(id) {
       if (busy) return chips.querySelectorAll('button').forEach((b) => (b.disabled = true));
       const last = chat.messages[chat.messages.length - 1];
       let h = '';
-      if (last?.role === 'assistant' && !last.first) h = `<button type="button" class="press" data-chip="regen">${icon('refresh', 16)}Regenerate</button><button type="button" class="press" data-chip="continue">${icon('chev', 16)}Continue</button>`;
+      if (last?.role === 'assistant' && !last.first) {
+        h = `<button type="button" class="press" data-chip="regen">${icon('refresh', 16)}Regenerate</button><button type="button" class="press" data-chip="continue">${icon('chev', 16)}Continue</button>`;
+        if (ix) h += `<button type="button" class="press" data-chip="reply">${icon('chev', 16)}${chat.next && chat.next !== 'either' ? esc(speakerOf({ speaker: chat.next }).name) + ' speaks' : 'Next line'}</button>`;
+      }
       else if (last?.role === 'user') h = `<button type="button" class="press" data-chip="reply">${icon('refresh', 16)}Get a reply</button>`;
       chips.innerHTML = h;
+    }
+    // ---------- Interchange: who answers next ----------
+    function renderNext() {
+      const bar = root.querySelector('#nextbar');
+      if (!bar) return;
+      const cur = chat.next || 'either';
+      bar.innerHTML =
+        '<span class="nb-l">Next stop</span>' +
+        ix.people
+          .map((p) => {
+            const col = p.line?.color || '#2EAA67';
+            return `<button type="button" class="ns press${cur === p.id ? ' on' : ''}" role="radio" aria-checked="${cur === p.id}" data-next="${p.id}" style="--c:${col};--ink:${inkOn(col)}">${avatarBullet(p, 26)}${esc(p.name)}${cur === p.id ? icon('check', 15) : ''}</button>`;
+          })
+          .join('') +
+        `<button type="button" class="ns either press${cur === 'either' ? ' on' : ''}" role="radio" aria-checked="${cur === 'either'}" data-next="either">Either</button>`;
+    }
+    // Picked speaker, else whoever you addressed by name, else anyone but the last to speak.
+    function pickSpeaker() {
+      if (chat.next && chat.next !== 'either') return speakerOf({ speaker: chat.next });
+      const lastUser = [...chat.messages].reverse().find((m) => m.role === 'user');
+      const said = (lastUser ? textOf(lastUser) : '').toLowerCase();
+      const named = ix.people.filter((p) => new RegExp(`\\b${p.name.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(said));
+      if (named.length === 1) return named[0];
+      const lastAi = [...chat.messages].reverse().find((m) => m.role === 'assistant');
+      const pool = ix.people.filter((p) => p.id !== lastAi?.speaker);
+      const from = pool.length ? pool : ix.people;
+      return from[Math.floor(Math.random() * from.length)];
     }
     const nearBottom = () => log.scrollHeight - log.scrollTop - log.clientHeight < 140;
     const toBottom = (smooth = false) => log.scrollTo({ top: log.scrollHeight, behavior: smooth && !reducedMotion() ? 'smooth' : 'auto' });
@@ -141,7 +183,8 @@ export async function chatView(id) {
     }
     function updateTokens() {
       const c = connectionFor(ch);
-      const b = buildPrompt({ char: ch, chat, conn: c, settings: S.settings, persona: S.persona });
+      const who = ix ? speakerOf({ speaker: chat.next && chat.next !== 'either' ? chat.next : ix.people[0].id }) : ch;
+      const b = buildPrompt({ char: who, chat, conn: c, settings: S.settings, persona: S.persona, group });
       root.querySelector('#tokN').textContent = fmtNum(b.total);
     }
     function setBusy(v) {
@@ -162,6 +205,7 @@ export async function chatView(id) {
       let idx;
       if (mode === 'reply') {
         target = { id: uid(), role: 'assistant', alts: [''], alt: 0, mood: 'happy', at: Date.now() };
+        if (ix) target.speaker = pickSpeaker().id;
         chat.messages.push(target);
         idx = chat.messages.length - 1;
       } else {
@@ -174,7 +218,8 @@ export async function chatView(id) {
         }
       }
       const upto = mode === 'continue' ? idx + 1 : idx;
-      const built = buildPrompt({ char: ch, chat, conn, settings: S.settings, persona: S.persona, upto, mode });
+      const sp = speakerOf(target);
+      const built = buildPrompt({ char: sp, chat, conn, settings: S.settings, persona: S.persona, upto, mode, group });
 
       // Prepare the bubble.
       let el = log.querySelector(`.msg[data-i="${idx}"]`);
@@ -217,7 +262,7 @@ export async function chatView(id) {
           stream: ch.stream !== false,
           maxTokens: conn.maxTokens,
           temperature: conn.temperature,
-          character: ch,
+          character: sp,
           onDelta(d) {
             if (destroyed) return;
             if (first && mode === 'continue') d = (prev && !/\s$/.test(prev) && !/^[\s.,!?;:)]/.test(d) ? ' ' : '') + d;
@@ -253,6 +298,8 @@ export async function chatView(id) {
         rerenderMsg(idx);
         if (moodChanged && !reducedMotion()) log.querySelector(`.msg[data-i="${idx}"] .msg-av`)?.classList.add('bump');
         if (S.settings.readAloud) speak(text);
+        // Fares: what this journey cost, as an estimate (about four characters per token).
+        recordFare(conn, sp.id, built.total, estimateTokens(text.slice(prev.length)));
       }
       setBusy(false);
       setStatus('idle');
@@ -268,7 +315,7 @@ export async function chatView(id) {
       toBottom(true);
 
       // Long chats: condense older messages in the background.
-      if (!error && S.settings.autoSummary && shouldSummarize(chat, conn)) {
+      if (!ix && !error && S.settings.autoSummary && shouldSummarize(chat, conn)) {
         setStatus('summary');
         try {
           await summarize({ chat, char: ch, conn, persona: S.persona });
@@ -344,6 +391,7 @@ export async function chatView(id) {
           { icon: 'edit', label: 'Edit message', on: () => editMessage(i) },
           { icon: 'copy', label: 'Copy', on: () => copyText(textOf(m)).then(() => toast('Copied')) },
           ...(ttsSupported ? [{ icon: 'speaker', label: 'Read aloud', on: () => speak(textOf(m)) }] : []),
+          { icon: 'star', label: m.star ? 'Remove star' : 'Star to Logbook', on: () => toggleStar(m, i) },
           { icon: 'pin', label: 'Pin to notes', on: () => pin(m) },
           '-',
           { icon: 'trash', label: 'Delete', danger: true, on: () => remove(i) },
@@ -370,6 +418,14 @@ export async function chatView(id) {
           };
         },
       });
+    }
+    // Starred messages collect in the Logbook (Platform and Lines › Starred).
+    async function toggleStar(m, i) {
+      if (m.star) delete m.star;
+      else m.star = Date.now();
+      rerenderMsg(i);
+      await saveChat(chat, false);
+      toast(m.star ? 'Starred. It’s in your Logbook.' : 'Removed from your Logbook', m.star ? { action: 'View', onAction: () => (location.hash = '#/lines/starred') } : {});
     }
     async function pin(m) {
       const t = textOf(m).replace(/\s+/g, ' ').trim();
@@ -402,11 +458,17 @@ export async function chatView(id) {
     // ---------- header menu ----------
     root.querySelector('#moreBtn').addEventListener('click', (e) =>
       openMenu(e.currentTarget, [
-        { icon: 'card', label: 'Edit character', on: () => (location.hash = `#/edit/${ch.id}`) },
-        { icon: 'image', label: 'Scene', on: sceneSheet },
-        { icon: 'spark', label: 'Memory and notes', on: () => (location.hash = `#/memory/${ch.id}`) },
-        { icon: 'layers', label: 'Final prompt', on: () => (location.hash = `#/final/${ch.id}`) },
-        { icon: 'download', label: 'Export card (PNG)', on: async () => download(await exportCardPng(ch), slug(ch.name) + '.card.png') },
+        ...(ix
+          ? [{ icon: 'card', label: 'Edit interchange', on: () => (location.hash = `#/interchange/${ix.id}`) }]
+          : [{ icon: 'card', label: 'Edit character', on: () => (location.hash = `#/edit/${ch.id}`) }]),
+        ...(ix
+          ? []
+          : [
+              { icon: 'image', label: 'Scene', on: sceneSheet },
+              { icon: 'spark', label: 'Memory and notes', on: () => (location.hash = `#/memory/${ch.id}`) },
+              { icon: 'layers', label: 'Final prompt', on: () => (location.hash = `#/final/${ch.id}`) },
+              { icon: 'download', label: 'Export card (PNG)', on: async () => download(await exportCardPng(ch), slug(ch.name) + '.card.png') },
+            ]),
         '-',
         {
           icon: 'restart',
@@ -490,6 +552,15 @@ export async function chatView(id) {
       generate(b.dataset.chip);
     };
     chips.addEventListener('click', onChip);
+    root.querySelector('#nextbar')?.addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-next]');
+      if (!b) return;
+      chat.next = b.dataset.next;
+      renderNext();
+      renderChips();
+      updateTokens();
+      await saveChat(chat, false);
+    });
 
     log.addEventListener('click', (e) => {
       onChip(e);
@@ -543,9 +614,16 @@ export async function chatView(id) {
     log.addEventListener('pointercancel', endPress);
 
     renderAll();
+    if (ix) renderNext();
     toBottom();
     updateTokens();
-    if (!matchMedia('(pointer: coarse)').matches) input.focus({ preventScroll: true });
+    // Opened from the Logbook or a search hit: bring that message into view and mark it briefly.
+    const focusEl = focusId && log.querySelector(`.msg[data-id="${CSS.escape(focusId)}"]`);
+    if (focusEl) {
+      focusEl.scrollIntoView({ block: 'center' });
+      focusEl.classList.add('found');
+      setTimeout(() => focusEl.classList.remove('found'), 2200);
+    } else if (!matchMedia('(pointer: coarse)').matches) input.focus({ preventScroll: true });
   }
 
   return {

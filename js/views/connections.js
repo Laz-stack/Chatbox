@@ -76,6 +76,11 @@ export function connectionEditView(id) {
           ${field('cMax', 'Max reply tokens', d.maxTokens, { type: 'number', attrs: 'min="16" max="32000" step="1"' })}
           ${field('cCtx', 'Context size', d.context, { type: 'number', attrs: 'min="1000" max="2000000" step="1000"' })}
         </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          ${field('cPin', 'Input $ / 1M tokens', d.priceIn ?? '', { type: 'number', ph: 'e.g. 3', attrs: 'min="0" step="0.01" inputmode="decimal"' })}
+          ${field('cPout', 'Output $ / 1M tokens', d.priceOut ?? '', { type: 'number', ph: 'e.g. 15', attrs: 'min="0" step="0.01" inputmode="decimal"' })}
+        </div>
+        <p class="fhint" style="margin:-4px 2px 0">Prices from your provider's pricing page. Fares uses them to turn tokens into dollars.</p>
         <p class="fhint" style="margin:-4px 2px 0">Context size is how many tokens this model can read. Long chats get summarized when they pass about half of it.</p>
         <div id="proxyRow">${toggleRow('tProxy', 'Route through local server', 'Use if your provider blocks requests from the browser. Needs server.js running.', d.useProxy)}</div>
       </div></details>
@@ -119,6 +124,8 @@ export function connectionEditView(id) {
     $('#cPrompt').addEventListener('input', (e) => (d.prompt = e.target.value));
     $('#cMax').addEventListener('input', (e) => (d.maxTokens = Math.max(16, +e.target.value || 600)));
     $('#cCtx').addEventListener('input', (e) => (d.context = Math.max(1000, +e.target.value || 16000)));
+    $('#cPin').addEventListener('input', (e) => (d.priceIn = e.target.value === '' ? null : Math.max(0, +e.target.value)));
+    $('#cPout').addEventListener('input', (e) => (d.priceOut = e.target.value === '' ? null : Math.max(0, +e.target.value)));
     $('#eyeBtn').addEventListener('click', (e) => {
       const k = $('#cKey');
       const show = k.type === 'password';

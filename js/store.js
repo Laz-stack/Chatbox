@@ -18,6 +18,7 @@ const DEFAULT_SETTINGS = {
   remindBackup: true,
   lastBackup: null,
   includeKeysInBackup: false,
+  budget: null,
   seenChatTips: false,
   migrated: 0,
 };
@@ -28,6 +29,8 @@ export const S = {
   connections: [],
   characters: [],
   chats: new Map(),
+  fares: { months: {} },
+  interchanges: [],
 };
 
 export function newConnection(provider = 'anthropic') {
@@ -93,6 +96,8 @@ export async function load() {
   const all = new Map(await db.entries());
   if (all.has('settings')) S.settings = { ...DEFAULT_SETTINGS, ...all.get('settings') };
   if (all.has('persona')) S.persona = { ...S.persona, ...all.get('persona') };
+  if (all.has('fares')) S.fares = { months: {}, ...all.get('fares') };
+  S.interchanges = all.get('interchanges') || [];
   S.connections = all.get('connections') || [];
   S.characters = all.get('characters') || [];
   S.chats = new Map();
@@ -120,6 +125,60 @@ export const saveSettings = () => db.set('settings', S.settings);
 export const savePersona = () => db.set('persona', S.persona);
 export const saveConnections = () => db.set('connections', S.connections);
 export const saveCharacters = () => db.set('characters', S.characters);
+export const saveFares = () => db.set('fares', S.fares);
+export const saveInterchanges = () => db.set('interchanges', S.interchanges);
+
+// ---------- Interchanges: group chats where 2–3 lines meet ----------
+export const isInterchangeId = (id) => typeof id === 'string' && id.startsWith('ix-');
+// The interchange with its member characters resolved (members that were deleted drop out).
+export function interchange(id) {
+  const ix = S.interchanges.find((x) => x.id === id);
+  if (!ix) return null;
+  const members = ix.members.map((m) => S.characters.find((c) => c.id === m)).filter(Boolean);
+  return members.length ? { ...ix, people: members, title: ix.name?.trim() || members.map((c) => c.name).join(' × ') } : null;
+}
+export async function saveInterchange(ix) {
+  const i = S.interchanges.findIndex((x) => x.id === ix.id);
+  if (i >= 0) S.interchanges[i] = ix;
+  else S.interchanges.push(ix);
+  await saveInterchanges();
+}
+export async function deleteInterchange(id) {
+  S.interchanges = S.interchanges.filter((x) => x.id !== id);
+  S.chats.delete(id);
+  await Promise.all([saveInterchanges(), db.del('chat:' + id)]);
+}
+
+// ---------- Fares: tokens per connection and per line, by calendar month ----------
+export const monthKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+
+// Record one journey (a reply): estimated input and output tokens, against its connection and line.
+export async function recordFare(conn, lineId, inTok, outTok) {
+  if (!conn) return;
+  const k = monthKey();
+  const mo = (S.fares.months[k] ||= { conns: {}, lines: {} });
+  const c = (mo.conns[conn.id] ||= { name: '', model: '', in: 0, out: 0, rides: 0 });
+  c.name = conn.name || conn.provider;
+  c.model = conn.provider === 'demo' ? 'Demo replies' : conn.model;
+  c.in += inTok;
+  c.out += outTok;
+  c.rides++;
+  const l = (mo.lines[lineId] ||= { in: 0, out: 0, byConn: {} });
+  l.in += inTok;
+  l.out += outTok;
+  const lc = (l.byConn[conn.id] ||= { in: 0, out: 0 });
+  lc.in += inTok;
+  lc.out += outTok;
+  await saveFares();
+}
+
+// Dollars for a token count on a connection, or null when that connection has no prices set.
+export function fareCost(connId, inTok, outTok) {
+  const c = connection(connId);
+  if (c?.provider === 'demo') return 0;
+  if (!c || c.priceIn == null || c.priceOut == null || c.priceIn === '' || c.priceOut === '') return null;
+  return (inTok * +c.priceIn + outTok * +c.priceOut) / 1e6;
+}
 
 export const character = (id) => S.characters.find((c) => c.id === id);
 export const connection = (id) => S.connections.find((c) => c.id === id);
@@ -136,7 +195,8 @@ export async function saveCharacter(ch) {
 export async function deleteCharacter(id) {
   S.characters = S.characters.filter((c) => c.id !== id);
   S.chats.delete(id);
-  await Promise.all([saveCharacters(), db.del('chat:' + id)]);
+  S.interchanges.forEach((x) => (x.members = x.members.filter((m) => m !== id)));
+  await Promise.all([saveCharacters(), saveInterchanges(), db.del('chat:' + id)]);
 }
 
 export async function saveConnection(c) {
@@ -193,6 +253,24 @@ export async function resetChat(charId) {
 // A chat has "started" once the user has said something.
 export const hasStarted = (chat) => !!chat && chat.messages.some((m) => m.role === 'user');
 
+// Chats that have started, newest first: [{ c, chat }] for characters.
+// Interchange items carry `ix` (with .people and .title) and `c` = their first member.
+export function departures() {
+  const lines = S.characters.map((c) => ({ c, chat: S.chats.get(c.id) }));
+  const groups = S.interchanges
+    .map((x) => interchange(x.id))
+    .filter(Boolean)
+    .map((ix) => ({ ix, c: ix.people[0], chat: S.chats.get(ix.id) }));
+  return [...lines, ...groups].filter((x) => hasStarted(x.chat)).sort((a, b) => b.chat.updatedAt - a.chat.updatedAt);
+}
+
+// The Logbook: every starred message across all chats, newest star first: [{ chat, m }].
+export function logbook() {
+  const out = [];
+  for (const chat of S.chats.values()) for (const m of chat.messages) if (m.star) out.push({ chat, m });
+  return out.sort((a, b) => b.m.star - a.m.star);
+}
+
 export function lastMessage(chat) {
   return chat?.messages[chat.messages.length - 1] || null;
 }
@@ -208,6 +286,8 @@ export function snapshot({ includeKeys = true } = {}) {
     connections: S.connections.map((c) => (includeKeys ? c : { ...c, apiKey: '' })),
     characters: S.characters,
     chats: [...S.chats.values()],
+    fares: S.fares,
+    interchanges: S.interchanges,
   };
 }
 
@@ -219,6 +299,8 @@ export async function restore(data) {
   S.persona = { ...S.persona, ...(data.persona || {}) };
   S.connections = data.connections || [];
   S.characters = data.characters || [];
+  S.fares = { months: {}, ...(data.fares || {}) };
+  S.interchanges = data.interchanges || [];
   S.chats = new Map();
   for (const c of data.chats || []) S.chats.set(c.characterId, c);
   await Promise.all([
@@ -226,6 +308,8 @@ export async function restore(data) {
     savePersona(),
     saveConnections(),
     saveCharacters(),
+    saveFares(),
+    saveInterchanges(),
     ...[...S.chats.values()].map((c) => db.set('chat:' + c.characterId, c)),
   ]);
 }
