@@ -3,7 +3,7 @@
 // Extra notes, and a preview of the persona the model receives.
 import { S, connection, activeConnection } from '../store.js';
 import { SECTIONS, FIELDS, fieldsOf, filled, hasSheet, compileSheet, generate } from '../blueprint.js';
-import { esc, motion, EASE_OUT } from '../util.js';
+import { esc, motion, EASE_OUT, reducedMotion } from '../util.js';
 import { icon, toggleRow, bindSwitch, openSheet, toast, confirmSheet, autosize } from '../ui.js';
 
 const isLocked = (d, k) => (d.locks || []).includes(k);
@@ -15,20 +15,22 @@ function fieldHTML(d, f, ui) {
   const dot = ui.changed.has(f.k) ? '<i class="new-dot" title="Just written"></i>' : '';
   const input = f.short
     ? `<input class="input bp-in" id="bp-${f.k}" data-k="${f.k}" value="${esc(v)}" placeholder="${esc(f.ph || '')}" autocomplete="off" ${f.num ? 'type="number" inputmode="numeric" min="18" max="120"' : 'type="text"'}>`
-    : `<textarea class="input bp-in bp-ta${f.tall ? ' tall' : ''}" id="bp-${f.k}" data-k="${f.k}" rows="${f.tall ? 5 : 3}" placeholder="${esc(f.ph || '')}">${esc(v)}</textarea>`;
+    : `<textarea class="input bp-in bp-ta${f.tall ? ' tall' : ''}" id="bp-${f.k}" data-k="${f.k}" rows="${f.tall ? 3 : 1}" placeholder="${esc(f.ph || '')}">${esc(v)}</textarea>`;
   const sug = ui.suggest[f.k];
-  return `<div class="bpf${locked ? ' locked' : ''}" data-f="${f.k}">
-    <div class="bpf-l"><label for="bp-${f.k}">${label}${dot}</label>
-      <button type="button" class="lockb press" data-lock="${f.k}" aria-pressed="${locked}" aria-label="${locked ? 'Unlock' : 'Lock'} ${label}" title="${locked ? 'Locked: Random and Reroll skip it' : 'Lock to keep it'}">${icon(locked ? 'lock' : 'unlock', 17)}</button></div>
-    ${input}
-    ${f.num ? '<p class="bpf-help">Characters are 18 or older.</p>' : ''}
+  return `<div class="bpf" data-f="${f.k}">
+    <div class="bpf-l"><label for="bp-${f.k}">${label}${dot}</label></div>
+    <div class="fwrap">${input}<button type="button" class="lockb fafter press" data-lock="${f.k}" aria-pressed="${locked}" aria-label="${locked ? 'Unlock' : 'Lock'} ${label}" title="${locked ? 'Locked: Random and Reroll skip it' : 'Lock to keep it'}">${icon(locked ? 'lock' : 'unlock', 17)}</button></div>
+    ${f.num ? '<p class="bpf-help" hidden>Characters are 18 or older, so this was set to 18.</p>' : ''}
     ${sug ? `<div class="bp-sug"><span class="bp-sug-t">Suggestion</span><p>${esc(sug)}</p><div class="bp-sug-a"><button type="button" class="press" data-use="${f.k}">Use this</button><button type="button" class="press ghost" data-keep="${f.k}">Keep mine</button></div></div>` : ''}
   </div>`;
 }
 
 function sectionHTML(d, s, ui) {
+  return `<section class="acc${ui.open.has(s.key) ? ' open' : ''}" data-s="${s.key}">${sectionInner(d, s, ui)}</section>`;
+}
+function sectionInner(d, s, ui) {
   const fields = fieldsOf(s.key, d.mature);
-  const n = fields.filter((f) => filled(d.sheet, f.k)).length + (s.key === 'basic' && d.name?.trim() ? 0 : 0);
+  const n = fields.filter((f) => filled(d.sheet, f.k)).length;
   const open = ui.open.has(s.key);
   const firstVal = fields.map((f) => d.sheet?.[f.k]).find((v) => String(v ?? '').trim());
   const body = open
@@ -36,12 +38,11 @@ function sectionHTML(d, s, ui) {
         .map((f, i) => (s.key === 'look' && f.k === 'genitals' ? '' : fieldHTML(d, f, ui)) + (s.key === 'look' && i === fields.findIndex((x) => x.k === 'notable') ? matureHTML(d, ui) : ''))
         .join('')}</div>`
     : '';
-  return `<section class="acc${open ? ' open' : ''}" data-s="${s.key}">
-    <div class="acc-h">
+  return `<div class="acc-h">
       <button type="button" class="acc-t press" data-toggle="${s.key}" aria-expanded="${open}"><span class="acc-tt"><b>${esc(s.title)}</b><span class="acc-n num">${n}/${fields.length}</span></span>${!open && firstVal ? `<span class="acc-pv">${esc(String(firstVal).slice(0, 80))}</span>` : ''}</button>
       <button type="button" class="acc-roll press" data-roll="${s.key}" aria-label="Reroll ${esc(s.title)}">${icon('dice', 18)}${open ? '<span>Reroll</span>' : ''}</button>
-      <span class="acc-c" aria-hidden="true">${icon('chev', 18)}</span>
-    </div>${body}</section>`;
+      <button type="button" class="acc-c press" data-toggle="${s.key}" aria-label="${open ? 'Close' : 'Open'} ${esc(s.title)}">${icon('chev', 18)}</button>
+    </div>${body}`;
 }
 
 // Mature details sit inside Appearance, right above the one field they unlock.
@@ -61,7 +62,7 @@ export function blueprintHTML(d) {
     <div class="bp-result" id="bpResult" role="status" hidden></div>
     <div class="bp-list" id="bpList"></div>
     <section class="acc notes${(d.persona || '').trim() ? ' open' : ''}" data-s="notes">
-      <div class="acc-h"><button type="button" class="acc-t press" data-toggle="notes" aria-expanded="${!!(d.persona || '').trim()}"><span class="acc-tt"><b>Extra notes</b><span class="counter" id="cPersona">0 / 6,000</span></span></button><span class="acc-c" aria-hidden="true">${icon('chev', 18)}</span></div>
+      <div class="acc-h"><button type="button" class="acc-t press" data-toggle="notes" aria-expanded="${!!(d.persona || '').trim()}"><span class="acc-tt"><b>Extra notes</b><span class="counter" id="cPersona">0 / 6,000</span></span></button><button type="button" class="acc-c press" data-toggle="notes" aria-label="Open or close Extra notes">${icon('chev', 18)}</button></div>
       <div class="acc-body"><textarea class="input area" id="fPersona" rows="5" placeholder="Anything the sheet doesn't cover. Use {{char}} for their name and {{user}} for yours.">${esc(d.persona || '')}</textarea>
         <p class="fhint">Sent after the sheet. Random and Enhance read it but never change it.</p></div>
     </section>
@@ -81,14 +82,25 @@ export function bindBlueprint(root, d, { onName }) {
   const render = (keep = true) => {
     const y = keep ? window.scrollY : 0;
     list.innerHTML = SECTIONS.map((s) => sectionHTML(d, s, ui)).join('');
-    list.querySelectorAll('textarea.bp-ta').forEach((t) => autosize(t, Math.round(innerHeight * 0.4)));
-    bindSwitch(list.querySelector('#tMature'), (v) => {
-      d.mature = v;
-      render();
-    });
+    bindParts(list);
     if (keep) window.scrollTo(0, y);
     updateEnhance();
   };
+  // Growing text boxes and the Mature switch, for a freshly drawn list or section.
+  function bindParts(el) {
+    el.querySelectorAll('textarea.bp-ta').forEach((t) => autosize(t, Math.round(innerHeight * 0.4)));
+    bindSwitch(el.querySelector('#tMature'), (v) => {
+      d.mature = v;
+      redrawSection('look');
+    });
+  }
+  function redrawSection(key) {
+    const sec = list.querySelector(`.acc[data-s="${key}"]`);
+    sec.classList.toggle('open', ui.open.has(key));
+    sec.innerHTML = sectionInner(d, SECTIONS.find((s) => s.key === key), ui);
+    bindParts(sec);
+    return sec;
+  }
   const updateEnhance = () => {
     const can = $('#bpHint').value.trim() || hasSheet(d) || (d.persona || '').trim() || d.name?.trim();
     $('#bpEnh').disabled = !can || !!busyBtn;
@@ -111,7 +123,12 @@ export function bindBlueprint(root, d, { onName }) {
   list.addEventListener('change', (e) => {
     if (e.target.dataset?.k !== 'age' || !e.target.value) return;
     const n = Math.max(18, Math.min(120, parseInt(e.target.value, 10) || 18));
-    if (String(n) !== e.target.value) toast('Characters are 18 or older.');
+    if (String(n) !== e.target.value) {
+      const help = e.target.closest('.bpf').querySelector('.bpf-help');
+      help.hidden = false;
+      help.classList.add('warn');
+      setTimeout(() => ((help.hidden = true), help.classList.remove('warn')), 2400);
+    }
     e.target.value = d.sheet.age = String(n);
   });
   root.querySelector('#bp').addEventListener('click', async (e) => {
@@ -125,13 +142,16 @@ export function bindBlueprint(root, d, { onName }) {
         t.setAttribute('aria-expanded', open);
         return;
       }
-      ui.open.has(k) ? ui.open.delete(k) : ui.open.add(k);
-      render();
-      const sec = list.querySelector(`.acc[data-s="${k}"]`);
-      if (ui.open.has(k)) {
+      const opening = !ui.open.has(k);
+      const cur = list.querySelector(`.acc[data-s="${k}"]`);
+      if (!opening) await motion(cur.querySelector('.acc-body'), [{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'ease-in' }).finished.catch(() => {});
+      opening ? ui.open.add(k) : ui.open.delete(k);
+      const sec = redrawSection(k);
+      motion(sec.querySelector('.acc-c .ic'), [{ transform: `rotate(${opening ? 0 : 90}deg)` }, { transform: `rotate(${opening ? 90 : 0}deg)` }], { duration: 200, easing: EASE_OUT });
+      if (opening) {
         motion(sec.querySelector('.acc-body'), [{ opacity: 0, transform: 'translateY(-6px)' }, { opacity: 1, transform: 'none' }], { duration: 220, easing: EASE_OUT });
         const top = sec.getBoundingClientRect().top;
-        if (top < 70 || top > innerHeight * 0.6) sec.scrollIntoView({ block: 'start', behavior: 'smooth' });
+        if (top < 70 || top > innerHeight * 0.6) sec.scrollIntoView({ block: 'start', behavior: reducedMotion() ? 'auto' : 'smooth' });
       }
       return;
     }
@@ -141,8 +161,8 @@ export function bindBlueprint(root, d, { onName }) {
       d.locks = isLocked(d, k) ? d.locks.filter((x) => x !== k) : [...d.locks, k];
       const on = isLocked(d, k);
       l.setAttribute('aria-pressed', on);
+      l.setAttribute('aria-label', `${on ? 'Unlock' : 'Lock'} ${FIELDS.find((f) => f.k === k).label}`);
       l.innerHTML = icon(on ? 'lock' : 'unlock', 17);
-      l.closest('.bpf').classList.toggle('locked', on);
       return;
     }
     const u = e.target.closest('[data-use]');
@@ -170,7 +190,7 @@ export function bindBlueprint(root, d, { onName }) {
     const r = $('#bpResult');
     r.hidden = !html;
     r.className = 'bp-result ' + kind;
-    r.innerHTML = html;
+    r.innerHTML = html ? `<span class="bp-msg">${html}</span>` : '';
   };
   function setBusy(btn) {
     busyBtn = btn;
@@ -246,23 +266,25 @@ export function bindBlueprint(root, d, { onName }) {
     }
     result(
       mode === 'enhance'
-        ? `Enhance filled ${n}${sharp ? `, suggested ${sharp} sharper` : ''}. <button type="button" class="bp-undo press">Undo</button>${demo}`
-        : `Random wrote ${n} field${n === 1 ? '' : 's'}${out.name ? ' and a name' : ''}. <button type="button" class="bp-undo press">Undo</button>${demo}`
+        ? `Enhance filled ${n}${sharp ? `, suggested ${sharp} sharper` : ''}.`
+        : `Random wrote ${n} field${n === 1 ? '' : 's'}${out.name ? ' and a name' : ''}.`
     );
+    $('#bpResult').insertAdjacentHTML('beforeend', `<button type="button" class="bp-undo press">Undo</button>${demo}`);
+    $('#bpResult').classList.toggle('two', !!demo);
     $('#bpResult .bp-undo').addEventListener('click', undo);
   }
 
   // ---------- preview: the persona exactly as the model receives it ----------
   function preview() {
+    document.querySelectorAll('#toast-root .toast').forEach((t) => t.remove());
     const text = compileSheet(d);
-    const rows = text
-      .split('\n')
-      .map((line) => {
-        if (line.startsWith('## ')) return `<h3 class="pv-h">${esc(line.slice(3))}</h3>`;
-        const m = line.match(/^([A-Z0-9 /(){}.]+):\s(.*)$/);
-        return m ? `<div class="pv-r"><span>${esc(m[1])}</span><span>${esc(m[2])}</span></div>` : line.trim() ? `<p class="pv-p">${esc(line)}</p>` : '';
-      })
-      .join('');
+    let rows = '';
+    for (const s of SECTIONS) {
+      const items = s.fields.filter((f) => (d.mature || !f.mature) && filled(d.sheet, f.k)).map((f) => [f.label.toUpperCase().replace('{{USER}}', '{{user}}'), d.sheet[f.k]]);
+      if (s.key === 'basic' && d.name?.trim()) items.unshift(['NAME', d.name.trim()]);
+      if (items.length) rows += `<h3 class="pv-h">${esc(s.head)}</h3>` + items.map(([l, v]) => `<div class="pv-r"><span>${esc(l)}</span><span>${esc(String(v).trim())}</span></div>`).join('');
+    }
+    if ((d.persona || '').trim()) rows += `<h3 class="pv-h">EXTRA NOTES</h3><p class="pv-p">${esc(d.persona.trim())}</p>`;
     openSheet({
       label: 'Persona preview',
       html: `<h2 class="sheet-title">Persona preview</h2><p class="sheet-p">Exactly what the model receives as ${esc(d.name || 'this character')}. ${text.length.toLocaleString()} characters.</p>
