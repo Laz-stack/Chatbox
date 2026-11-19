@@ -68,14 +68,16 @@ export const primary = (text, { id = '', href = '', cls = '', rot = 0, attrs = '
     ? `<a class="btn-primary press ${cls}" href="${href}" ${attrs}><span>${text}</span>${arrow(30, 'currentColor', rot)}</a>`
     : `<button type="button" class="btn-primary press ${cls}" ${id ? `id="${id}"` : ''} ${attrs}><span>${text}</span>${arrow(30, 'currentColor', rot)}</button>`;
 
+// Bottom navigation as a route line: three stops on one line. The active stop wears the
+// yellow "you are here" ring, which travels along the line between tab screens (see main.js / app.css).
 export function tabbar(active) {
-  const tab = (label, ic, href, key) =>
-    `<a class="tab" href="${href}" ${key === active ? 'aria-current="page"' : ''}><span class="lens"><span class="rim"></span></span>${icon(ic, 21)}<span>${label}</span></a>`;
+  const stop = (label, href, key) =>
+    `<a class="stop-link press" href="${href}" ${key === active ? 'aria-current="page"' : ''}><span class="stop" aria-hidden="true">${key === active ? '<span class="here"></span>' : ''}</span><span class="stop-name">${label}</span></a>`;
   return (
     '<div class="tabfade" aria-hidden="true"></div>' +
-    `<nav class="tabbar" aria-label="Main"><span class="rim"></span>${tab('Home', 'home', '#/', 'home')}` +
-    `<a class="tab-plus press" href="#/edit/new" aria-label="Create a character"><span class="rim" style="background:linear-gradient(135deg,rgba(255,255,255,.6),rgba(255,255,255,.12) 38%,rgba(255,255,255,.12) 62%,rgba(255,255,255,.35))"></span>${icon('plus', 26)}</a>` +
-    `${tab('Settings', 'sliders', '#/settings', 'settings')}</nav>`
+    `<nav class="tabbar" aria-label="Main">${stop('Home', '#/', 'home')}` +
+    `<a class="stop-link stop-new press" href="#/edit/new"><span class="stop" aria-hidden="true">${icon('plus', 24)}</span><span class="stop-name">New line</span></a>` +
+    `${stop('Settings', '#/settings', 'settings')}</nav>`
   );
 }
 
