@@ -7,7 +7,7 @@ import { avatarTile } from '../avatar.js';
 import { sceneSVG, SCENES } from '../scenes.js';
 import { speak, stopSpeaking, ttsSupported } from '../tts.js';
 import { exportCardPng } from '../cards.js';
-import { ibtn, lineBullet, icon, arrow, openMenu, openSheet, toast, confirmSheet, autosize, ruler, bindRuler, reel } from '../ui.js';
+import { ibtn, avatarBullet, icon, arrow, openMenu, openSheet, toast, confirmSheet, autosize, ruler, bindRuler, reel } from '../ui.js';
 
 // Streams text into a bubble word by word, keeping *actions* italic as they arrive.
 class StreamRenderer {
@@ -56,7 +56,7 @@ export async function chatView(id) {
     <div class="chat-scene" id="scene" aria-hidden="true">${ch.scene && ch.scene !== 'none' ? sceneSVG(ch.scene) : ''}</div>
     <header class="chat-head">
       ${ibtn('back', 'Back to home', { href: '#/' })}
-      <a class="chat-who press" href="#/edit/${ch.id}" aria-label="Edit ${esc(ch.name)}">${lineBullet(ch, 42, `view-transition-name:line-${ch.id}`)}<span class="who-tx"><span class="who-n">${esc(ch.name)}</span><span class="who-s" id="status">${esc(ch.tagline || 'Online')}</span></span></a>
+      <a class="chat-who press" href="#/edit/${ch.id}" aria-label="Edit ${esc(ch.name)}">${avatarBullet(ch, 42, `view-transition-name:line-${ch.id}`)}<span class="who-tx"><span class="who-n">${esc(ch.name)}</span><span class="who-s" id="status">${esc(ch.tagline || 'Online')}</span></span></a>
       ${ibtn('more', 'Chat options', { id: 'moreBtn' })}
     </header>
     <div class="chat-meta">
