@@ -53,6 +53,16 @@ export function buildPrompt({ char, chat, conn, settings, persona, upto = null, 
   const lore = matchLore(recent, lineIds).slice(0, 12);
   if (lore.length) layers.push({ key: 'lore', name: 'Lorebook', text: lore.map((e) => (e.title?.trim() ? `${e.title.trim()}: ` : '') + m(e.text)).join('\n\n') });
 
+  // Reply style (Depot): only non-default choices add instructions.
+  const rs = settings.replyStyle || {};
+  const style = [];
+  const remind = [];
+  if (rs.length === 'short') style.push('Keep each reply short: two to four sentences, under 60 words. This overrides any other length guidance above.'), remind.push('short, under 60 words');
+  if (rs.length === 'long') style.push('Write long, rich replies: three to five paragraphs with sensory detail, body language and inner thoughts, about 250 to 400 words. This overrides any shorter length limit above.'), remind.push('long, 250 to 400 words');
+  if (rs.person === 'first' && !isScene) style.push(`Write ${char.name}'s actions and narration in first person ("I smile"), even if earlier messages use third person. This overrides other guidance above.`), remind.push('first person');
+  if (rs.person === 'third' && !isScene) style.push(`Write ${char.name}'s actions and narration in third person ("${char.name} smiles"), even if earlier messages use first person. This overrides other guidance above.`), remind.push('third person');
+  if (style.length) layers.push({ key: 'style', name: 'Reply style', text: style.join('\n') });
+
   const memory = [];
   if (chat.summary?.text) memory.push('Story so far:\n' + chat.summary.text.trim());
   if (chat.notes?.length) memory.push('Remember:\n' + chat.notes.map((n) => '- ' + m(n.text)).join('\n'));
@@ -113,6 +123,9 @@ export function buildPrompt({ char, chat, conn, settings, persona, upto = null, 
   if (merged.length && merged[0].role === 'assistant') merged.unshift({ role: 'user', content: '(The scene begins.)' });
   if (!merged.length) merged.push({ role: 'user', content: '(The scene begins.)' });
 
+  // Models follow instructions placed after the history best: repeat the reply style there in one line.
+  const lastTurn = merged[merged.length - 1];
+  if (remind.length && lastTurn?.role === 'user') lastTurn.content += `\n\n[Reply style: ${remind.join(', ')}]`;
   const histTokens = merged.reduce((a, x) => a + estimateTokens(x.content), 0);
   return {
     system,

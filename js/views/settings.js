@@ -30,6 +30,39 @@ export async function importCardFiles(input) {
   }
 }
 
+const LENGTHS = { short: 'Short', normal: 'Normal', long: 'Long' };
+const styleSummary = () => {
+  const rs = S.settings.replyStyle || {};
+  return `${LENGTHS[rs.length] || 'Normal'} length · ${rs.person === 'first' ? 'first person' : rs.person === 'third' ? 'third person' : 'point of view as written'}`;
+};
+// How characters write: length and point of view. "Normal" leaves it to your prompts.
+function replyStyleSheet(onDone) {
+  const rs = { length: 'normal', person: 'written', ...(S.settings.replyStyle || {}) };
+  const seg = (name, opts) =>
+    `<div class="seg ${opts.length === 3 ? 'three' : 'two'}" role="group" aria-label="${name}">${opts
+      .map(([k, b, sub]) => `<button type="button" class="press" data-${name}="${k}" aria-pressed="${rs[name] === k}"><b>${b}</b><span>${sub}</span></button>`)
+      .join('')}</div>`;
+  openSheet({
+    label: 'Reply style',
+    html: `<h2 class="sheet-title">Reply style</h2><p class="sheet-p">Applies to every chat. Normal and As written leave it to your prompts and characters.</p>
+      <div class="field"><div class="flabel"><span>Length</span></div>${seg('length', [['short', 'Short', 'A few sentences'], ['normal', 'Normal', 'As prompted'], ['long', 'Long', 'Rich, detailed']])}</div>
+      <div class="field" style="margin-top:16px"><div class="flabel"><span>Point of view</span></div>${seg('person', [['written', 'As written', 'Follow the character'], ['third', 'Third', '“She smiles.”'], ['first', 'First', '“I smile.”']])}</div>
+      <p class="fhint" style="margin-top:10px">Carriage scenes always use a narrator, so point of view applies to one-on-one chats and turns.</p>`,
+    onMount(sh) {
+      sh.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-length],[data-person]');
+        if (!b) return;
+        const key = b.dataset.length ? 'length' : 'person';
+        rs[key] = b.dataset[key];
+        sh.querySelectorAll(`[data-${key}]`).forEach((x) => x.setAttribute('aria-pressed', x === b));
+        S.settings.replyStyle = { ...rs };
+        saveSettings();
+        onDone?.();
+      });
+    },
+  });
+}
+
 export function settingsView() {
   const conn = activeConnection();
   const v = ttsSupported ? voices().find((x) => x.voiceURI === S.settings.voiceURI) : null;
@@ -44,6 +77,7 @@ export function settingsView() {
     )}
     <h2 class="sec">Chat</h2>
     ${group(
+      row({ id: 'styleRow', ic: 'sliders', bc: 'var(--pink)', fc: '#0A0A0A', title: 'Reply style', sub: `<span id="styleSub">${styleSummary()}</span>` }),
       `<div class="row">${'<span class="row-ic" style="background:var(--green2);color:#0A0A0A">' + icon('spark', 19) + '</span>'}<span class="row-tx"><span class="row-t">Auto-summary</span><span class="row-s">Condense long chats so they keep fitting</span></span>${sw('tAuto', S.settings.autoSummary, 'Auto-summary')}</div>`,
       `<div class="row"><span class="row-ic" style="background:var(--lilac);color:#0A0A0A">${icon('layers', 19)}</span><span class="row-tx"><span class="row-t">Token counter</span><span class="row-s">Show the estimate in the chat header</span></span>${sw('tCounter', S.settings.showCounter, 'Token counter')}</div>`,
       ttsSupported
@@ -59,6 +93,7 @@ export function settingsView() {
     html,
     depth: 0,
     mount(root) {
+      root.querySelector('#styleRow')?.addEventListener('click', () => replyStyleSheet(() => (root.querySelector('#styleSub').textContent = styleSummary())));
       bindSwitch(root.querySelector('#tAuto'), (x) => ((S.settings.autoSummary = x), saveSettings()));
       bindSwitch(root.querySelector('#tCounter'), (x) => ((S.settings.showCounter = x), saveSettings()));
       bindSwitch(root.querySelector('#tRead'), (x) => ((S.settings.readAloud = x), saveSettings()));

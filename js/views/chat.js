@@ -1,4 +1,4 @@
-import { S, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, named, resetChat, recordFare, interchange, isInterchangeId, chatsFor, startNewChat, deleteChat, blankCharacter, saveInterchange, personaFor, personaById } from '../store.js';
+import { S, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, named, resetChat, recordFare, interchange, isInterchangeId, chatsFor, startNewChat, deleteChat, blankCharacter, saveInterchange, personaFor, personaById, newChat } from '../store.js';
 import { STEER, parseScene, resolveSpeaker, passengersIn, demoScene } from '../scene.js';
 import { complete, PROVIDERS } from '../providers.js';
 import { buildPrompt } from '../prompt.js';
@@ -220,6 +220,7 @@ export async function chatView(id, focusId = null) {
       const el = log.querySelector(`.msg[data-i="${i}"]`);
       if (el) el.outerHTML = msgHTML(chat.messages[i], i);
     }
+    const writeChip = () => `<button type="button" class="press" data-chip="write">${icon('edit', 16)}Write for me</button>`;
     function renderChips() {
       // While a reply is being written the chips stay in place, disabled, so nothing jumps.
       chips.classList.toggle('wait', busy);
@@ -229,14 +230,15 @@ export async function chatView(id, focusId = null) {
       if (scene) {
         if (last?.role === 'user' && !last.dir) h += `<button type="button" class="press" data-chip="reply">${icon('refresh', 16)}Get the scene</button>`;
         // After a reply, the reply's own actions come first; the steering choices follow the separator.
-        if (last?.role === 'assistant' && !last.first) h += `<button type="button" class="press" data-chip="regen">${icon('refresh', 16)}Regenerate</button><button type="button" class="press" data-chip="continue">${icon('chev', 16)}Continue</button><span class="chip-sep" aria-hidden="true"></span>`;
+        if (last?.role === 'assistant' && !last.first) h += `<button type="button" class="press" data-chip="regen">${icon('refresh', 16)}Regenerate</button><button type="button" class="press" data-chip="continue">${icon('chev', 16)}Continue</button>${writeChip()}<span class="chip-sep" aria-hidden="true"></span>`;
         h += Object.entries(STEER).map(([k, s]) => `<button type="button" class="press" data-steer="${k}">${icon(s.icon, 16)}${s.label}</button>`).join('');
         chips.innerHTML = h;
         chips.scrollLeft = 0;
         return;
       }
+      if (last?.role === 'assistant' && last.first) h = writeChip();
       if (last?.role === 'assistant' && !last.first) {
-        h = `<button type="button" class="press" data-chip="regen">${icon('refresh', 16)}Regenerate</button><button type="button" class="press" data-chip="continue">${icon('chev', 16)}Continue</button>`;
+        h = `<button type="button" class="press" data-chip="regen">${icon('refresh', 16)}Regenerate</button><button type="button" class="press" data-chip="continue">${icon('chev', 16)}Continue</button>` + writeChip();
         if (ix) h += `<button type="button" class="press" data-chip="reply">${icon('chev', 16)}${chat.next && chat.next !== 'either' ? esc(speakerOf({ speaker: chat.next }).name) + ' speaks' : 'Next line'}</button>`;
       }
       else if (last?.role === 'user') h = `<button type="button" class="press" data-chip="reply">${icon('refresh', 16)}Get a reply</button>`;
@@ -275,6 +277,7 @@ export async function chatView(id, focusId = null) {
     function setStatus(kind) {
       status.classList.toggle('busy', kind !== 'idle');
       if (kind === 'typing') status.innerHTML = 'typing <span class="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span>';
+      else if (kind === 'you') status.innerHTML = 'writing your line <span class="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span>';
       else if (kind === 'summary') status.innerHTML = `${reel(16, { spd: 0.8 })} summarizing`;
       else status.textContent = ch.tagline || 'Online';
     }
@@ -363,7 +366,7 @@ export async function chatView(id, focusId = null) {
           messages: built.messages,
           signal: ctl.signal,
           stream: ch.stream !== false,
-          maxTokens: conn.maxTokens,
+          maxTokens: S.settings.replyStyle?.length === 'long' ? Math.max(conn.maxTokens || 600, 1000) : conn.maxTokens,
           temperature: conn.temperature,
           character: asked,
           onDelta(d) {
@@ -577,6 +580,7 @@ export async function chatView(id, focusId = null) {
           ...(ttsSupported ? [{ icon: 'speaker', label: 'Read aloud', on: () => speak(textOf(m)) }] : []),
           { icon: 'star', label: m.star ? 'Remove star' : 'Star to Logbook', on: () => toggleStar(m, i) },
           { icon: 'pin', label: 'Pin to notes', on: () => pin(m) },
+          ...(ix ? [] : [{ icon: 'track', label: 'Branch from here', on: () => branch(i) }]),
           '-',
           { icon: 'trash', label: 'Delete', danger: true, on: () => remove(i) },
         ],
@@ -654,6 +658,7 @@ export async function chatView(id, focusId = null) {
               { icon: 'download', label: 'Export card (PNG)', on: async () => download(await exportCardPng(ch), slug(ch.name) + '.card.png') },
             ]),
         { icon: 'user', label: `You: ${me().name?.trim() || 'You'}`, on: personaSheet },
+        { icon: 'download', label: 'Export as story', on: exportStory },
         '-',
         ...(ix
           ? []
@@ -691,6 +696,99 @@ export async function chatView(id, focusId = null) {
         }]),
       ])
     );
+
+    // ---------- branch: a new chat that starts as a copy of this one up to message i ----------
+    async function branch(i) {
+      const c = newChat(ch.id, `${ch.id}~${uid()}`);
+      c.messages = structuredClone(chat.messages.slice(0, i + 1));
+      c.notes = structuredClone(chat.notes || []);
+      if (chat.personaId) c.personaId = chat.personaId;
+      if (chat.summary && chat.summary.upto <= i + 1) c.summary = structuredClone(chat.summary);
+      c.branchOf = { chat: chat.id, at: chat.messages[i].id };
+      await saveChat(c);
+      location.hash = `#/chat/${c.id}`;
+      toast('Branched here. The original is under Chats.', { action: 'Back', ms: 5000, onAction: () => (location.hash = `#/chat/${chat.id}`) });
+    }
+
+    // ---------- write for me: the AI drafts your next line into the composer ----------
+    async function writeForMe() {
+      if (busy) return;
+      const conn = connectionFor(ch);
+      if (!conn) return toast('Add a connection first.', { action: 'Add', onAction: () => (location.hash = '#/connection/new') });
+      const lastAi = chat.messages[lastAiIndex()];
+      const sp = scene ? ix.people[0] : speakerOf(lastAi);
+      // Your line is short and in your voice, whatever the characters' reply style is.
+      const built = buildPrompt({ char: sp, chat, conn, settings: { ...S.settings, replyStyle: {} }, persona: me(), group });
+      const prev = input.value.trim();
+      const as = speakAs ? speakerOf({ speaker: speakAs }).name : me().name?.trim() || 'the user';
+      const ask = `[Write ${as}'s next message for them: what ${as} says and does next, in first person as ${as}, matching the story so far. One to three short sentences, actions in *asterisks*. Write only the message itself: no name in front, no notes. Do not write anyone else's lines.${prev ? ` Build it from this idea: "${prev}".` : ''}]`;
+      const msgs = built.messages.map((x) => ({ ...x }));
+      const tail = msgs[msgs.length - 1];
+      if (tail?.role === 'user') tail.content += '\n\n' + ask;
+      else msgs.push({ role: 'user', content: ask });
+      const clean = (t) => t.replace(new RegExp(`^\\s*\\**${as.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\**\\s*:\\s*`, 'i'), '').trimStart();
+      setBusy(true);
+      setStatus('you');
+      input.value = '';
+      ctl = new AbortController();
+      let out = '';
+      try {
+        await complete(conn, {
+          system: built.system,
+          messages: msgs,
+          signal: ctl.signal,
+          stream: true,
+          maxTokens: 220,
+          temperature: conn.temperature,
+          character: { name: as, demoText: () => ['*glances at the clock* "One more coffee, then I really have to go."', '*leans in, smiling* "Okay, now I want to hear the whole story."', '*shrugs* "Fine by me. Lead the way."'][Math.floor(Math.random() * 3)] },
+          onDelta(d) {
+            if (destroyed) return;
+            out += d;
+            input.value = clean(out);
+            fit();
+          },
+        });
+      } catch (e) {
+        if (e.name !== 'AbortError') toast(e.message || 'Could not write a line.', { kind: 'err' });
+      }
+      ctl = null;
+      if (destroyed) return;
+      setBusy(false);
+      setStatus('idle');
+      // Nothing came back (error or stop): give back what you had typed.
+      input.value = clean(out).trim() || prev;
+      fit();
+      sendBtn.disabled = !input.value.trim();
+      if (input.value) {
+        input.focus();
+        recordFare(conn, sp.id, built.total, estimateTokens(out));
+      }
+    }
+
+    // ---------- export: the chat as a readable story (Markdown) ----------
+    function exportStory() {
+      const you = me().name?.trim() || 'You';
+      const title = ix ? ix.title : ch.name;
+      const names = [...(ix ? ix.people.map((p) => p.name) : [ch.name]), you];
+      const cast = names.length > 2 ? names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] : names.join(' and ');
+      const out = [`# ${title}`, '', `*${scene ? 'A Carriage scene' : ix ? 'An Interchange' : 'A story'} with ${cast}. Exported from Chatbox on ${new Date().toLocaleDateString()}.*`, ''];
+      if (ix?.scene?.trim()) out.push(`> ${ix.scene.trim()}`, '');
+      for (const m of chat.messages) {
+        if (m.error) continue;
+        if (m.dir) {
+          if (m.dir === 'skip') out.push('* * *', '');
+          continue;
+        }
+        const who = m.role === 'assistant' ? speakerOf(m) : ix ? ix.people[0] : ch;
+        const t = named(textOf(m), who, 'you', me()).trim();
+        if (!t) continue;
+        if (m.role === 'user') out.push(`**${m.as ? speakerOf({ speaker: m.as }).name : you}:** ${t}`, '');
+        else if (scene) for (const b of parseScene(t)) out.push(b.kind === 'narr' ? b.text.trim() : `**${b.name}:** ${b.text.trim()}`, '');
+        else out.push(`**${who.name}:** ${t}`, '');
+      }
+      download(new Blob([out.join('\n')], { type: 'text/markdown' }), `${slug(title) || 'chat'}.story.md`);
+      toast('Story saved as a Markdown file');
+    }
 
     // ---------- who you are in this chat ----------
     function personaSheet() {
@@ -733,14 +831,24 @@ export async function chatView(id, focusId = null) {
     }
     const chatTitle = (c) => {
       const firstYou = c.messages.find((m) => m.role === 'user');
-      return firstYou ? plain(textOf(firstYou)).slice(0, 60) : 'Not started yet';
+      if (firstYou && !c.branchOf) return plain(textOf(firstYou)).slice(0, 60);
+      if (c.branchOf) {
+        const src = S.chats.get(c.branchOf.chat);
+        return `Branch of “${src ? chatTitle(src) : 'an earlier chat'}”`.slice(0, 70);
+      }
+      return 'Not started yet';
+    };
+    const branchNote = (c) => {
+      if (!c.branchOf) return '';
+      const n = c.messages.findIndex((m) => m.id === c.branchOf.at);
+      return `Branch · from message ${n + 1} · `;
     };
     function chatsSheet() {
       const list = () =>
         chatsFor(ch.id)
           .map(
             (c) =>
-              `<div class="chatrow${c.id === chat.id ? ' here' : ''}"><a class="cr-main press" href="#/chat/${c.id}" data-go><span class="cr-t">${esc(chatTitle(c))}</span><span class="cr-s">${c.messages.length} message${c.messages.length === 1 ? '' : 's'} · ${ago(c.updatedAt) === 'now' ? 'just now' : ago(c.updatedAt) + ' ago'}${c.id === chat.id ? ' · open now' : ''}</span></a><button type="button" class="ibtn ghost press" data-del="${c.id}" aria-label="Delete this chat">${icon('trash', 18)}</button></div>`
+              `<div class="chatrow${c.id === chat.id ? ' here' : ''}"><a class="cr-main press" href="#/chat/${c.id}" data-go><span class="cr-t">${esc(chatTitle(c))}</span><span class="cr-s">${branchNote(c)}${c.messages.length} message${c.messages.length === 1 ? '' : 's'} · ${ago(c.updatedAt) === 'now' ? 'just now' : ago(c.updatedAt) + ' ago'}${c.id === chat.id ? ' · open now' : ''}</span></a><button type="button" class="ibtn ghost press" data-del="${c.id}" aria-label="Delete this chat">${icon('trash', 18)}</button></div>`
           )
           .join('');
       openSheet({
@@ -819,6 +927,7 @@ export async function chatView(id, focusId = null) {
       if (st) return steer(st.dataset.steer);
       const b = e.target.closest('[data-chip]');
       if (!b || busy) return;
+      if (b.dataset.chip === 'write') return writeForMe();
       generate(b.dataset.chip);
     };
     root.querySelector('#aboard')?.addEventListener('click', (e) => {
