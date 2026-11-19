@@ -1,0 +1,13 @@
+{
+  "name": "chatbox",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Your own roleplay chat web app. Bring your own AI key.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
