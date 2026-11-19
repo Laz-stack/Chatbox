@@ -53,7 +53,7 @@ input, textarea { caret-color: var(--yellow); }
   body { background: #000 radial-gradient(1200px 600px at 50% -10%, #141414, #000 70%); }
   .app { box-shadow: 0 0 0 1px var(--hair), 0 40px 120px rgba(0, 0, 0, .6); }
 }
-.screen { position: relative; min-height: 100dvh; padding: calc(18px + var(--safe-t)) 16px calc(124px + var(--safe-b)); }
+.screen { position: relative; min-height: 100dvh; padding: calc(18px + var(--safe-t)) 16px calc(140px + var(--safe-b)); }
 .screen.no-tab { padding-bottom: calc(110px + var(--safe-b)); }
 .screen:has(.sticky-cta) { padding-bottom: calc(140px + var(--safe-b)); }
 .stack { display: flex; flex-direction: column; gap: 14px; }
@@ -166,21 +166,38 @@ a.pill::after, button.pill::after { content: ''; position: absolute; inset: -4px
 .row-chev { color: var(--muted); }
 .row-end { font: 800 15px/1 var(--font); color: var(--yellow); }
 
-/* ---------- glass tab bar ---------- */
-.tabfade { position: fixed; left: 50%; bottom: 0; width: min(520px, 100%); transform: translateX(-50%); height: calc(150px + var(--safe-b)); pointer-events: none; background: linear-gradient(180deg, rgba(10, 10, 10, 0), rgba(10, 10, 10, .72) 55%, rgba(10, 10, 10, .94)); z-index: 30; }
-.tabbar { position: fixed; left: 50%; bottom: calc(22px + var(--safe-b)); width: min(476px, calc(100% - 44px)); transform: translateX(-50%); height: 72px; border-radius: 36px; padding: 5px 8px; display: flex; align-items: center; gap: 4px; background: rgba(255, 255, 255, .045); backdrop-filter: blur(10px) saturate(170%); -webkit-backdrop-filter: blur(10px) saturate(170%); box-shadow: 0 10px 30px rgba(0, 0, 0, .35); z-index: 31; }
+/* ---------- route-line tab bar ---------- */
+.tabfade { position: fixed; left: 50%; bottom: 0; width: min(520px, 100%); transform: translateX(-50%); height: calc(150px + var(--safe-b)); pointer-events: none; background: linear-gradient(180deg, rgba(10, 10, 10, 0), rgba(10, 10, 10, .9) 30%, var(--bg) 46%); z-index: 30; }
+.tabbar { position: fixed; left: 50%; bottom: calc(12px + var(--safe-b)); width: min(440px, calc(100% - 24px)); transform: translateX(-50%); height: 80px; display: flex; align-items: flex-start; z-index: 31; }
 /* Named only between two tab screens (set from main.js), so it stays put there; elsewhere it leaves with the screen. */
 html.vt-tabs .tabbar { view-transition-name: tabbar; }
-.rim { position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none; background: linear-gradient(135deg, rgba(255, 255, 255, .55), rgba(255, 255, 255, .06) 38%, rgba(255, 255, 255, .06) 62%, rgba(255, 255, 255, .32)); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); }
-.tab { position: relative; flex: 1; height: 62px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; font: 700 12px/1 var(--font); color: var(--cream); }
-.tab > * { position: relative; }
-.tab[aria-current='page'] { color: var(--yellow); }
-.tab .lens { position: absolute; inset: 5px 4px; border-radius: 24px; background: rgba(255, 255, 255, .07); opacity: 0; transform: scale(.8); transition: opacity .3s ease, transform .5s var(--spring); }
-.tab[aria-current='page'] .lens { opacity: 1; transform: none; }
-.tab .lens .rim { background: linear-gradient(135deg, rgba(255, 255, 255, .38), rgba(255, 255, 255, .04) 38%, rgba(255, 255, 255, .04) 62%, rgba(255, 255, 255, .2)); }
-.tab-plus { position: relative; flex: none; width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--white); background: var(--red); text-decoration: none; }
-.tab-plus .ic { transition: transform .5s var(--spring); }
-.tab-plus:hover .ic { transform: rotate(90deg); }
+html.vt-tabs .tabbar .here { view-transition-name: tab-here; }
+html.vt-tabs .tabbar .stop-new .stop { view-transition-name: tab-new; }
+/* The line runs between the first and last stop centres (each stop is centred in a third). */
+.tabbar::before { content: ''; position: absolute; left: 16.67%; right: 16.67%; top: 21px; height: 5px; border-radius: 3px; background: #3A3A3A; }
+.stop-link { position: relative; flex: 1; min-height: 72px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-decoration: none; color: var(--muted); font: 800 13px/1 var(--font); letter-spacing: -.005em; }
+.stop-link.press:active { transform: none; }
+.stop { position: relative; width: 46px; height: 46px; display: flex; align-items: center; justify-content: center; flex: none; transition: transform .2s var(--out); }
+.stop-link:active .stop { transform: scale(.9); }
+/* A plain station: a cream dot cut out of the line by a ring of the background. */
+.stop::before { content: ''; width: 20px; height: 20px; border-radius: 50%; background: var(--cream); box-shadow: 0 0 0 5px var(--bg); }
+/* You are here: yellow ring with a soft halo. */
+.stop .here { position: absolute; inset: 7px; border-radius: 50%; border: 7px solid var(--yellow); background: var(--bg); box-shadow: 0 0 0 4px var(--bg), 0 0 0 10px rgba(253, 205, 21, .18); }
+.stop-link[aria-current='page'] { color: var(--yellow); }
+.stop-link[aria-current='page'] .stop::before { opacity: 0; }
+.stop-new { color: var(--cream); }
+.stop-new .stop { border-radius: 50%; background: var(--red); color: var(--white); box-shadow: 0 0 0 5px var(--bg); }
+.stop-new .stop::before { display: none; }
+.stop-new .stop .ic { transition: transform .4s var(--out); }
+.stop-new:hover .stop .ic { transform: rotate(90deg); }
+.stop-link:focus-visible { outline: none; }
+.stop-link:focus-visible .stop { outline: 3px solid var(--yellow); outline-offset: 4px; border-radius: 50%; }
+/* The ring travels along the line between tab screens. */
+::view-transition-group(tab-here) { animation-duration: .5s; animation-timing-function: cubic-bezier(.65, 0, .35, 1); }
+/* ...passing behind the red "New line" stop, like a train through a station. */
+::view-transition-group(tab-new) { z-index: 2; animation: none; }
+::view-transition-old(tab-new) { display: none; }
+::view-transition-new(tab-new) { animation: none; }
 
 /* ---------- home ---------- */
 .hero { position: relative; display: block; height: 310px; border-radius: 30px; padding: 20px; background: var(--line, var(--green)); color: var(--on, var(--white)); text-decoration: none; overflow: hidden; margin-top: 18px; }
