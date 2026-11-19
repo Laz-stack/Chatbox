@@ -66,6 +66,11 @@ async function render() {
 
 window.addEventListener('hashchange', render);
 
+// Service worker: makes reloads pick up new deploys and lets the app open offline.
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
 window.addEventListener('unhandledrejection', (e) => {
   console.error(e.reason);
   toast(e.reason?.message || 'Something went wrong.', { kind: 'err' });
