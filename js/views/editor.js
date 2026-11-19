@@ -203,7 +203,7 @@ export function editorView(id) {
         // If the chat has not started, refresh its opening line.
         const chat = await getChat(d.id);
         if (!chat.messages.some((m) => m.role === 'user')) {
-          const fresh = newChat(d.id);
+          const fresh = newChat(d.id, chat.id);
           fresh.notes = chat.notes;
           await saveChat(fresh, false);
         }

@@ -1,4 +1,4 @@
-import { S, character, getChat, saveChat, saveSettings, connectionFor, hasStarted } from '../store.js';
+import { S, character, getChat, saveChat, saveSettings, connectionFor, hasStarted, latestChat } from '../store.js';
 import { buildPrompt, promptAsText } from '../prompt.js';
 import { summarize, historyTokens } from '../memory.js';
 import { esc, debounce, uid, fmtNum, copyText, reducedMotion } from '../util.js';
@@ -10,7 +10,7 @@ const layerNo = (k) => String(LAYER_ORDER.indexOf(k) + 1);
 const LAYER_COLORS = { global: ['#FDCD15', '#0A0A0A'], connection: ['#E70404', '#FFFFFF'], persona: ['#ECECEC', '#0A0A0A'], user: ['#065BFE', '#FFFFFF'], notes: ['#B8ACFE', '#0A0A0A'], chat: ['#333333', '#ECECEC'] };
 
 function recentCharacter() {
-  const started = S.characters.filter((c) => hasStarted(S.chats.get(c.id))).sort((a, b) => S.chats.get(b.id).updatedAt - S.chats.get(a.id).updatedAt);
+  const started = S.characters.filter((c) => hasStarted(latestChat(c.id))).sort((a, b) => latestChat(b.id).updatedAt - latestChat(a.id).updatedAt);
   return started[0] || S.characters[0];
 }
 
@@ -67,15 +67,15 @@ export function promptsView() {
 
 // ---------- Final prompt preview ----------
 export async function finalView(id) {
-  const ch = character(id);
-  if (!ch) return null;
   const chat = await getChat(id);
+  const ch = chat && character(chat.characterId);
+  if (!ch) return null;
   const conn = connectionFor(ch);
   const built = buildPrompt({ char: ch, chat, conn, settings: S.settings, persona: S.persona });
   const parts = [...built.layers, { key: 'chat', name: 'The chat', tokens: built.histTokens, text: built.messages.map((m) => `${m.role === 'user' ? S.persona.name || 'You' : ch.name}: ${m.content}`).join('\n\n') }];
   const total = built.total;
   const html = `<div class="screen no-tab">
-    ${topbar({ back: `#/chat/${ch.id}`, title: 'Final prompt', right: ibtn('copy', 'Copy the whole prompt', { id: 'copyBtn', cls: 'yellow' }) })}
+    ${topbar({ back: `#/chat/${chat.id}`, title: 'Final prompt', right: ibtn('copy', 'Copy the whole prompt', { id: 'copyBtn', cls: 'yellow' }) })}
     <div class="stack" style="gap:16px">
       <div style="display:flex;align-items:center;gap:10px">${avatarBullet(ch, 30)}<span class="small" style="font-size:14px">${esc(ch.name)} · ${esc(conn?.name || 'No connection')}${conn && conn.provider !== 'demo' && conn.model ? ' · ' + esc(conn.model) : ''}</span></div>
       <div class="bignum"><span class="n" id="bigN">${total.toLocaleString()}</span><span class="l"><span>tokens</span><span>each reply</span></span></div>
@@ -112,9 +112,9 @@ export async function finalView(id) {
 
 // ---------- Memory and notes (per character) ----------
 export async function memoryView(id) {
-  const ch = character(id);
-  if (!ch) return null;
   const chat = await getChat(id);
+  const ch = chat && character(chat.characterId);
+  if (!ch) return null;
   const conn = connectionFor(ch);
   const ctx = conn?.context || 16000;
 
@@ -139,7 +139,7 @@ export async function memoryView(id) {
       : `<p style="margin:10px 0 12px;font:400 14px/1.55 var(--font);color:var(--muted)">No summary yet. One appears automatically once this chat grows long, or make one now.</p>`;
 
   const html = `<div class="screen no-tab">
-    ${topbar({ back: `#/chat/${ch.id}` })}
+    ${topbar({ back: `#/chat/${chat.id}` })}
     ${title2('Memory', `What ${esc(ch.name)} keeps`, { tag: 'h1' })}
     <div class="stack" style="margin-top:16px">
       <div id="deck">${deck()}</div>

@@ -11,7 +11,7 @@ import { faresView } from './views/fares.js';
 import { interchangeView } from './views/interchange.js';
 import { openBuildSheet } from './build.js';
 import { reducedMotion } from './util.js';
-import { toast } from './ui.js';
+import { toast, closeOverlays } from './ui.js';
 
 const app = document.getElementById('app');
 
@@ -118,6 +118,7 @@ async function render() {
   lastKind = kind;
   document.body.dataset.route = kind;
   clearStaleToasts();
+  closeOverlays();
 
   const swap = () => {
     current?.unmount?.();
@@ -149,6 +150,18 @@ async function render() {
 }
 
 window.addEventListener('hashchange', render);
+
+// Long text boxes grow with what you type (they also open up when focused, see app.css).
+document.addEventListener('input', (e) => {
+  const t = e.target;
+  if (!t.matches?.('textarea.input.area')) return;
+  t.style.height = 'auto';
+  t.style.height = Math.min(t.scrollHeight + 4, innerHeight * 0.7) + 'px';
+});
+document.addEventListener('focusin', (e) => {
+  const t = e.target;
+  if (t.matches?.('textarea.input.area')) setTimeout(() => t.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 320);
+});
 
 // The red Build stop in the bar opens the Build sheet on any screen that shows the bar.
 document.addEventListener('click', (e) => {
