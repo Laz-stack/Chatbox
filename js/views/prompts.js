@@ -1,4 +1,4 @@
-import { S, character, getChat, saveChat, saveSettings, connectionFor, hasStarted, latestChat } from '../store.js';
+import { S, character, getChat, saveChat, saveSettings, connectionFor, hasStarted, latestChat, personaFor } from '../store.js';
 import { buildPrompt, promptAsText } from '../prompt.js';
 import { summarize, historyTokens } from '../memory.js';
 import { esc, debounce, uid, fmtNum, copyText, reducedMotion } from '../util.js';
@@ -72,7 +72,7 @@ export async function finalView(id) {
   const ch = chat && character(chat.characterId);
   if (!ch) return null;
   const conn = connectionFor(ch);
-  const built = buildPrompt({ char: ch, chat, conn, settings: S.settings, persona: S.persona });
+  const built = buildPrompt({ char: ch, chat, conn, settings: S.settings, persona: personaFor(chat) });
   const parts = [...built.layers, { key: 'chat', name: 'The chat', tokens: built.histTokens, text: built.messages.map((m) => `${m.role === 'user' ? S.persona.name || 'You' : ch.name}: ${m.content}`).join('\n\n') }];
   const total = built.total;
   const html = `<div class="screen no-tab">
@@ -120,7 +120,7 @@ export async function memoryView(id) {
   const ctx = conn?.context || 16000;
 
   const deck = () => {
-    const used = buildPrompt({ char: ch, chat, conn, settings: S.settings, persona: S.persona }).total;
+    const used = buildPrompt({ char: ch, chat, conn, settings: S.settings, persona: personaFor(chat) }).total;
     const frac = Math.min(1, used / ctx);
     const spd = Math.max(1.5, 9 - frac * 7).toFixed(1);
     return `<div class="deck"><div class="reels">${reel(118, { spd, pack: 40 - Math.round(frac * 12), cls: 'r1' })}${reel(118, { spd: (spd * 0.75).toFixed(1), pack: 26 + Math.round(frac * 12), cls: 'r2' })}<span class="tape"></span></div>
@@ -228,7 +228,7 @@ export async function memoryView(id) {
         btn.disabled = true;
         root.querySelectorAll('.reel').forEach((r) => r.classList.add('fast'));
         try {
-          await summarize({ chat, char: ch, conn, persona: S.persona, force: true });
+          await summarize({ chat, char: ch, conn, persona: personaFor(chat), force: true });
           $('#sumText').innerHTML = summaryHTML();
           $('#covers').textContent = `Covers ${chat.summary.covers} messages`;
           btn.querySelector('span').textContent = 'Redo';

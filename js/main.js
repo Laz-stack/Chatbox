@@ -5,7 +5,7 @@ import { chatView } from './views/chat.js';
 import { editorView } from './views/editor.js';
 import { connectionsView, connectionEditView } from './views/connections.js';
 import { promptsView, finalView, memoryView } from './views/prompts.js';
-import { settingsView, personaView, backupView } from './views/settings.js';
+import { settingsView, personasView, personaView, backupView } from './views/settings.js';
 import { linesView } from './views/lines.js';
 import { faresView } from './views/fares.js';
 import { interchangeView } from './views/interchange.js';
@@ -31,7 +31,8 @@ const routes = [
   [/^#\/prompts$/, () => promptsView()],
   [/^#\/final\/([^/]+)$/, (id) => finalView(decodeURIComponent(id))],
   [/^#\/memory\/([^/]+)$/, (id) => memoryView(decodeURIComponent(id))],
-  [/^#\/persona$/, () => personaView()],
+  [/^#\/persona$/, () => personasView()],
+  [/^#\/persona\/([^/]+)$/, (id) => personaView(decodeURIComponent(id))],
   [/^#\/backup$/, () => backupView()],
 ];
 

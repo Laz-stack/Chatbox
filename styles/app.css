@@ -831,3 +831,13 @@ textarea.bp-ta.tall { min-height: 96px; }
 .pass-said { display: flex; flex-direction: column; gap: 10px; margin: 4px 0 18px; padding-left: 14px; border-left: 2px dashed rgba(236, 236, 236, .55); font: 400 15px/1.5 var(--font); color: var(--white); }
 .pass-said p { margin: 0; }
 .pass-said .act { font-style: italic; color: #C9C9C9; }
+
+/* ================= Personas (Riders) ================= */
+.plist { display: flex; flex-direction: column; gap: 10px; }
+.rider.prow { padding: 12px 16px 12px 12px; border-radius: 22px; width: 100%; text-align: left; animation: riseIn .4s var(--out) both; }
+.rider.prow .nm { font-size: 19px; }
+.rider.prow .nm small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.def-chip { flex: none; display: inline-flex; align-items: center; gap: 4px; height: 28px; padding: 0 11px; border-radius: 14px; background: var(--yellow); color: var(--bg); font: 800 12.5px/1 var(--font); }
+.pick-p.on { background: var(--yellow); }
+.pick-p.on .def-chip { background: var(--bg); color: var(--yellow); }
+.locked-row .switch { opacity: .55; pointer-events: none; }
