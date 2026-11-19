@@ -40,5 +40,7 @@ export function icon(name, size = 20, cls = '') {
 
 // Chunky transit-sign arrow. rot 0 = up-right, 135 = down, -45 = up, 45 = right.
 export function arrow(size, color = 'currentColor', rot = 0, cls = '') {
-  return `<svg class="arrow ${cls}" width="${size}" height="${size}" viewBox="0 0 100 100" aria-hidden="true" style="transform:rotate(${rot}deg)"><path d="M20 80 L72 28 M36 24 H76 V64" fill="none" stroke="${color}" stroke-width="16"/></svg>`;
+  // Rotation lives on the inner group so CSS can still move the whole svg (hover nudges).
+  const g = rot ? ` transform="rotate(${rot} 50 50)"` : '';
+  return `<svg class="arrow ${cls}" width="${size}" height="${size}" viewBox="0 0 100 100" aria-hidden="true"><path${g} d="M20 80 L72 28 M36 24 H76 V64" fill="none" stroke="${color}" stroke-width="16"/></svg>`;
 }

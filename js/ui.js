@@ -1,5 +1,5 @@
 // Shared UI pieces: markup builders and overlay components (sheets, menus, toasts, dial, ruler).
-import { esc, inkOn, clamp } from './util.js';
+import { esc, inkOn, clamp, reducedMotion, EASE_OUT } from './util.js';
 import { icon, arrow } from './icons.js';
 import { avatarSVG } from './avatar.js';
 
@@ -11,12 +11,13 @@ export const bullet = (t, bg, fg, s = 40, style = '') =>
 export const lineBullet = (ch, s = 40, style = '') => bullet(esc(ch.line?.letter || ch.name?.[0] || '?'), ch.line?.color || '#ECECEC', null, s, style);
 
 // Round badge showing the character's avatar (uploaded image, else the chibi preset) instead of a letter.
-export const avatarBullet = (ch, s = 40, style = '') => {
+// `av` marks it as a shared-transition spot ("line:<id>", "head:<id>", …; see main.js).
+export const avatarBullet = (ch, s = 40, style = '', av = '') => {
   const bg = ch.line?.color || ch.color || '#2EAA67';
   const inner = ch.avatarImage
     ? `<img src="${esc(ch.avatarImage)}" alt="" width="${s}" height="${s}">`
     : avatarSVG(ch.preset, s, 'happy', bg);
-  return `<span class="bullet bullet-av" style="width:${s}px;height:${s}px;background:${bg};${style}">${inner}</span>`;
+  return `<span class="bullet bullet-av"${av ? ` data-av="${esc(av)}"` : ''} style="width:${s}px;height:${s}px;background:${bg};${style}">${inner}</span>`;
 };
 
 export const title2 = (a, b, { tag = 'h1', size = 30 } = {}) =>
@@ -149,14 +150,15 @@ function dragToDismiss(sheet, handle, close) {
     if (y0 == null) return;
     y0 = null;
     if (dy > 110) return close();
-    sheet.style.transition = 'transform .5s cubic-bezier(.34,1.56,.64,1)';
+    sheet.style.transition = reducedMotion() ? '' : `transform .35s ${EASE_OUT}`;
     sheet.style.transform = '';
   };
   handle.addEventListener('pointerup', end);
   handle.addEventListener('pointercancel', end);
 }
 
-export function openMenu(anchor, items, { onClose } = {}) {
+// spotlight: an element to keep bright (cut out of the scrim), e.g. the message being acted on.
+export function openMenu(anchor, items, { onClose, spotlight } = {}) {
   const wrap = document.createElement('div');
   wrap.className = 'menu-ov';
   const html = items
@@ -180,6 +182,15 @@ export function openMenu(anchor, items, { onClose } = {}) {
     origin = 'bottom right';
   }
   Object.assign(menu.style, { left: x + 'px', top: y + 'px', width: mw + 'px', transformOrigin: origin });
+  if (spotlight) {
+    // Rounded cut-out in the scrim around the element, slightly larger than it (it lifts a little).
+    const b = spotlight.getBoundingClientRect();
+    const pad = 6;
+    const [l, t, w, h] = [b.left - pad, b.top - pad, b.width + pad * 2, b.height + pad * 2];
+    const rr = Math.min(26, h / 2);
+    const hole = `M${l + rr} ${t}H${l + w - rr}A${rr} ${rr} 0 0 1 ${l + w} ${t + rr}V${t + h - rr}A${rr} ${rr} 0 0 1 ${l + w - rr} ${t + h}H${l + rr}A${rr} ${rr} 0 0 1 ${l} ${t + h - rr}V${t + rr}A${rr} ${rr} 0 0 1 ${l + rr} ${t}Z`;
+    wrap.querySelector('.menu-scrim').style.clipPath = `path(evenodd, "M0 0H${innerWidth}V${innerHeight}H0Z ${hole}")`;
+  }
   let closed = false;
   const onKey = (e) => {
     if (e.key === 'Escape') close();
@@ -216,7 +227,8 @@ export function confirmSheet({ title, body = '', ok = 'Confirm', danger = false 
     let done = false;
     openSheet({
       label: title,
-      html: `<h2 class="sheet-title">${title}</h2>${body ? `<p class="sheet-p">${body}</p>` : ''}<div class="sheet-actions"><button type="button" class="btn-primary plate press" data-v="0"><span>Cancel</span></button><button type="button" class="btn-primary press ${danger ? 'danger' : ''}" data-v="1" data-autofocus><span>${ok}</span></button></div>`,
+            // A destructive confirm starts on Cancel, so Enter never destroys by accident.
+      html: `<h2 class="sheet-title">${title}</h2>${body ? `<p class="sheet-p">${body}</p>` : ''}<div class="sheet-actions"><button type="button" class="btn-primary plate press" data-v="0" ${danger ? 'data-autofocus' : ''}><span>Cancel</span></button><button type="button" class="btn-primary press ${danger ? 'danger' : ''}" data-v="1" ${danger ? '' : 'data-autofocus'}><span>${ok}</span></button></div>`,
       onMount(s, close) {
         s.querySelectorAll('[data-v]').forEach((b) =>
           b.addEventListener('click', () => {
@@ -237,6 +249,7 @@ export function toast(msg, { kind = '', action = '', onAction, ms = 3600 } = {})
   const root = document.getElementById('toast-root');
   const t = document.createElement('div');
   t.className = 'toast ' + kind;
+  t.dataset.t = Date.now();
   t.setAttribute('role', kind === 'err' ? 'alert' : 'status');
   t.innerHTML = `<span>${esc(msg)}</span>${action ? `<button type="button">${esc(action)}</button>` : ''}`;
   root.appendChild(t);
@@ -277,8 +290,7 @@ export function dial(id, value, { min = 0, max = 2, step = 0.05, label = 'Temper
     <svg viewBox="0 0 300 160" aria-hidden="true">
       <path d="M22 150 A128 128 0 0 1 278 150" fill="none" stroke="#333" stroke-width="20"/>
       <path class="prog" d="M22 150 A128 128 0 0 1 278 150" fill="none" stroke="#FDCD15" stroke-width="20" pathLength="100" stroke-dasharray="${(f * 100).toFixed(2)} 100"/>
-      <path d="M44 150 A106 106 0 0 1 256 150" fill="none" stroke="#B8ACFE" stroke-width="20" opacity=".9"/>
-      <g class="knobs"><circle class="k1" r="7" fill="#0A0A0A"/><circle class="k2" r="7" fill="#0A0A0A"/></g>
+      <g class="knobs"><circle class="k1" r="7" fill="#0A0A0A"/></g>
     </svg>
     <div class="val num">${value.toFixed(1)}</div>
     <input id="${id}" type="range" min="${min}" max="${max}" step="${step}" value="${value}" aria-label="${esc(label)}">
@@ -293,7 +305,6 @@ export function bindDial(box, onChange) {
   const step = +d.dataset.step;
   const prog = d.querySelector('.prog');
   const k1 = d.querySelector('.k1');
-  const k2 = d.querySelector('.k2');
   const val = d.querySelector('.val');
   const svg = d.querySelector('svg');
   function paint(v) {
@@ -302,8 +313,6 @@ export function bindDial(box, onChange) {
     prog.setAttribute('stroke-dasharray', `${(f * 100).toFixed(2)} 100`);
     k1.setAttribute('cx', 150 + 128 * Math.cos(a));
     k1.setAttribute('cy', 150 - 128 * Math.sin(a));
-    k2.setAttribute('cx', 150 + 106 * Math.cos(a));
-    k2.setAttribute('cy', 150 - 106 * Math.sin(a));
     val.textContent = v.toFixed(step < 0.1 ? 2 : 1).replace(/0$/, '').replace(/\.$/, '.0');
   }
   function set(v) {

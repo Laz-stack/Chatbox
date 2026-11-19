@@ -1,6 +1,6 @@
 import { S, connection, newConnection, saveConnection, deleteConnection, saveSettings, activeConnection } from '../store.js';
 import { PROVIDERS, testConnection, proxyAvailable } from '../providers.js';
-import { esc } from '../util.js';
+import { esc, motion } from '../util.js';
 import { topbar, title2, ibtn, bullet, field, area, toggleRow, bindSwitch, icon, arrow, dial, bindDial, toast, confirmSheet } from '../ui.js';
 
 const LETTER_BG = { anthropic: '#FDCD15', openai: '#ECECEC', openrouter: '#B8ACFE', custom: '#2EAA67', demo: '#333333' };
@@ -35,7 +35,7 @@ export function connectionsView() {
         await saveSettings();
         const v = connectionsView();
         root.innerHTML = v.html;
-        root.querySelector(`[data-use="${b.dataset.use}"]`)?.closest('.conn')?.animate([{ transform: 'scale(.96)' }, { transform: 'scale(1)' }], { duration: 450, easing: 'cubic-bezier(.34,1.56,.64,1)' });
+        motion(root.querySelector(`[data-use="${b.dataset.use}"]`)?.closest('.conn'), [{ transform: 'scale(.97)' }, { transform: 'scale(1)' }], { duration: 260, easing: 'cubic-bezier(.16,1,.3,1)' });
       });
     },
   };
@@ -57,15 +57,20 @@ export function connectionEditView(id) {
     ${topbar({ back: '#/connections', title: isNew ? 'New connection' : esc(d.name || p().label), right: !isNew && S.connections.length > 1 ? ibtn('trash', 'Delete connection', { id: 'delBtn' }) : '' })}
     <div class="stack" style="gap:16px">
       ${d.provider === 'demo' ? `<div class="note">${icon('spark', 18)}<span>The demo connection sends canned replies so you can try the app. Pick a provider below to switch this connection to a real AI.</span></div>` : ''}
-      <div class="seg" role="group" aria-label="Provider">${providers.map((k) => `<button type="button" class="press" data-prov="${k}" aria-pressed="${d.provider === k}"><b>${PROVIDERS[k].label}</b><span>${PROVIDERS[k].sub}</span></button>`).join('')}</div>
-      ${field('cName', 'Name', d.name, { ph: p().label, attrs: 'autocomplete="off" maxlength="40"' })}
+      <div class="seg two" role="group" aria-label="Provider">${providers.map((k) => `<button type="button" class="press" data-prov="${k}" aria-pressed="${d.provider === k}"><b>${PROVIDERS[k].label}</b><span>${PROVIDERS[k].sub}</span></button>`).join('')}</div>
       <div id="urlSlot">${showUrl() ? urlField() : ''}</div>
+      <div>
+        ${field('cKey', 'API key', d.apiKey, { type: 'password', ph: p().keyHint, attrs: 'autocomplete="off" spellcheck="false"', right: d.provider === 'custom' ? '<span class="small">Optional</span>' : '', after: `<button type="button" class="ibtn ghost press" id="eyeBtn" aria-label="Show key">${icon('eye', 20)}</button>` })}
+        <p class="fhint key-note">${icon('shield', 15)}<span>Stays in this browser and goes only to ${esc(p().label)}. Backups leave it out unless you choose otherwise.</span></p>
+      </div>
       ${field('cModel', 'Model', d.model, { ph: p().modelHint, attrs: 'autocomplete="off" spellcheck="false"' })}
-      ${field('cKey', 'API key', d.apiKey, { type: 'password', ph: p().keyHint, attrs: 'autocomplete="off" spellcheck="false"', right: d.provider === 'custom' ? '<span class="small">Optional</span>' : '', after: `<button type="button" class="ibtn ghost press" id="eyeBtn" aria-label="Show key">${icon('eye', 20)}</button>` })}
-      <div id="dialSlot">${dial('cTemp', +d.temperature || 0.9, { min: 0, max: 2, step: 0.1, hint: 'How adventurous replies get' })}</div>
-      ${area('cPrompt', 'Connection prompt', d.prompt, { rows: 4, ph: 'Extra instructions for this model only, e.g. "Keep replies under 150 words."', right: '<span class="small" style="color:var(--yellow)">Added after the global prompt</span>' })}
-      ${toggleRow('tReplace', 'Replace global prompt', 'Send this prompt instead of the global one', d.replaceGlobal)}
-      <details class="adv"><summary>Advanced ${icon('chev', 18)}</summary><div class="inner">
+      <button type="button" class="btn-primary press" id="saveBtn"><span>Save and test</span>${arrow(30)}</button>
+      <div class="status-line" id="status" role="status"></div>
+      <details class="adv"${d.prompt?.trim() || d.replaceGlobal || d.useProxy ? ' open' : ''}><summary>More options ${icon('chev', 18)}</summary><div class="inner">
+        ${field('cName', 'Name', d.name, { ph: p().label, attrs: 'autocomplete="off" maxlength="40"' })}
+        <div id="dialSlot">${dial('cTemp', +d.temperature || 0.9, { min: 0, max: 2, step: 0.1, hint: 'How adventurous replies get' })}</div>
+        ${area('cPrompt', 'Connection prompt', d.prompt, { rows: 4, ph: 'Extra instructions for this model only, e.g. "Keep replies under 150 words."', right: '<span class="small">Added after the global prompt</span>' })}
+        ${toggleRow('tReplace', 'Replace global prompt', 'Send this prompt instead of the global one', d.replaceGlobal)}
         <div id="urlSlot2">${showUrl() ? '' : urlField()}</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           ${field('cMax', 'Max reply tokens', d.maxTokens, { type: 'number', attrs: 'min="16" max="32000" step="1"' })}
@@ -74,8 +79,6 @@ export function connectionEditView(id) {
         <p class="fhint" style="margin:-4px 2px 0">Context size is how many tokens this model can read. Long chats get summarized when they pass about half of it.</p>
         <div id="proxyRow">${toggleRow('tProxy', 'Route through local server', 'Use if your provider blocks requests from the browser. Needs server.js running.', d.useProxy)}</div>
       </div></details>
-      <button type="button" class="btn-primary press" id="saveBtn"><span>${isNew ? 'Save and test' : 'Save and test'}</span>${arrow(30)}</button>
-      <div class="status-line" id="status" role="status"></div>
     </div>
   </div>`;
 
@@ -101,6 +104,7 @@ export function connectionEditView(id) {
       $('#cName').placeholder = p().label;
       $('#cModel').placeholder = p().modelHint;
       $('#cKey').placeholder = p().keyHint;
+      root.querySelector('.key-note span').textContent = `Stays in this browser and goes only to ${p().label}. Backups leave it out unless you choose otherwise.`;
       $('#urlSlot').innerHTML = showUrl() ? urlField() : '';
       const u2 = $('#urlSlot2');
       if (u2) u2.innerHTML = showUrl() ? '' : urlField();
@@ -153,23 +157,37 @@ export function connectionEditView(id) {
       }
       await saveConnection(d);
       const prev = activeConnection();
-      if (!prev || prev.provider === 'demo' || isNew) {
-        S.settings.activeConnectionId = d.id;
-        await saveSettings();
-      }
+      const wasActive = prev?.id === d.id;
+      // Only a connection that works takes over chats; a failing one stays saved but off.
+      const shouldActivate = !prev || prev.provider === 'demo' || isNew;
       btn.classList.add('busy');
       btn.disabled = true;
       st.className = 'status-line';
       st.textContent = 'Testing the connection…';
       try {
         const r = await testConnection(d);
+        if (shouldActivate && !wasActive) {
+          S.settings.activeConnectionId = d.id;
+          await saveSettings();
+        }
         st.className = 'status-line ok';
-        st.innerHTML = `${icon('check', 18)}Connected. Replied in ${(r.ms / 1000).toFixed(1)} s.`;
-        toast('Connection saved and working');
+        st.innerHTML = `${icon('check', 18)}<span>Connected. Replied in ${(r.ms / 1000).toFixed(1)} s.${shouldActivate && !wasActive ? ' Chats now use it.' : ''}</span>`;
+        toast(shouldActivate && !wasActive ? 'Connected. Chats now use this connection.' : 'Connection saved and working');
         setTimeout(() => (location.hash = '#/connections'), 900);
       } catch (err) {
         st.className = 'status-line bad';
-        st.innerHTML = `${icon('x', 18)}<span>Saved, but the test failed: ${esc(err.message)}${err.hint ? ' ' + esc(err.hint) : ''}</span>`;
+        const why = `${esc(err.message)}${err.hint ? ' ' + esc(err.hint) : ''}`;
+        if (wasActive) {
+          st.innerHTML = `${icon('x', 18)}<span><b>Saved, but the test failed.</b> ${why} This is the connection your chats use, so replies will fail until it works.</span>`;
+        } else {
+          st.innerHTML = `${icon('x', 18)}<span><b>Saved, not switched on: the test failed.</b> ${why} Fix the key or model and test again.${shouldActivate ? ` <button type="button" class="btn-text" id="useAnyway" style="height:auto;padding:4px 0;color:var(--cream);text-decoration:underline;text-underline-offset:3px">Use it anyway</button>` : ''}</span>`;
+          st.querySelector('#useAnyway')?.addEventListener('click', async () => {
+            S.settings.activeConnectionId = d.id;
+            await saveSettings();
+            toast(`Chats now use ${d.name}`);
+            location.hash = '#/connections';
+          });
+        }
       }
       btn.classList.remove('busy');
       btn.disabled = false;

@@ -141,7 +141,7 @@ export async function complete(conn, { system, messages, signal, onDelta = () =>
       0,
       conn.useProxy
         ? 'The local server is not running. Start it with "npm start", or turn off "Route through local server".'
-        : 'Check your internet and the base URL. If the provider blocks browser requests, turn on "Route through local server" for this connection.'
+        : 'Check your internet connection, the API key and the base URL. Some providers refuse requests from a browser; if you run Chatbox on your computer with "npm start", turn on Route through local server under More options in this connection.'
     );
   }
   if (!res.ok) throw await readError(res);
@@ -207,6 +207,7 @@ const DEMO_LINES = [
   ['leans on the counter, chin in her hand', "Okay, I'm listening. Go on."],
   ['blushes and looks away for a second', 'W-well, thank you. That was nice of you to say.'],
 ];
+let demoCalls = 0;
 async function demoReply({ messages, signal, onDelta, character }) {
   const n = messages.filter((m) => m.role === 'user').length;
   const last = [...messages].reverse().find((m) => m.role === 'user')?.content || '';
@@ -215,7 +216,8 @@ async function demoReply({ messages, signal, onDelta, character }) {
     onDelta(out);
     return out;
   }
-  const [act, say] = DEMO_LINES[n % DEMO_LINES.length];
+  // demoCalls makes Regenerate give a different line instead of repeating the same one.
+  const [act, say] = DEMO_LINES[(n + demoCalls++) % DEMO_LINES.length];
   const out = `*${act}* "${say}"\n\n*(Demo reply. Add your API key in Settings to talk to ${character?.name || 'your character'} for real.)*`;
   const parts = out.split(/(\s+)/);
   let text = '';

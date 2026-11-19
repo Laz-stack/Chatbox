@@ -1,13 +1,14 @@
-import { S, character, getChat, saveChat, saveCharacter, connectionFor, textOf, resetChat } from '../store.js';
+import { S, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, resetChat } from '../store.js';
 import { complete, PROVIDERS } from '../providers.js';
 import { buildPrompt } from '../prompt.js';
 import { shouldSummarize, summarize } from '../memory.js';
-import { esc, uid, formatMessage, fmtNum, detectMood, copyText, download, slug, reducedMotion } from '../util.js';
+import { esc, uid, formatMessage, fmtNum, detectMood, copyText, download, slug, reducedMotion, motion, lineAccent, EASE_OUT } from '../util.js';
 import { avatarTile } from '../avatar.js';
-import { sceneSVG, SCENES } from '../scenes.js';
+import { sceneSVG } from '../scenes.js';
+import { sceneSheet as openSceneSheet } from '../scenepicker.js';
 import { speak, stopSpeaking, ttsSupported } from '../tts.js';
 import { exportCardPng } from '../cards.js';
-import { ibtn, avatarBullet, icon, arrow, openMenu, openSheet, toast, confirmSheet, autosize, ruler, bindRuler, reel } from '../ui.js';
+import { ibtn, avatarBullet, icon, arrow, openMenu, openSheet, toast, confirmSheet, autosize, reel } from '../ui.js';
 
 // Streams text into a bubble word by word, keeping *actions* italic as they arrive.
 class StreamRenderer {
@@ -52,24 +53,27 @@ export async function chatView(id) {
   let destroyed = false;
 
   const conn0 = connectionFor(ch);
-  const html = `<div class="chat" id="chat" style="--blur:${ch.sceneBlur ?? 4}px;--dim:${(ch.sceneDim ?? 60) / 100}">
+  const connText = (c) => (!c ? 'No connection' : c.provider === 'demo' ? 'Demo replies' : c.model || c.name);
+  // Short placeholder: a long name would wrap the composer onto several lines.
+  const callName = ch.name.length > 14 ? ch.name.split(/\s+/)[0].slice(0, 14) : ch.name;
+  const html = `<div class="chat" id="chat" style="--blur:${ch.sceneBlur ?? 4}px;--dim:${(ch.sceneDim ?? 60) / 100};--accent:${lineAccent(ch.line?.color)}">
     <div class="chat-scene" id="scene" aria-hidden="true">${ch.scene && ch.scene !== 'none' ? sceneSVG(ch.scene) : ''}</div>
     <header class="chat-head">
       ${ibtn('back', 'Back to home', { href: '#/' })}
-      <a class="chat-who press" href="#/edit/${ch.id}" aria-label="Edit ${esc(ch.name)}">${avatarBullet(ch, 42, `view-transition-name:line-${ch.id}`)}<span class="who-tx"><span class="who-n">${esc(ch.name)}</span><span class="who-s" id="status">${esc(ch.tagline || 'Online')}</span></span></a>
+      <a class="chat-who press" href="#/edit/${ch.id}" aria-label="Edit ${esc(ch.name)}">${avatarBullet(ch, 42, '', `head:${ch.id}`)}<span class="who-tx"><span class="who-n">${esc(ch.name)}</span><span class="who-s" id="status">${esc(ch.tagline || 'Online')}</span></span></a>
       ${ibtn('more', 'Chat options', { id: 'moreBtn' })}
     </header>
     <div class="chat-meta">
-      <a class="pill press" href="#/connections" aria-label="Switch connection"><span class="dot"></span><span class="ell" id="connName">${esc(conn0 ? conn0.model || conn0.name : 'No connection')}</span></a>
-      <span class="pill muted" id="tokPill" ${S.settings.showCounter ? '' : 'hidden'} title="Estimated tokens sent with the next reply">${icon('layers', 14)}<span class="num" id="tokN">…</span></span>
+      <a class="pill press" href="#/connections" aria-label="Connection: ${esc(connText(conn0))}. Tap to switch."><span class="dot${conn0?.provider === 'demo' ? ' demo' : ''}" id="connDot"></span><span class="ell" id="connName">${esc(connText(conn0))}</span></a>
+      <span class="pill muted" id="tokPill" ${S.settings.showCounter ? '' : 'hidden'} title="Estimated tokens sent with the next reply">${icon('layers', 14)}<span><span class="num" id="tokN">…</span> tokens</span></span>
       <a class="pill y press end" href="#/memory/${ch.id}">${icon('pin', 15)}<span id="noteN">${chat.notes.length}</span>&nbsp;note${chat.notes.length === 1 ? '' : 's'}</a>
     </div>
-    <div class="log" id="log" role="log" aria-live="polite" aria-relevant="additions"></div>
+    <div class="log" id="log" role="log" aria-live="polite" aria-relevant="additions" aria-label="Chat with ${esc(ch.name)}"></div>
     <div class="chips" id="chips"></div>
     <form class="composer" id="composer">
-      ${ibtn('asterisk', 'Add an action in asterisks', { id: 'actBtn' })}
-      <textarea id="input" rows="1" placeholder="Message ${esc(ch.name)}…" aria-label="Message ${esc(ch.name)}" enterkeyhint="send"></textarea>
-      <button type="submit" class="send press" id="sendBtn" aria-label="Send" disabled>${arrow(24, '#FFFFFF')}</button>
+      ${ibtn('asterisk', 'Add an *action*', { id: 'actBtn', attrs: 'title="Add an *action*: wraps the selection in asterisks"' })}
+      <textarea id="input" rows="1" placeholder="Message ${esc(callName)}…" aria-label="Message ${esc(ch.name)}" enterkeyhint="send"></textarea>
+      <button type="submit" class="send press" id="sendBtn" aria-label="Send" disabled>${arrow(24, 'currentColor')}</button>
     </form>
   </div>`;
 
@@ -117,7 +121,9 @@ export async function chatView(id) {
       if (el) el.outerHTML = msgHTML(chat.messages[i], i);
     }
     function renderChips() {
-      if (busy) return (chips.innerHTML = '');
+      // While a reply is being written the chips stay in place, disabled, so nothing jumps.
+      chips.classList.toggle('wait', busy);
+      if (busy) return chips.querySelectorAll('button').forEach((b) => (b.disabled = true));
       const last = chat.messages[chat.messages.length - 1];
       let h = '';
       if (last?.role === 'assistant' && !last.first) h = `<button type="button" class="press" data-chip="regen">${icon('refresh', 16)}Regenerate</button><button type="button" class="press" data-chip="continue">${icon('chev', 16)}Continue</button>`;
@@ -141,7 +147,7 @@ export async function chatView(id) {
     function setBusy(v) {
       busy = v;
       sendBtn.classList.toggle('stopping', v);
-      sendBtn.innerHTML = v ? icon('stop', 20) : arrow(24, '#FFFFFF');
+      sendBtn.innerHTML = v ? icon('stop', 20) : arrow(24, 'currentColor');
       sendBtn.setAttribute('aria-label', v ? 'Stop' : 'Send');
       sendBtn.disabled = !v && !input.value.trim();
       renderChips();
@@ -178,11 +184,14 @@ export async function chatView(id) {
         el = log.querySelector(`.msg[data-i="${idx}"]`);
       }
       const bubble = el.querySelector('.bubble');
-      el.querySelector('.msg-tools')?.remove();
+      // Keep the tools row's space while writing (hidden), so the log doesn't jump.
+      const tools = el.querySelector('.msg-tools');
+      if (tools) (tools.style.visibility = 'hidden'), tools.querySelectorAll('button').forEach((b) => (b.disabled = true));
       const prev = mode === 'continue' ? textOf(target) : '';
       if (mode === 'regen') {
-        await bubble.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateX(-30px)' }], { duration: 180, easing: 'ease-in' }).finished.catch(() => {});
-        bubble.style.opacity = '';
+        // Hold the bubble's height until the new text fills it, so the log doesn't jump.
+        bubble.style.minHeight = bubble.offsetHeight + 'px';
+        await motion(bubble, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateX(-24px)' }], { duration: 160, easing: 'ease-in' }).finished.catch(() => {});
       }
       bubble.innerHTML = mode === 'continue' ? formatMessage(prev) : '';
       const caret = document.createElement('span');
@@ -195,6 +204,7 @@ export async function chatView(id) {
 
       setBusy(true);
       setStatus('typing');
+      el.setAttribute('aria-busy', 'true');
       ctl = new AbortController();
       let text = prev;
       let first = true;
@@ -241,12 +251,19 @@ export async function chatView(id) {
         const moodChanged = mood !== target.mood;
         target.mood = mood;
         rerenderMsg(idx);
-        if (moodChanged) log.querySelector(`.msg[data-i="${idx}"] .msg-av`)?.classList.add('bump');
+        if (moodChanged && !reducedMotion()) log.querySelector(`.msg[data-i="${idx}"] .msg-av`)?.classList.add('bump');
         if (S.settings.readAloud) speak(text);
       }
       setBusy(false);
       setStatus('idle');
+      root.querySelector('#connDot').classList.toggle('bad', !!error);
       if (error) showError(error, mode);
+      else if (text.trim() && !S.settings.seenChatTips) {
+        // One-time tip after the first reply: the message actions are otherwise invisible.
+        S.settings.seenChatTips = true;
+        saveSettings();
+        setTimeout(() => !destroyed && toast('Tip: long-press a message to edit, copy or pin it. Swipe a reply sideways for another version.', { action: 'Got it', ms: 9000 }), 500);
+      }
       await save();
       toBottom(true);
 
@@ -305,12 +322,12 @@ export async function chatView(id) {
       if (next < 0) return;
       if (next >= m.alts.length) return generate('regen');
       const b = log.querySelector(`.msg[data-i="${i}"] .bubble`);
-      if (b && !reducedMotion()) await b.animate([{ transform: 'none', opacity: 1 }, { transform: `translateX(${-dir * 36}px)`, opacity: 0 }], { duration: 150, easing: 'ease-in' }).finished.catch(() => {});
+      if (b) await motion(b, [{ transform: 'none', opacity: 1 }, { transform: `translateX(${-dir * 28}px)`, opacity: 0 }], { duration: 140, easing: 'ease-in' }).finished.catch(() => {});
       m.alt = next;
       m.mood = detectMood(textOf(m));
       rerenderMsg(i);
       const nb = log.querySelector(`.msg[data-i="${i}"] .bubble`);
-      if (nb && !reducedMotion()) nb.animate([{ transform: `translateX(${dir * 36}px)`, opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 420, easing: 'cubic-bezier(.34,1.56,.64,1)' });
+      if (nb) motion(nb, [{ transform: `translateX(${dir * 28}px)`, opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 300, easing: EASE_OUT });
       save();
       updateTokens();
     }
@@ -331,7 +348,7 @@ export async function chatView(id) {
           '-',
           { icon: 'trash', label: 'Delete', danger: true, on: () => remove(i) },
         ],
-        { onClose: () => el.classList.remove('lifted') }
+        { onClose: () => el.classList.remove('lifted'), spotlight: el.querySelector('.bubble') }
       );
     }
     function editMessage(i) {
@@ -366,7 +383,7 @@ export async function chatView(id) {
       const [m] = chat.messages.splice(i, 1);
       if (chat.summary && i < chat.summary.upto) chat.summary.upto--;
       const el = log.querySelector(`.msg[data-i="${i}"]`);
-      if (el && !reducedMotion()) await el.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.9)' }], { duration: 200, easing: 'ease-in' }).finished.catch(() => {});
+      if (el) await motion(el, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.94)' }], { duration: 180, easing: 'ease-in' }).finished.catch(() => {});
       renderAll();
       await save();
       updateTokens();
@@ -396,53 +413,48 @@ export async function chatView(id) {
           label: 'Start a new chat',
           danger: true,
           on: async () => {
-            if (!(await confirmSheet({ title: 'Start a new chat?', body: `This clears your chat with ${esc(ch.name)}. Pinned notes stay. Export a backup first if you want to keep it.`, ok: 'Start over', danger: true }))) return;
+            if (!(await confirmSheet({ title: 'Start a new chat?', body: `This clears your chat with ${esc(ch.name)}. Pinned notes stay. You can undo for a few seconds afterwards.`, ok: 'Clear the chat', danger: true }))) return;
+            const old = structuredClone(chat);
             const fresh = await resetChat(ch.id);
+            for (const k of Object.keys(chat)) delete chat[k];
             Object.assign(chat, fresh);
             renderAll();
             updateTokens();
+            toast('Chat cleared', {
+              action: 'Undo',
+              ms: 8000,
+              onAction: async () => {
+                for (const k of Object.keys(chat)) delete chat[k];
+                Object.assign(chat, old);
+                await saveChat(chat);
+                if (destroyed) return;
+                renderAll();
+                toBottom();
+                updateTokens();
+                root.querySelector('#noteN').textContent = chat.notes.length;
+              },
+            });
           },
         },
       ])
     );
 
     function sceneSheet() {
-      const orig = { scene: ch.scene, blur: ch.sceneBlur ?? 4, dim: ch.sceneDim ?? 60 };
-      let d = { ...orig };
       const chatEl = root.querySelector('#chat');
       const sceneEl = root.querySelector('#scene');
-      const apply = () => {
+      const apply = (d) => {
         chatEl.style.setProperty('--blur', d.blur + 'px');
         chatEl.style.setProperty('--dim', d.dim / 100);
         sceneEl.innerHTML = d.scene !== 'none' ? sceneSVG(d.scene) : '';
       };
-      let saved = false;
-      openSheet({
-        label: 'Scene',
-        html: `<div class="sheet-head"><h2 class="t2" style="font-size:28px"><span>Scene</span><span class="sub">Behind the chat</span></h2></div>
-          <div class="grid3" id="scGrid">${SCENES.map((s) => `<button type="button" class="pick press" data-k="${s.key}" aria-pressed="${s.key === d.scene}"><span class="thumb scene">${sceneSVG(s.key)}<span class="check">${`<span class="bullet" style="width:24px;height:24px;background:var(--yellow);color:var(--bg)">${icon('check', 13)}</span>`}</span></span><span class="nm">${s.name}</span></button>`).join('')}</div>
-          <div class="stack" style="margin:18px 0">${ruler('scBlur', 'Blur', d.blur, 20)}${ruler('scDim', 'Dim', d.dim, 100)}</div>
-          <button type="button" class="btn-primary press" id="scSave"><span>Use for ${esc(ch.name)}</span>${arrow(30)}</button>`,
-        onMount(s, close) {
-          s.querySelector('#scGrid').addEventListener('click', (e) => {
-            const b = e.target.closest('[data-k]');
-            if (!b) return;
-            d.scene = b.dataset.k;
-            s.querySelectorAll('[data-k]').forEach((x) => x.setAttribute('aria-pressed', x === b));
-            apply();
-          });
-          bindRuler(s.querySelector('#scBlur').closest('.ruler-wrap'), (v) => ((d.blur = v), apply()));
-          bindRuler(s.querySelector('#scDim').closest('.ruler-wrap'), (v) => ((d.dim = v), apply()));
-          s.querySelector('#scSave').onclick = async () => {
-            saved = true;
-            Object.assign(ch, { scene: d.scene, sceneBlur: d.blur, sceneDim: d.dim });
-            await saveCharacter(ch);
-            close();
-            toast('Scene saved');
-          };
-        },
-        onClose() {
-          if (!saved) (d = orig), apply();
+      openSceneSheet({
+        value: { scene: ch.scene, blur: ch.sceneBlur ?? 4, dim: ch.sceneDim ?? 60 },
+        cta: `Use for ${esc(ch.name)}`,
+        onPreview: apply,
+        async onSave(d) {
+          Object.assign(ch, { scene: d.scene, sceneBlur: d.blur, sceneDim: d.dim });
+          await saveCharacter(ch);
+          toast('Scene saved');
         },
       });
     }
@@ -522,9 +534,9 @@ export async function chatView(id) {
       const p = press;
       press = null;
       if (!p.swipe) return;
-      p.bubble.style.transition = 'transform .4s cubic-bezier(.34,1.56,.64,1)';
+      p.bubble.style.transition = reducedMotion() ? '' : `transform .32s ${EASE_OUT}`;
       p.bubble.style.transform = '';
-      setTimeout(() => (p.bubble.style.transition = ''), 400);
+      setTimeout(() => (p.bubble.style.transition = ''), 340);
       if (Math.abs(p.dx) > 70) switchAlt(p.dx < 0 ? 1 : -1);
     };
     log.addEventListener('pointerup', endPress);

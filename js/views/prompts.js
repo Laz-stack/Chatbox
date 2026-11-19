@@ -1,9 +1,12 @@
 import { S, character, getChat, saveChat, saveSettings, connectionFor, hasStarted } from '../store.js';
 import { buildPrompt, promptAsText } from '../prompt.js';
 import { summarize, historyTokens } from '../memory.js';
-import { esc, debounce, uid, fmtNum, copyText } from '../util.js';
-import { topbar, title2, ibtn, bullet, lineBullet, area, toggleRow, bindSwitch, icon, primary, reel, toast, openSheet } from '../ui.js';
+import { esc, debounce, uid, fmtNum, copyText, reducedMotion } from '../util.js';
+import { topbar, title2, ibtn, bullet, avatarBullet, area, toggleRow, bindSwitch, icon, primary, reel, toast, openSheet } from '../ui.js';
 
+// Every layer keeps one number and one colour everywhere (Prompts and Final prompt), even when some are empty.
+const LAYER_ORDER = ['global', 'connection', 'persona', 'user', 'notes', 'chat'];
+const layerNo = (k) => String(LAYER_ORDER.indexOf(k) + 1);
 const LAYER_COLORS = { global: ['#FDCD15', '#0A0A0A'], connection: ['#E70404', '#FFFFFF'], persona: ['#ECECEC', '#0A0A0A'], user: ['#065BFE', '#FFFFFF'], notes: ['#B8ACFE', '#0A0A0A'], chat: ['#333333', '#ECECEC'] };
 
 function recentCharacter() {
@@ -74,14 +77,14 @@ export async function finalView(id) {
   const html = `<div class="screen no-tab">
     ${topbar({ back: `#/chat/${ch.id}`, title: 'Final prompt', right: ibtn('copy', 'Copy the whole prompt', { id: 'copyBtn', cls: 'yellow' }) })}
     <div class="stack" style="gap:16px">
-      <div style="display:flex;align-items:center;gap:10px">${lineBullet(ch, 30)}<span class="small" style="font-size:14px">${esc(ch.name)} · ${esc(conn?.name || 'No connection')} · ${esc(conn?.model || '')}</span></div>
+      <div style="display:flex;align-items:center;gap:10px">${avatarBullet(ch, 30)}<span class="small" style="font-size:14px">${esc(ch.name)} · ${esc(conn?.name || 'No connection')}${conn && conn.provider !== 'demo' && conn.model ? ' · ' + esc(conn.model) : ''}</span></div>
       <div class="bignum"><span class="n" id="bigN">${total.toLocaleString()}</span><span class="l"><span>tokens</span><span>each reply</span></span></div>
       <div class="segbar" aria-hidden="true">${parts.map((p, i) => `<i style="flex:${Math.max(p.tokens, 1)};background:${LAYER_COLORS[p.key][0]};animation-delay:${0.1 + i * 0.07}s"></i>`).join('')}</div>
-      <div class="legend">${parts.map((p, i) => `<span>${bullet(String(i + 1), LAYER_COLORS[p.key][0], LAYER_COLORS[p.key][1], 20)}${p.name.replace(' prompt', '')} <em class="num">${fmtNum(p.tokens)}</em></span>`).join('')}</div>
+      <div class="legend">${parts.map((p) => `<span>${bullet(layerNo(p.key), LAYER_COLORS[p.key][0], LAYER_COLORS[p.key][1], 20)}${p.name.replace(' prompt', '')} <em class="num">${fmtNum(p.tokens)}</em></span>`).join('')}</div>
       <div class="stack" style="gap:10px">${parts
         .map(
           (p, i) =>
-            `<details class="layer" style="animation-delay:${0.15 + i * 0.05}s"><summary>${bullet(String(i + 1), LAYER_COLORS[p.key][0], LAYER_COLORS[p.key][1], 24)}<b>${p.name}</b><span class="small num">${p.tokens.toLocaleString()} tokens</span></summary><div class="peek">${esc(p.text)}</div><pre>${esc(p.text)}</pre></details>`
+            `<details class="layer" style="animation-delay:${0.15 + i * 0.05}s"><summary>${bullet(layerNo(p.key), LAYER_COLORS[p.key][0], LAYER_COLORS[p.key][1], 24)}<b>${p.name}</b><span class="small num">${p.tokens.toLocaleString()} tokens</span></summary><div class="peek">${esc(p.text)}</div><pre>${esc(p.text)}</pre></details>`
         )
         .join('')}</div>
       <p class="fhint">Token counts are estimates (about four characters each). Messages older than the summary and anything past the context size are left out.</p>
@@ -94,9 +97,11 @@ export async function finalView(id) {
       root.querySelector('#copyBtn').addEventListener('click', () => copyText(promptAsText(built)).then(() => toast('Prompt copied')));
       // Count-up on the big number.
       const el = root.querySelector('#bigN');
+      if (reducedMotion()) return;
       const t0 = performance.now();
-      const tick = (t) => {
-        const k = Math.min(1, (t - t0) / 700);
+      // Own clock, clamped: a frame timestamp can be earlier than t0 and would count backwards.
+      const tick = () => {
+        const k = Math.min(1, Math.max(0, (performance.now() - t0) / 700));
         el.textContent = Math.round(total * (1 - Math.pow(1 - k, 3))).toLocaleString();
         if (k < 1) requestAnimationFrame(tick);
       };
@@ -118,7 +123,7 @@ export async function memoryView(id) {
     const frac = Math.min(1, used / ctx);
     const spd = Math.max(1.5, 9 - frac * 7).toFixed(1);
     return `<div class="deck"><div class="reels">${reel(118, { spd, pack: 40 - Math.round(frac * 12), cls: 'r1' })}${reel(118, { spd: (spd * 0.75).toFixed(1), pack: 26 + Math.round(frac * 12), cls: 'r2' })}<span class="tape"></span></div>
-      <div class="stats"><span class="big num">${fmtNum(used)} of ${fmtNum(ctx)}<small>tokens sent with each reply</small></span><span class="small num" style="color:var(--inkm);font-size:13px">${chat.messages.length} messages</span></div>
+      <div class="stats"><span class="big num">${fmtNum(used)} of ${fmtNum(ctx)}<small>tokens sent with each reply</small></span><span class="small num" style="color:var(--inkm);font-size:13px">${chat.messages.length} message${chat.messages.length === 1 ? '' : 's'}</span></div>
       <div class="meter"><i style="width:${Math.max(2, frac * 100).toFixed(1)}%"></i></div></div>`;
   };
   const notesHTML = () =>

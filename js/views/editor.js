@@ -1,9 +1,12 @@
 import { S, character, blankCharacter, saveCharacter, deleteCharacter, getChat, connection, LINE_COLORS, newChat, saveChat } from '../store.js';
-import { esc, resizeImage, download, slug, inkOn } from '../util.js';
+import { esc, resizeImage, download, slug, motion } from '../util.js';
 import { avatarTile, avatarSVG, PRESETS, PRESET_KEYS, EXPRESSIONS } from '../avatar.js';
 import { sceneSVG, SCENES } from '../scenes.js';
+import { sceneSheet } from '../scenepicker.js';
 import { exportCardPng, exportCardJson } from '../cards.js';
 import { topbar, ibtn, field, area, group, row, toggleRow, bindSwitch, bullet, icon, arrow, openSheet, openMenu, toast, confirmSheet } from '../ui.js';
+
+const COLOR_NAMES = { '#2EAA67': 'Green', '#FB4DAA': 'Pink', '#FE6500': 'Orange', '#B8ACFE': 'Lilac', '#FDCD15': 'Yellow', '#065BFE': 'Blue', '#ECECEC': 'Silver', '#E70404': 'Red' };
 
 export function editorView(id) {
   const isNew = id === 'new';
@@ -16,7 +19,7 @@ export function editorView(id) {
     d.avatarImage
       ? `<p class="fhint" style="margin:0">Expressions work with the drawn avatars. Uploaded pictures stay the same in every mood.</p>`
       : `<div style="display:flex;justify-content:space-between">${EXPRESSIONS.map(
-          (x, i) => `<span style="display:flex;flex-direction:column;align-items:center;gap:8px;animation:popIn .5s var(--spring) ${0.05 * i}s both">${avatarTile(d, 74, { expr: x, radius: 20 })}<span class="small" style="text-transform:capitalize">${x}</span></span>`
+          (x, i) => `<span style="display:flex;flex-direction:column;align-items:center;gap:8px;animation:popIn .4s var(--out) ${0.04 * i}s both">${avatarTile(d, 74, { expr: x, radius: 20 })}<span class="small" style="text-transform:capitalize">${x}</span></span>`
         ).join('')}</div>`;
 
   const connLabel = () => {
@@ -46,7 +49,7 @@ export function editorView(id) {
       <div class="field"><div class="flabel"><span>Line</span><span class="small">The letter and colour on the bullet</span></div>
         <div style="display:flex;gap:12px;align-items:center">
           <input class="input" id="fLetter" value="${esc(d.line.letter)}" maxlength="2" aria-label="Line letter" style="width:64px;text-align:center;font-weight:800;font-size:20px;flex:none">
-          <div class="swatches" id="swatches" role="group" aria-label="Line colour">${LINE_COLORS.map((c) => `<button type="button" class="swatch press" data-c="${c}" aria-label="Colour ${c}" aria-pressed="${c === d.line.color}">${bullet('', c, null, 32)}</button>`).join('')}</div>
+          <div class="swatches" id="swatches" role="group" aria-label="Line colour">${LINE_COLORS.map((c) => `<button type="button" class="swatch press" data-c="${c}" aria-label="${COLOR_NAMES[c] || c}" title="${COLOR_NAMES[c] || c}" aria-pressed="${c === d.line.color}">${bullet('', c, null, 32)}</button>`).join('')}</div>
         </div>
       </div>
       ${area('fPersona', 'Persona prompt', d.persona, { rows: 7, ph: 'Who they are, how they talk, what they want. Use {{char}} for their name and {{user}} for yours.', right: `<span class="counter" id="cPersona">0 / 6,000</span>` })}
@@ -64,10 +67,20 @@ export function editorView(id) {
 
   function mount(root) {
     const $ = (s) => root.querySelector(s);
+    const pristine = JSON.stringify(d);
+    let leaving = false;
+    root.querySelector('.topbar a').addEventListener('click', async (e) => {
+      if (leaving || JSON.stringify(d) === pristine) return;
+      e.preventDefault();
+      const href = e.currentTarget.getAttribute('href');
+      if (!(await confirmSheet({ title: 'Discard your changes?', body: isNew ? 'This character has not been created yet.' : `Your edits to ${esc(d.name || 'this character')} have not been saved.`, ok: 'Discard', danger: true }))) return;
+      leaving = true;
+      location.hash = href;
+    });
     const paintBullet = () => ($('#heroBullet').innerHTML = bullet(esc(d.line.letter || (d.name?.[0] || '?').toUpperCase()), d.line.color, null, 40, 'box-shadow:0 0 0 4px var(--bg)'));
     const paintAv = () => {
       $('#heroAv').innerHTML = avatarTile(d, 112, { radius: 30, rot: -3 });
-      $('#heroAv').firstElementChild.animate([{ transform: 'scale(.8) rotate(-12deg)' }, { transform: 'rotate(-3deg)' }], { duration: 500, easing: 'cubic-bezier(.34,1.56,.64,1)' });
+      motion($('#heroAv').firstElementChild, [{ transform: 'scale(.9) rotate(-8deg)', opacity: 0.6 }, { transform: 'rotate(-3deg)', opacity: 1 }], { duration: 320, easing: 'cubic-bezier(.16,1,.3,1)' });
       $('#exprRow').innerHTML = exprRow();
     };
     const count = () => {
@@ -100,7 +113,7 @@ export function editorView(id) {
       if (!b) return;
       d.line.color = b.dataset.c;
       root.querySelectorAll('.swatch').forEach((x) => x.setAttribute('aria-pressed', x === b));
-      b.animate([{ transform: 'scale(.8)' }, { transform: 'scale(1)' }], { duration: 400, easing: 'cubic-bezier(.34,1.56,.64,1)' });
+      motion(b.firstElementChild, [{ transform: 'scale(.85)' }, { transform: 'scale(1)' }], { duration: 240, easing: 'cubic-bezier(.16,1,.3,1)' });
       paintBullet();
       paintAv();
     });
@@ -143,18 +156,13 @@ export function editorView(id) {
     );
 
     $('#sceneRow').addEventListener('click', () =>
-      openSheet({
-        label: 'Scene',
-        html: `<h2 class="sheet-title">Scene</h2><p class="sheet-p">Shown softly behind the chat.</p><div class="grid3" id="sg">${SCENES.map((s) => `<button type="button" class="pick press" data-k="${s.key}" aria-pressed="${s.key === d.scene}"><span class="thumb scene">${sceneSVG(s.key)}<span class="check"><span class="bullet" style="width:24px;height:24px;background:var(--yellow);color:var(--bg)">${icon('check', 13)}</span></span></span><span class="nm">${s.name}</span></button>`).join('')}</div>`,
-        onMount(s, close) {
-          s.querySelector('#sg').addEventListener('click', (e) => {
-            const b = e.target.closest('[data-k]');
-            if (!b) return;
-            d.scene = b.dataset.k;
-            $('#sceneName').textContent = SCENES.find((x) => x.key === d.scene)?.name;
-            $('#sceneThumb').innerHTML = d.scene !== 'none' ? `<span style="width:100%;height:100%;filter:grayscale(1)">${sceneSVG(d.scene)}</span>` : icon('image', 19);
-            close();
-          });
+      sceneSheet({
+        value: { scene: d.scene, blur: d.sceneBlur ?? 4, dim: d.sceneDim ?? 60 },
+        cta: 'Use this scene',
+        onSave(v) {
+          Object.assign(d, { scene: v.scene, sceneBlur: v.blur, sceneDim: v.dim });
+          $('#sceneName').textContent = SCENES.find((x) => x.key === d.scene)?.name || 'None';
+          $('#sceneThumb').innerHTML = d.scene !== 'none' ? `<span style="width:100%;height:100%;filter:grayscale(1)">${sceneSVG(d.scene)}</span>` : icon('image', 19);
         },
       })
     );
@@ -184,7 +192,7 @@ export function editorView(id) {
       d.name = d.name.trim();
       if (!d.name) {
         $('#fName').focus();
-        $('#fName').animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-8px)' }, { transform: 'translateX(8px)' }, { transform: 'translateX(0)' }], { duration: 300 });
+        motion($('#fName'), [{ transform: 'translateX(0)' }, { transform: 'translateX(-6px)' }, { transform: 'translateX(6px)' }, { transform: 'translateX(0)' }], { duration: 260 });
         return toast('Give your character a name.');
       }
       if (!d.line.letter) d.line.letter = d.name[0].toUpperCase();

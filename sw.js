@@ -28,7 +28,25 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  if (url.origin !== self.location.origin) return; // AI APIs, fonts: leave alone
+  // Archivo from Google Fonts: keep a copy so the installed app keeps its typeface offline.
+  if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
+    e.respondWith(
+      (async () => {
+        const cache = await caches.open(CACHE);
+        const hit = await cache.match(req);
+        const net = fetch(req)
+          .then((res) => {
+            if (res.ok || res.type === 'opaque') cache.put(req, res.clone());
+            return res;
+          })
+          .catch(() => null);
+        if (hit) return e.waitUntil(net), hit;
+        return (await net) || Response.error();
+      })()
+    );
+    return;
+  }
+  if (url.origin !== self.location.origin) return; // AI APIs: leave alone
   if (/\/proxy(\/|$)/.test(url.pathname)) return; // local relay, never cache
 
   e.respondWith(
