@@ -34,21 +34,33 @@ let lastKind = '';
 // Lines badge or Departures badge, marked data-av="kind:id") flies into the chat header
 // avatar (data-av="head:id") and back to the same spot on return.
 let origin = null; // e.g. "hero:mika"
+// Where the last tap landed: the next screen grows out of that point.
+let tap = null;
 document.addEventListener(
   'click',
   (e) => {
     const a = e.target.closest?.('a[href^="#/chat/"]');
     const av = a?.querySelector('[data-av]');
     if (av) origin = av.dataset.av;
+    // detail 0 = keyboard "click": no finger position, so no tap origin.
+    tap = e.detail ? { x: e.clientX, y: e.clientY, t: performance.now() } : null;
   },
   true
 );
 const routeKind = (h) => (/^#\/chat\//.test(h) ? 'chat' : /^#?\/?$/.test(h) ? 'home' : 'other');
 
 // Names stay on a node after a transition; clear them so the next (unrelated) one has no orphans.
-const clearShared = (root) => root.querySelectorAll('[data-av]').forEach((n) => (n.style.viewTransitionName = ''));
+const clearShared = (root) => root.querySelectorAll('[data-av], .hero-arrow').forEach((n) => (n.style.viewTransitionName = ''));
 
-function tagShared(root) {
+function tagShared(root, toChat) {
+  // Home -> Chat: the hero's big arrow gets its own layer and keeps flying the way it points.
+  const arrowEl = toChat && root.querySelector('.hero-arrow');
+  if (arrowEl) {
+    arrowEl.style.viewTransitionName = 'hero-arrow';
+    // A dark (ink) arrow would vanish over the dark chat it flies across, so it lights up as it leaves.
+    const [r, g, b] = getComputedStyle(arrowEl).color.match(/\d+/g).map(Number);
+    document.documentElement.classList.toggle('vt-arrow-ink', r + g + b < 200);
+  }
   let el = root.querySelector('[data-av^="head:"]');
   if (!el) {
     const id = origin?.split(':')[1];
@@ -103,15 +115,26 @@ async function render() {
     current?.unmount?.();
     current = view;
     app.innerHTML = view.html;
-    if (shared) tagShared(app);
+    if (shared) tagShared(app, false);
     window.scrollTo(0, 0);
     return view.mount?.(app);
   };
   if (document.startViewTransition && !reducedMotion() && current) {
-    if (shared) tagShared(app);
-    else clearShared(app);
+    clearShared(app);
+    if (shared) tagShared(app, kind === 'chat');
+    // A fresh tap (not a back gesture or keyboard) sets the point the new screen grows from.
+    const html = document.documentElement;
+    const fromTap = tap && performance.now() - tap.t < 1200;
+    if (fromTap) {
+      const r = Math.hypot(Math.max(tap.x, innerWidth - tap.x), Math.max(tap.y, innerHeight - tap.y));
+      html.style.setProperty('--tx', tap.x + 'px');
+      html.style.setProperty('--ty', tap.y + 'px');
+      html.style.setProperty('--tr', Math.ceil(r) + 'px');
+    }
+    html.classList.toggle('vt-tap', !!fromTap);
+    tap = null;
     const t = document.startViewTransition(swap);
-    t.finished.catch(() => {});
+    t.finished.catch(() => {}).finally(() => html.classList.remove('vt-tap', 'vt-arrow-ink'));
   } else {
     await swap();
   }

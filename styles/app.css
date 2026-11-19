@@ -492,6 +492,17 @@ html[data-dir='back']::view-transition-new(root) { animation-name: fadeIn, vtInB
 /* Same bar on both tab screens: show the new one at once (no dip); only the active tab changes. */
 ::view-transition-old(tabbar) { display: none; }
 ::view-transition-new(tabbar) { animation: none; }
+/* From a tap: the new screen grows out of the point you touched, the old one recedes beneath it. */
+html.vt-tap::view-transition-old(root) { animation: vtRecede .5s var(--out) both; }
+html.vt-tap::view-transition-new(root) { animation: vtReveal .5s cubic-bezier(.22, .9, .25, 1) both; }
+/* Home -> Chat: the hero arrow keeps going the way it points, off the top-right corner. */
+::view-transition-group(hero-arrow) { animation: none; }
+::view-transition-old(hero-arrow) { animation: arrowAway .46s cubic-bezier(.55, 0, .75, .3) both; }
+@keyframes vtReveal { from { clip-path: circle(0 at var(--tx, 50%) var(--ty, 50%)); } to { clip-path: circle(var(--tr, 150%) at var(--tx, 50%) var(--ty, 50%)); } }
+@keyframes vtRecede { to { transform: scale(.96); filter: brightness(.6); } }
+html.vt-arrow-ink::view-transition-old(hero-arrow) { animation-name: arrowAwayLit; }
+@keyframes arrowAway { to { transform: translate(110vw, -110vh) scale(1.6); } }
+@keyframes arrowAwayLit { 35% { filter: invert(.92); } to { transform: translate(110vw, -110vh) scale(1.6); filter: invert(.92); } }
 @keyframes vtOut { to { opacity: 0; transform: translateX(-6%); } }
 @keyframes vtIn { from { transform: translateX(14%); } }
 @keyframes vtOutBack { to { opacity: 0; transform: translateX(6%); } }
