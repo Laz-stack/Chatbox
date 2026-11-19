@@ -218,7 +218,7 @@ async function demoReply({ messages, signal, onDelta, character }) {
   }
   // demoCalls makes Regenerate give a different line instead of repeating the same one.
   const [act, say] = DEMO_LINES[(n + demoCalls++) % DEMO_LINES.length];
-  const out = `*${act}* "${say}"\n\n*(Demo reply. Add your API key in Settings to talk to ${character?.name || 'your character'} for real.)*`;
+  const out = character?.demoText ? character.demoText(last) : `*${act}* "${say}"\n\n*(Demo reply. Add your API key in Settings to talk to ${character?.name || 'your character'} for real.)*`;
   const parts = out.split(/(\s+)/);
   let text = '';
   for (const part of parts) {

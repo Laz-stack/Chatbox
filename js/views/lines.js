@@ -26,7 +26,7 @@ function lineRow(c) {
 function ixRow(ix) {
   const chat = latestChat(ix.id);
   const when = chat && chat.messages.some((m) => m.role === 'user') ? ago(chat.updatedAt) : 'new';
-  return `<a class="ix ixg press" href="#/chat/${ix.id}" aria-label="Open ${esc(ix.title)}"><span class="meet">${ix.people.map((p, i) => avatarBullet(p, 40, i ? 'margin-left:-14px' : '')).join('')}</span><span class="row-tx"><span class="row-t">${esc(ix.title)}</span><span class="row-s">Interchange · ${ix.people.map((p) => esc(p.name)).join(', ')}</span></span><span class="ix-t num">${when}</span></a>`;
+  return `<a class="ix ixg press" href="#/chat/${ix.id}" aria-label="Open ${esc(ix.title)}"><span class="meet">${ix.people.map((p, i) => avatarBullet(p, 40, i ? 'margin-left:-14px' : '')).join('')}</span><span class="row-tx"><span class="row-t">${esc(ix.title)}</span><span class="row-s">${ix.mode === 'scene' ? 'Carriage' : 'Interchange'} · ${ix.people.map((p) => esc(p.name)).join(', ')}</span></span><span class="ix-t num">${when}</span></a>`;
 }
 
 function departureRow({ c, chat, ix }) {

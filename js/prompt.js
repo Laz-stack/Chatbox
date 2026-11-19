@@ -5,11 +5,13 @@ import { estimateTokens } from './util.js';
 import { textOf, matchLore } from './store.js';
 import { PROVIDERS } from './providers.js';
 import { compileSheet } from './blueprint.js';
+import { sceneSystem, STEER } from './scene.js';
 
 export const macro = (t, ch, persona) =>
   (t || '').replace(/\{\{\s*char\s*\}\}/gi, ch?.name || 'Character').replace(/\{\{\s*user\s*\}\}/gi, persona?.name?.trim() || 'the user');
 
-// group: { people: [characters], scene: '' } when this reply is one speaker inside an Interchange.
+// group: { people: [characters], scene: '', mode: 'turns' | 'scene', passengers } inside an Interchange.
+// In 'scene' mode (a Carriage) one reply narrates the whole scene and voices every character.
 export function buildPrompt({ char, chat, conn, settings, persona, upto = null, mode = 'reply', group = null }) {
   const layers = [];
   const m = (t) => macro(t, char, persona).trim();
@@ -22,21 +24,25 @@ export function buildPrompt({ char, chat, conn, settings, persona, upto = null, 
   const personaText = [m(compileSheet(char)) || `You are ${char.name}.`, char.tagline ? `${char.name} in a few words: ${char.tagline}.` : '']
     .filter(Boolean)
     .join('\n');
+  const isScene = group?.mode === 'scene';
+  const youName = persona?.name?.trim() || 'the user';
   let groupText = '';
-  if (group) {
+  if (isScene) {
+    layers.push({ key: 'persona', name: 'Cast and scene', text: sceneSystem({ people: group.people, scene: group.scene, passengers: group.passengers !== false, you: youName, fill: (t, p) => macro(t, p, persona).trim() }) });
+  } else if (group) {
     const others = group.people.filter((p) => p.id !== char.id);
     groupText =
       `\n\nThis is a group scene (an Interchange). Also present: ${others.map((p) => p.name + (p.tagline ? ` (${p.tagline})` : '')).join('; ')}.` +
       (group.scene?.trim() ? `\nScene: ${m(group.scene)}` : '') +
       `\nOther characters' lines arrive prefixed with their names. Write only ${char.name}'s next message. Never write dialogue or actions for ${others.map((p) => p.name).join(' or ')}, or for ${persona?.name?.trim() || 'the user'}.`;
   }
-  layers.push({ key: 'persona', name: 'Character persona', text: personaText + groupText });
+  if (!isScene) layers.push({ key: 'persona', name: 'Character persona', text: personaText + groupText });
 
   if (persona.useEverywhere && (persona.about?.trim() || persona.name?.trim())) {
     layers.push({
       key: 'user',
       name: 'Your persona',
-      text: `You are talking with ${persona.name?.trim() || 'the user'}.` + (persona.about?.trim() ? ` About them: ${m(persona.about)}` : ''),
+      text: (isScene ? `The user plays ${youName}.` : `You are talking with ${youName}.`) + (persona.about?.trim() ? ` About them: ${m(persona.about)}` : ''),
     });
   }
 
@@ -68,6 +74,12 @@ export function buildPrompt({ char, chat, conn, settings, persona, upto = null, 
     .map((x) => {
       const own = group?.people.find((p) => p.id === x.speaker) || char;
       const t = macro(textOf(x), own, persona);
+      if (isScene) {
+        if (x.role === 'assistant') return { role: 'assistant', content: t };
+        if (x.dir) return { role: 'user', content: `[${STEER[x.dir]?.note || t}]` };
+        if (x.as) return { role: 'user', content: `[${you} writes this line for ${nameOf(x.as)}]\n${nameOf(x.as)}: ${t}` };
+        return { role: 'user', content: `${you}: ${t}` };
+      }
       if (!group) return { role: x.role, content: t };
       if (x.role === 'assistant' && x.speaker === char.id) return { role: 'assistant', content: t };
       return { role: 'user', content: `${x.role === 'user' ? you : nameOf(x.speaker)}: ${t}` };

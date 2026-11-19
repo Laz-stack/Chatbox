@@ -1,4 +1,5 @@
-import { S, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, named, resetChat, recordFare, interchange, isInterchangeId, chatsFor, startNewChat, deleteChat } from '../store.js';
+import { S, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, named, resetChat, recordFare, interchange, isInterchangeId, chatsFor, startNewChat, deleteChat, blankCharacter, saveInterchange } from '../store.js';
+import { STEER, parseScene, resolveSpeaker, passengersIn, demoScene } from '../scene.js';
 import { complete, PROVIDERS } from '../providers.js';
 import { buildPrompt } from '../prompt.js';
 import { shouldSummarize, summarize } from '../memory.js';
@@ -50,10 +51,13 @@ export async function chatView(id, focusId = null) {
   // each reply's own speaker comes from speakerOf().
   // A chat id ("mika~x7k2") opens that chat; a character id opens its most recent one.
   const owner = ix ? id : character(id) ? id : S.chats.get(id)?.characterId || id;
-  const ch = ix ? { ...ix.people[0], id: ix.id, name: ix.title, tagline: `Interchange · ${ix.people.length} lines`, connectionId: null } : character(owner);
+  // A Carriage is an Interchange in "One scene" mode: one reply narrates the scene and voices everyone.
+  const scene = ix?.mode === 'scene';
+  const ch = ix ? { ...ix.people[0], id: ix.id, name: ix.title, tagline: scene ? `Carriage · ${ix.people.length} aboard` : `Interchange · ${ix.people.length} lines`, connectionId: null } : character(owner);
   if (!ch) return null;
   const speakerOf = (m) => (ix ? ix.people.find((p) => p.id === m?.speaker) || ix.people[0] : ch);
-  const group = ix ? { people: ix.people, scene: ix.scene } : null;
+  const group = ix ? { people: ix.people, scene: ix.scene, mode: ix.mode || 'turns', passengers: ix.passengers !== false } : null;
+  const youWho = () => ({ name: S.persona.name?.trim() || 'You', preset: S.persona.preset, avatarImage: S.persona.avatarImage, line: { color: '#FDCD15' } });
   const chat = await getChat(id);
   if (!chat) return null;
   let ctl = null;
@@ -63,7 +67,7 @@ export async function chatView(id, focusId = null) {
   const conn0 = connectionFor(ch);
   const connText = (c) => (!c ? 'No connection' : c.provider === 'demo' ? 'Demo replies' : c.model || c.name);
   // Short placeholder: a long name would wrap the composer onto several lines.
-  const callName = ix ? 'the interchange' : ch.name.length > 14 ? ch.name.split(/\s+/)[0].slice(0, 14) : ch.name;
+  const callName = scene ? 'the scene' : ix ? 'the interchange' : ch.name.length > 14 ? ch.name.split(/\s+/)[0].slice(0, 14) : ch.name;
   const html = `<div class="chat" id="chat" style="--blur:${ch.sceneBlur ?? 4}px;--dim:${(ch.sceneDim ?? 60) / 100};--accent:${lineAccent(ch.line?.color)}">
     <div class="chat-scene" id="scene" aria-hidden="true">${ch.scene && ch.scene !== 'none' ? sceneSVG(ch.scene) : ''}</div>
     <header class="chat-head">
@@ -76,12 +80,14 @@ export async function chatView(id, focusId = null) {
       <span class="pill muted" id="tokPill" ${S.settings.showCounter ? '' : 'hidden'} title="Estimated tokens sent with the next reply">${icon('layers', 14)}<span><span class="num" id="tokN">…</span> tokens</span></span>
       <a class="pill y press end" href="#/memory/${chat.id}" ${ix ? 'hidden' : ''}>${icon('pin', 15)}<span id="noteN">${chat.notes.length}</span>&nbsp;note${chat.notes.length === 1 ? '' : 's'}</a>
     </div>
-    <div class="log" id="log" role="log" aria-live="polite" aria-relevant="additions" aria-label="Chat with ${esc(ch.name)}"></div>
-    <div class="chips" id="chips"></div>
-    ${ix ? '<div class="nextbar" id="nextbar" role="radiogroup" aria-label="Who answers next"></div>' : ''}
+    ${scene ? '<div class="aboard" id="aboard" role="group" aria-label="On board"></div>' : ''}
+    <div class="log${scene ? ' story' : ''}" id="log" role="log" aria-live="polite" aria-relevant="additions" aria-label="Chat with ${esc(ch.name)}"></div>
+    <div class="chips${scene ? ' steer' : ''}" id="chips"></div>
+    ${ix && !scene ? '<div class="nextbar" id="nextbar" role="radiogroup" aria-label="Who answers next"></div>' : ''}
     <form class="composer" id="composer">
+      ${scene ? `<button type="button" class="ibtn as-btn press" id="asBtn" aria-label="Speaking as you. Tap to speak as someone else." aria-haspopup="menu">${avatarBullet(youWho(), 36)}</button>` : ''}
       ${ibtn('asterisk', 'Add an *action*', { id: 'actBtn', attrs: 'title="Add an *action*: wraps the selection in asterisks"' })}
-      <textarea id="input" rows="1" placeholder="Message ${esc(callName)}…" aria-label="Message ${esc(ch.name)}" enterkeyhint="send"></textarea>
+      <textarea id="input" rows="1" placeholder="${scene ? 'What you do or say…' : `Message ${esc(callName)}…`}" aria-label="Message ${esc(ch.name)}" enterkeyhint="send"></textarea>
       <button type="submit" class="send press" id="sendBtn" aria-label="Send" disabled>${arrow(24, 'currentColor')}</button>
     </form>
   </div>`;
@@ -111,7 +117,79 @@ export async function chatView(id, focusId = null) {
       const lore = used.length ? `<button type="button" class="mini lore-used press" data-lore aria-label="${used.length} Lorebook entr${used.length === 1 ? 'y' : 'ies'} used">${icon('book', 16)}<span class="num">${used.length}</span></button>` : '';
       return pager || read || lore ? `<div class="msg-tools">${pager}${read}${lore}</div>` : '';
     }
+    // ---------- Carriage: the story layout ----------
+    const fillS = (t, who) => named(t, who || ix.people[0]);
+    // One block's markup; data-k lets the streamer update a block in place instead of rebuilding it.
+    function blockHTML(r, text, { by = false, save = false } = {}) {
+      if (r.kind === 'narr') return `<p class="scn-narr" data-k="narr">${formatMessage(fillS(text))}</p>`;
+      if (r.kind === 'passenger')
+        return `<div class="scn-b pass" data-k="p:${esc(r.name.toLowerCase())}"><span class="scn-tag">${esc(r.name)}</span><div class="scn-t">${formatMessage(fillS(text))}</div>${save ? `<button type="button" class="scn-save press" data-pass="${esc(r.name)}">${icon('plus', 14)}Save as a line</button>` : ''}</div>`;
+      const who = r.kind === 'you' ? youWho() : r.who;
+      const col = who.line?.color || '#2EAA67';
+      return `<div class="scn-b${r.kind === 'you' ? ' you' : ''}" data-k="${r.kind === 'you' ? 'you' : 'l:' + who.id}" style="--c:${col};--ink:${inkOn(col)}"><span class="scn-tag">${avatarBullet(who, 20)}${esc(r.kind === 'you' ? 'You' : who.name)}${by ? '<small>· you wrote</small>' : ''}</span><div class="scn-t">${formatMessage(fillS(text, r.who))}</div></div>`;
+    }
+    function sceneParts(text, m) {
+      const shown = new Set();
+      return parseScene(text).map((b) => {
+        if (b.kind === 'narr') return blockHTML({ kind: 'narr' }, b.text);
+        const r = resolveSpeaker(b.name, ix.people, S.persona.name);
+        let save = false;
+        if (r.kind === 'passenger' && m) {
+          const key = r.name.toLowerCase();
+          const pe = (chat.passengers || []).find((x) => x.name.toLowerCase() === key);
+          save = !!pe && !pe.line && pe.first === m.id && !shown.has(key);
+          shown.add(key);
+        }
+        return blockHTML(r, b.text, { save });
+      });
+    }
+    // While streaming: keep finished blocks, update the growing one, append new ones (their tags fade in).
+    function paintScene(box, text, caret) {
+      caret.remove();
+      const parts = sceneParts(text, null);
+      const tpl = document.createElement('template');
+      parts.forEach((h, j) => {
+        tpl.innerHTML = h;
+        const n = tpl.content.firstElementChild;
+        const cur = box.children[j];
+        if (cur && cur.dataset.k === n.dataset.k) {
+          if (cur._h === h) return;
+          const t1 = cur.querySelector('.scn-t');
+          const t2 = n.querySelector('.scn-t');
+          if (t1 && t2) t1.innerHTML = t2.innerHTML;
+          else cur.innerHTML = n.innerHTML;
+          cur._h = h;
+        } else {
+          n._h = h;
+          n.classList.add('fresh');
+          if (cur) cur.replaceWith(n);
+          else box.appendChild(n);
+        }
+      });
+      while (box.children.length > parts.length) box.lastElementChild.remove();
+      const last = box.lastElementChild;
+      (last?.querySelector('.scn-t') || last || box).appendChild(caret);
+    }
+    function sceneMsgHTML(m, i, enter) {
+      const star = m.star ? `<span class="star-b" title="In your Logbook">${icon('star', 13)}</span>` : '';
+      let inner;
+      if (m.role === 'user') {
+        if (m.dir) inner = `<p class="scn-dir">${icon(STEER[m.dir]?.icon || 'chev', 14)}${esc(STEER[m.dir]?.label || 'Direction')}</p>`;
+        else if (m.as) inner = blockHTML({ kind: 'line', who: speakerOf({ speaker: m.as }) }, textOf(m), { by: true });
+        else inner = blockHTML({ kind: 'you' }, textOf(m));
+      } else inner = sceneParts(textOf(m), m).join('');
+      return `<div class="msg scene ${m.role === 'user' ? 'mine' : 'ai'}${m.dir ? ' dir' : ''}${enter ? ' enter' : ''}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="msg-col"><div class="bubble scn">${inner}${star}</div>${m.role === 'assistant' ? toolsHTML(m, i) : ''}</div></div>`;
+    }
+    function renderAboard() {
+      const bar = root.querySelector('#aboard');
+      if (!bar) return;
+      bar.innerHTML =
+        '<span class="lbl">On board</span>' +
+        ix.people.map((p) => `<span class="ab" style="--c:${p.line?.color || '#2EAA67'}">${avatarBullet(p, 24)}${esc(p.name)}</span>`).join('') +
+        (chat.passengers || []).filter((p) => !p.line).map((p) => `<button type="button" class="ab pass press" data-pass="${esc(p.name)}" aria-label="${esc(p.name)}, a passenger. Tap to save as a line.">${esc(p.name)}</button>`).join('');
+    }
     function msgHTML(m, i, enter = false) {
+      if (scene) return sceneMsgHTML(m, i, enter);
       const cls = `msg ${m.role === 'user' ? 'user' : 'ai'}${enter ? ' enter' : ''}`;
       const star = m.star ? `<span class="star-b" title="In your Logbook">${icon('star', 13)}</span>` : '';
       if (m.role === 'user') return `<div class="${cls}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="bubble">${formatMessage(named(textOf(m), ch))}${star}</div></div>`;
@@ -126,7 +204,10 @@ export async function chatView(id, focusId = null) {
         if (cut && i === cut) h += `<a class="stop-line" href="#/memory/${chat.id}">${icon('spark', 14)} Earlier stops summarized</a>`;
         h += msgHTML(m, i);
       });
-      if (!chat.messages.length)
+      if (scene) {
+        h = `<div class="scn-card"><span class="scn-card-h"><b>Scene</b><a class="scn-edit press" href="#/interchange/${ix.id}">Edit</a></span>${ix.scene?.trim() ? esc(ix.scene.trim()) : 'No scene set yet. Tap Edit to say where everyone is.'}</div>${h}`;
+        if (!chat.messages.length) h += `<p class="empty scn-empty">${esc(ix.people.length > 1 ? ix.people.slice(0, -1).map((p) => p.name).join(', ') + ' and ' + ix.people[ix.people.length - 1].name : ix.people[0].name)} are on board. Write what you do, or tap <b>Let them talk</b> to get the scene going.</p>`;
+      } else if (!chat.messages.length)
         h = ix
           ? `<div class="empty">${ix.scene?.trim() ? `<b class="ix-scene">${esc(ix.scene.trim())}</b>` : ''}${esc(ix.people.map((p) => p.name).join(' and '))} are here. Say something, and pick who answers below.</div>`
           : `<div class="empty">Say hello to ${esc(ch.name)}. Wrap actions in *asterisks*.</div>`;
@@ -143,6 +224,15 @@ export async function chatView(id, focusId = null) {
       if (busy) return chips.querySelectorAll('button').forEach((b) => (b.disabled = true));
       const last = chat.messages[chat.messages.length - 1];
       let h = '';
+      if (scene) {
+        if (last?.role === 'user' && !last.dir) h += `<button type="button" class="press" data-chip="reply">${icon('refresh', 16)}Get the scene</button>`;
+        // After a reply, the reply's own actions come first; the steering choices follow the separator.
+        if (last?.role === 'assistant' && !last.first) h += `<button type="button" class="press" data-chip="regen">${icon('refresh', 16)}Regenerate</button><button type="button" class="press" data-chip="continue">${icon('chev', 16)}Continue</button><span class="chip-sep" aria-hidden="true"></span>`;
+        h += Object.entries(STEER).map(([k, s]) => `<button type="button" class="press" data-steer="${k}">${icon(s.icon, 16)}${s.label}</button>`).join('');
+        chips.innerHTML = h;
+        chips.scrollLeft = 0;
+        return;
+      }
       if (last?.role === 'assistant' && !last.first) {
         h = `<button type="button" class="press" data-chip="regen">${icon('refresh', 16)}Regenerate</button><button type="button" class="press" data-chip="continue">${icon('chev', 16)}Continue</button>`;
         if (ix) h += `<button type="button" class="press" data-chip="reply">${icon('chev', 16)}${chat.next && chat.next !== 'either' ? esc(speakerOf({ speaker: chat.next }).name) + ' speaks' : 'Next line'}</button>`;
@@ -210,7 +300,7 @@ export async function chatView(id, focusId = null) {
       let idx;
       if (mode === 'reply') {
         target = { id: uid(), role: 'assistant', alts: [''], alt: 0, mood: 'happy', at: Date.now() };
-        if (ix) target.speaker = pickSpeaker().id;
+        if (ix && !scene) target.speaker = pickSpeaker().id;
         chat.messages.push(target);
         idx = chat.messages.length - 1;
       } else {
@@ -224,6 +314,8 @@ export async function chatView(id, focusId = null) {
       }
       const upto = mode === 'continue' ? idx + 1 : idx;
       const sp = speakerOf(target);
+      // In demo mode a Carriage gets a canned scene in the right format.
+      const asked = scene ? { ...sp, name: ix.title, demoText: (last) => demoScene(ix.people.map((p) => p.name), last) } : sp;
       const built = buildPrompt({ char: sp, chat, conn, settings: S.settings, persona: S.persona, upto, mode, group });
 
       // Prepare the bubble.
@@ -248,8 +340,12 @@ export async function chatView(id, focusId = null) {
       caret.className = 'caret';
       caret.setAttribute('aria-hidden', 'true');
       bubble.appendChild(caret);
-      const rd = new StreamRenderer(bubble, caret);
-      if (mode === 'continue' && /\*/.test(prev) && (prev.match(/\*/g) || []).length % 2) rd.inAct = !rd.inAct, rd.open();
+      let raf = 0;
+      const rd = scene
+        ? { push: () => raf || (raf = requestAnimationFrame(() => ((raf = 0), !destroyed && paintScene(bubble, text, caret)))) }
+        : new StreamRenderer(bubble, caret);
+      if (scene && prev) paintScene(bubble, prev, caret);
+      if (!scene && mode === 'continue' && /\*/.test(prev) && (prev.match(/\*/g) || []).length % 2) rd.inAct = !rd.inAct, rd.open();
       toBottom();
 
       setBusy(true);
@@ -267,7 +363,7 @@ export async function chatView(id, focusId = null) {
           stream: ch.stream !== false,
           maxTokens: conn.maxTokens,
           temperature: conn.temperature,
-          character: sp,
+          character: asked,
           onDelta(d) {
             if (destroyed) return;
             if (first && mode === 'continue') d = (prev && !/\s$/.test(prev) && !/^[\s.,!?;:)]/.test(d) ? ' ' : '') + d;
@@ -283,6 +379,7 @@ export async function chatView(id, focusId = null) {
         if (e.name !== 'AbortError') error = e;
       }
       ctl = null;
+      cancelAnimationFrame(raf);
       if (destroyed) return save();
 
       if (!text.trim() || (error && text === prev)) {
@@ -301,6 +398,13 @@ export async function chatView(id, focusId = null) {
         target.lore ||= {};
         if (built.loreIds?.length) target.lore[target.alt] = built.loreIds;
         else delete target.lore[target.alt];
+        if (scene) {
+          // Side characters who spoke for the first time become passengers (they can be saved as lines).
+          chat.passengers ||= [];
+          for (const n of passengersIn(text, ix.people, S.persona.name))
+            if (!chat.passengers.some((x) => x.name.toLowerCase() === n.toLowerCase())) chat.passengers.push({ name: n, first: target.id });
+          renderAboard();
+        }
         const mood = detectMood(text);
         const moodChanged = mood !== target.mood;
         target.mood = mood;
@@ -356,6 +460,7 @@ export async function chatView(id, focusId = null) {
       if (!t || busy) return;
       stopSpeaking();
       const m = { id: uid(), role: 'user', alts: [t], alt: 0, at: Date.now() };
+      if (speakAs) (m.as = speakAs), setSpeakAs(null);
       chat.messages.push(m);
       const idx = chat.messages.length - 1;
       log.querySelector('.empty')?.remove();
@@ -368,6 +473,74 @@ export async function chatView(id, focusId = null) {
       toBottom(true);
       await save();
       generate('reply');
+    }
+
+    // Steering bar: a stage direction the AI follows (shown in the log as a small sign), then the scene moves on.
+    async function steer(k) {
+      if (busy || !STEER[k]) return;
+      const m = { id: uid(), role: 'user', dir: k, alts: [STEER[k].note], alt: 0, at: Date.now() };
+      chat.messages.push(m);
+      log.querySelector('.empty')?.remove();
+      log.querySelector('.err')?.remove();
+      log.querySelectorAll('.msg-tools').forEach((x) => x.remove());
+      log.insertAdjacentHTML('beforeend', msgHTML(m, chat.messages.length - 1, true));
+      toBottom(true);
+      await save();
+      generate('reply');
+    }
+    // Speak as: your next line is written for one of the cast instead of yourself.
+    let speakAs = null;
+    function setSpeakAs(id) {
+      speakAs = id;
+      const b = root.querySelector('#asBtn');
+      if (!b) return;
+      const p = id ? speakerOf({ speaker: id }) : null;
+      b.innerHTML = avatarBullet(p || youWho(), 36);
+      b.classList.toggle('on', !!p);
+      b.setAttribute('aria-label', p ? `Speaking as ${p.name}. Tap to change.` : 'Speaking as you. Tap to speak as someone else.');
+      input.placeholder = p ? `Write ${p.name}'s line…` : 'What you do or say…';
+    }
+    function passengerSheet(name) {
+      const key = name.toLowerCase();
+      const said = chat.messages
+        .filter((m) => m.role === 'assistant')
+        .flatMap((m) => parseScene(textOf(m)).filter((b) => b.kind === 'say' && b.name.toLowerCase() === key).map((b) => b.text));
+      const room = ix.people.length < 5;
+      openSheet({
+        label: name,
+        html: `<h2 class="sheet-title">${esc(name)}</h2><p class="sheet-p">A passenger in this scene. Save them as a line to give them a colour, a Blueprint and chats of their own.${room ? ' They also join this carriage.' : ''}</p>${
+          said.length ? `<div class="pass-said">${said.slice(-3).map((t) => `<p>${formatMessage(fillS(t))}</p>`).join('')}</div>` : ''
+        }<button type="button" class="btn-primary press" data-save><span>Save as a line</span>${icon('plus', 24)}</button>`,
+        onMount(s, close) {
+          s.querySelector('[data-save]').onclick = () => (close(), savePassenger(name, said));
+        },
+      });
+    }
+    async function savePassenger(name, said) {
+      const c = blankCharacter();
+      Object.assign(c, {
+        name,
+        tagline: `Met in ${ix.title}`,
+        preset: 'initial',
+        scene: ix.people[0].scene || 'cafe',
+        persona: `${name} first turned up in the scene "${ix.title}".` + (said.length ? `\nThings they said there:\n${said.slice(0, 4).map((t) => '- ' + plain(t)).join('\n')}` : ''),
+      });
+      await saveCharacter(c);
+      const raw = S.interchanges.find((x) => x.id === ix.id);
+      const joins = raw && raw.members.length < 5;
+      if (joins) {
+        raw.members.push(c.id);
+        await saveInterchange(raw);
+        ix.people.push(c);
+        ch.tagline = `Carriage · ${ix.people.length} aboard`;
+        setStatus('idle');
+      }
+      const pe = (chat.passengers || []).find((x) => x.name.toLowerCase() === name.toLowerCase());
+      if (pe) pe.line = c.id;
+      await save();
+      renderAll();
+      renderAboard();
+      toast(`${name} is now a line${joins ? ' and rides with this carriage' : ''}.`, { action: 'Edit', onAction: () => (location.hash = `#/edit/${c.id}`) });
     }
 
     async function switchAlt(dir) {
@@ -468,7 +641,7 @@ export async function chatView(id, focusId = null) {
     root.querySelector('#moreBtn').addEventListener('click', (e) =>
       openMenu(e.currentTarget, [
         ...(ix
-          ? [{ icon: 'card', label: 'Edit interchange', on: () => (location.hash = `#/interchange/${ix.id}`) }]
+          ? [{ icon: 'card', label: scene ? 'Edit carriage' : 'Edit interchange', on: () => (location.hash = `#/interchange/${ix.id}`) }]
           : [{ icon: 'card', label: 'Edit character', on: () => (location.hash = `#/edit/${ch.id}`) }]),
         ...(ix
           ? []
@@ -606,10 +779,22 @@ export async function chatView(id, focusId = null) {
     });
 
     const onChip = (e) => {
+      const st = e.target.closest('[data-steer]');
+      if (st) return steer(st.dataset.steer);
       const b = e.target.closest('[data-chip]');
       if (!b || busy) return;
       generate(b.dataset.chip);
     };
+    root.querySelector('#aboard')?.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-pass]');
+      if (b) passengerSheet(b.dataset.pass);
+    });
+    root.querySelector('#asBtn')?.addEventListener('click', (e) =>
+      openMenu(e.currentTarget, [
+        { icon: 'user', label: 'As yourself', on: () => setSpeakAs(null) },
+        ...ix.people.map((p) => ({ icon: 'edit', label: `As ${p.name}`, on: () => setSpeakAs(p.id) })),
+      ])
+    );
     chips.addEventListener('click', onChip);
     root.querySelector('#nextbar')?.addEventListener('click', async (e) => {
       const b = e.target.closest('[data-next]');
@@ -623,6 +808,8 @@ export async function chatView(id, focusId = null) {
 
     log.addEventListener('click', (e) => {
       onChip(e);
+      const ps = e.target.closest('[data-pass]');
+      if (ps) return passengerSheet(ps.dataset.pass);
       const a = e.target.closest('[data-alt]');
       if (a) return switchAlt(+a.dataset.alt);
       if (e.target.closest('[data-lore]')) {
@@ -687,7 +874,8 @@ export async function chatView(id, focusId = null) {
     log.addEventListener('pointercancel', endPress);
 
     renderAll();
-    if (ix) renderNext();
+    if (ix && !scene) renderNext();
+    renderAboard();
     toBottom();
     updateTokens();
     // Opened from the Logbook or a search hit: bring that message into view and mark it briefly.

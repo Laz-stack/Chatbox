@@ -1,7 +1,7 @@
 // Shared UI pieces: markup builders and overlay components (sheets, menus, toasts, dial, ruler).
 import { esc, inkOn, clamp, reducedMotion, EASE_OUT } from './util.js';
 import { icon, arrow } from './icons.js';
-import { avatarSVG } from './avatar.js';
+import { avatarSVG, faceSVG } from './avatar.js';
 
 export { icon, arrow };
 
@@ -16,7 +16,7 @@ export const avatarBullet = (ch, s = 40, style = '', av = '') => {
   const bg = ch.line?.color || ch.color || '#2EAA67';
   const inner = ch.avatarImage
     ? `<img src="${esc(ch.avatarImage)}" alt="" width="${s}" height="${s}">`
-    : avatarSVG(ch.preset, s, 'happy', bg);
+    : faceSVG(ch, s, 'happy', bg);
   return `<span class="bullet bullet-av"${av ? ` data-av="${esc(av)}"` : ''} style="width:${s}px;height:${s}px;background:${bg};${style}">${inner}</span>`;
 };
 
