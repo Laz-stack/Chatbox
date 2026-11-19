@@ -1,4 +1,4 @@
-import { S, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, resetChat, recordFare, interchange, isInterchangeId, chatsFor, startNewChat, deleteChat } from '../store.js';
+import { S, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, named, resetChat, recordFare, interchange, isInterchangeId, chatsFor, startNewChat, deleteChat } from '../store.js';
 import { complete, PROVIDERS } from '../providers.js';
 import { buildPrompt } from '../prompt.js';
 import { shouldSummarize, summarize } from '../memory.js';
@@ -112,10 +112,10 @@ export async function chatView(id, focusId = null) {
     function msgHTML(m, i, enter = false) {
       const cls = `msg ${m.role === 'user' ? 'user' : 'ai'}${enter ? ' enter' : ''}`;
       const star = m.star ? `<span class="star-b" title="In your Logbook">${icon('star', 13)}</span>` : '';
-      if (m.role === 'user') return `<div class="${cls}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="bubble">${formatMessage(textOf(m))}${star}</div></div>`;
+      if (m.role === 'user') return `<div class="${cls}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="bubble">${formatMessage(named(textOf(m), ch))}${star}</div></div>`;
       const sp = speakerOf(m);
       const tag = ix ? `<span class="spk-tag" style="--c:${sp.line?.color || '#2EAA67'};--ink:${inkOn(sp.line?.color || '#2EAA67')}">${esc(sp.name)}</span>` : '';
-      return `<div class="${cls}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}">${avatarTile(sp, 30, { expr: m.mood || 'happy', radius: 10, cls: 'msg-av' })}<div class="msg-col"><div class="bubble">${tag}${formatMessage(textOf(m))}${star}</div>${toolsHTML(m, i)}</div></div>`;
+      return `<div class="${cls}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}">${avatarTile(sp, 30, { expr: m.mood || 'happy', radius: 10, cls: 'msg-av' })}<div class="msg-col"><div class="bubble">${tag}${formatMessage(named(textOf(m), sp))}${star}</div>${toolsHTML(m, i)}</div></div>`;
     }
     function renderAll() {
       const cut = chat.summary?.upto || 0;

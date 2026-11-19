@@ -1,4 +1,4 @@
-import { S, activeConnection, lastMessage, textOf, departures, logbook, character, interchange, latestChat } from '../store.js';
+import { S, activeConnection, lastMessage, textOf, named, departures, logbook, character, interchange, latestChat } from '../store.js';
 import { esc, ago, agoLong, plain, inkOn, luminance, boardTime, formatMessage } from '../util.js';
 import { avatarTile } from '../avatar.js';
 import { title2, bullet, avatarBullet, tabbar, icon, arrow } from '../ui.js';
@@ -14,7 +14,7 @@ export function homeView() {
     const chat = latestChat(featured.id);
     const n = chat ? chat.messages.length : 0;
     const dots = Math.max(2, Math.min(6, n));
-    const preview = plain(textOf(lastMessage(chat)) || featured.tagline || 'Start the conversation');
+    const preview = plain(named(textOf(lastMessage(chat)), featured) || featured.tagline || 'Start the conversation');
     // The hero is painted in the character's own line colour, with ink that reads on it.
     const lc = featured.line?.color || '#2EAA67';
     hero = `<a class="hero press" href="#/chat/${featured.id}" style="--line:${lc};--on:${inkOn(lc)};--ring:${luminance(lc) > 0.55 ? '#0A0A0A' : '#FFFFFF'}" aria-label="${started[0] ? 'Continue chatting with' : 'Start chatting with'} ${esc(featured.name)}">
@@ -47,8 +47,8 @@ export function homeView() {
         .map(
           ({ c, chat, ix }) =>
             ix
-              ? `<a class="bd-row press" href="#/chat/${ix.id}" aria-label="Open ${esc(ix.title)}"><span class="num t">${boardTime(chat.updatedAt)}</span><span class="meet sm">${ix.people.map((p, i) => avatarBullet(p, 30, i ? 'margin-left:-14px' : '')).join('')}</span><span class="bd-tx"><b>${esc(ix.title)}</b><span>${esc(plain(textOf(lastMessage(chat))))}</span></span></a>`
-              : `<a class="bd-row press" href="#/chat/${chat.id}" aria-label="Chat with ${esc(c.name)}"><span class="num t">${boardTime(chat.updatedAt)}</span>${avatarBullet(c, 30, '', `dep:${c.id}`)}<span class="bd-tx"><b>${esc(c.name)}</b><span>${esc(plain(textOf(lastMessage(chat))) || c.tagline)}</span></span></a>`
+              ? `<a class="bd-row press" href="#/chat/${ix.id}" aria-label="Open ${esc(ix.title)}"><span class="num t">${boardTime(chat.updatedAt)}</span><span class="meet sm">${ix.people.map((p, i) => avatarBullet(p, 30, i ? 'margin-left:-14px' : '')).join('')}</span><span class="bd-tx"><b>${esc(ix.title)}</b><span>${esc(plain(named(textOf(lastMessage(chat)), character(lastMessage(chat)?.speaker) || ix.people[0])))}</span></span></a>`
+              : `<a class="bd-row press" href="#/chat/${chat.id}" aria-label="Chat with ${esc(c.name)}"><span class="num t">${boardTime(chat.updatedAt)}</span>${avatarBullet(c, 30, '', `dep:${c.id}`)}<span class="bd-tx"><b>${esc(c.name)}</b><span>${esc(plain(named(textOf(lastMessage(chat)), c)) || c.tagline)}</span></span></a>`
         )
         .join('')}<a class="bd-foot press" href="#/lines/recent">All departures ${icon('chev', 14)}</a></div>`
     : `<div class="board"><div class="bd-head"><span>Departures</span></div><a class="bd-empty press" href="#/lines">No departures yet. Pick a line and say hello. ${icon('chev', 14)}</a></div>`;
@@ -61,7 +61,7 @@ export function homeView() {
     const c = character(m.speaker) || character(chat.characterId) || ixr?.people[0];
     if (!c) return '';
     const col = c.line?.color || '#2EAA67';
-    const t = textOf(m);
+    const t = named(textOf(m), c);
     return `<a class="stub press" href="#/chat/${chat.id}/m/${m.id}" style="--c:${col};--ink:${inkOn(col)}"><span class="stub-l">${avatarBullet(c, 32)}</span><span class="stub-r"><span class="stub-m"><b>${esc(c.name)}</b><span>${agoLong(m.star)}</span></span><span class="stub-p">${formatMessage(t.length > 200 ? t.slice(0, 197) + '…' : t)}</span></span></a>`;
   };
   const logbookHTML = `<div class="blk logbook"><div class="hrow"><h2 class="h">Logbook</h2>${log.length > 3 ? `<a class="small press" href="#/lines/starred">See all ${log.length}</a>` : `<span class="small">${log.length ? log.length + ' starred' : 'Starred moments'}</span>`}</div>
