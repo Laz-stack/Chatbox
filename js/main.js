@@ -86,6 +86,8 @@ async function render() {
     return;
   }
   const dir = (view.depth ?? 0) < depth ? 'back' : 'fwd';
+  // The tab bar holds still only when both screens have it (Home <-> Settings).
+  document.documentElement.classList.toggle('vt-tabs', depth === 0 && (view.depth ?? 0) === 0);
   depth = view.depth ?? 0;
   document.documentElement.dataset.dir = dir;
   const kind = routeKind(location.hash || '#/');

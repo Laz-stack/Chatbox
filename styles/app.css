@@ -168,7 +168,9 @@ a.pill::after, button.pill::after { content: ''; position: absolute; inset: -4px
 
 /* ---------- glass tab bar ---------- */
 .tabfade { position: fixed; left: 50%; bottom: 0; width: min(520px, 100%); transform: translateX(-50%); height: calc(150px + var(--safe-b)); pointer-events: none; background: linear-gradient(180deg, rgba(10, 10, 10, 0), rgba(10, 10, 10, .72) 55%, rgba(10, 10, 10, .94)); z-index: 30; }
-.tabbar { position: fixed; left: 50%; bottom: calc(22px + var(--safe-b)); width: min(476px, calc(100% - 44px)); transform: translateX(-50%); height: 72px; border-radius: 36px; padding: 5px 8px; display: flex; align-items: center; gap: 4px; background: rgba(255, 255, 255, .045); backdrop-filter: blur(10px) saturate(170%); -webkit-backdrop-filter: blur(10px) saturate(170%); box-shadow: 0 10px 30px rgba(0, 0, 0, .35); z-index: 31; view-transition-name: tabbar; }
+.tabbar { position: fixed; left: 50%; bottom: calc(22px + var(--safe-b)); width: min(476px, calc(100% - 44px)); transform: translateX(-50%); height: 72px; border-radius: 36px; padding: 5px 8px; display: flex; align-items: center; gap: 4px; background: rgba(255, 255, 255, .045); backdrop-filter: blur(10px) saturate(170%); -webkit-backdrop-filter: blur(10px) saturate(170%); box-shadow: 0 10px 30px rgba(0, 0, 0, .35); z-index: 31; }
+/* Named only between two tab screens (set from main.js), so it stays put there; elsewhere it leaves with the screen. */
+html.vt-tabs .tabbar { view-transition-name: tabbar; }
 .rim { position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none; background: linear-gradient(135deg, rgba(255, 255, 255, .55), rgba(255, 255, 255, .06) 38%, rgba(255, 255, 255, .06) 62%, rgba(255, 255, 255, .32)); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); }
 .tab { position: relative; flex: 1; height: 62px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; text-decoration: none; font: 700 12px/1 var(--font); color: var(--cream); }
 .tab > * { position: relative; }
@@ -482,17 +484,18 @@ details.layer[open] .peek { display: none; }
 
 /* ---------- screen transitions (View Transitions API) ---------- */
 ::view-transition-old(root) { animation: vtOut .16s var(--out) both; }
-::view-transition-new(root) { animation: vtIn .42s var(--out) .04s both; }
+/* New screen: a fast fade (no delay, so the screen never dims) plus a longer slide. */
+::view-transition-new(root) { animation: fadeIn .14s var(--out) both, vtIn .42s var(--out) both; }
 html[data-dir='back']::view-transition-old(root) { animation-name: vtOutBack; }
-html[data-dir='back']::view-transition-new(root) { animation-name: vtInBack; }
+html[data-dir='back']::view-transition-new(root) { animation-name: fadeIn, vtInBack; }
 ::view-transition-group(*) { animation-duration: .46s; animation-timing-function: var(--out); }
 ::view-transition-group(tabbar) { animation-duration: .3s; }
 ::view-transition-old(tabbar) { animation: fadeOut .2s ease both; }
 ::view-transition-new(tabbar) { animation: fadeIn .3s ease .05s both; }
 @keyframes vtOut { to { opacity: 0; transform: translateX(-6%); } }
-@keyframes vtIn { from { opacity: 0; transform: translateX(14%); } }
+@keyframes vtIn { from { transform: translateX(14%); } }
 @keyframes vtOutBack { to { opacity: 0; transform: translateX(6%); } }
-@keyframes vtInBack { from { opacity: 0; transform: translateX(-14%); } }
+@keyframes vtInBack { from { transform: translateX(-14%); } }
 
 @media (prefers-reduced-motion: reduce) {
   /* No movement and no staggered waits; colour and state changes still happen instantly. */
