@@ -1,0 +1,229 @@
+// Talks to the AI providers straight from the browser with the user's own key.
+// Streaming is parsed from Server-Sent Events. Optionally routed through the
+// bundled local server (server.js) for providers that block browser requests.
+
+export const PROVIDERS = {
+  anthropic: { label: 'Anthropic', sub: 'Claude', base: 'https://api.anthropic.com', format: 'anthropic', modelHint: 'claude-sonnet-5-5', keyHint: 'sk-ant-…', maxTemp: 1 },
+  openai: { label: 'OpenAI', sub: 'or compatible', base: 'https://api.openai.com/v1', format: 'openai', modelHint: 'model name from your provider', keyHint: 'sk-…', maxTemp: 2 },
+  openrouter: { label: 'OpenRouter', sub: 'Many models', base: 'https://openrouter.ai/api/v1', format: 'openai', modelHint: 'provider/model-name', keyHint: 'sk-or-…', maxTemp: 2 },
+  custom: { label: 'Custom URL', sub: 'Local or other', base: 'http://localhost:1234/v1', format: 'openai', modelHint: 'local-model', keyHint: 'optional', maxTemp: 2 },
+  demo: { label: 'Demo', sub: 'Canned replies, no AI', format: 'demo', modelHint: '', keyHint: '', maxTemp: 2 },
+};
+
+export class ProviderError extends Error {
+  constructor(message, status = 0, hint = '') {
+    super(message);
+    this.name = 'ProviderError';
+    this.status = status;
+    this.hint = hint;
+  }
+}
+
+function baseOf(conn) {
+  const p = PROVIDERS[conn.provider] || PROVIDERS.openai;
+  return (conn.baseUrl?.trim() || p.base).replace(/\/+$/, '');
+}
+
+function endpoint(conn) {
+  const p = PROVIDERS[conn.provider] || PROVIDERS.openai;
+  const base = baseOf(conn);
+  if (p.format === 'anthropic') return /\/v1$/.test(base) ? base + '/messages' : base + '/v1/messages';
+  return base + '/chat/completions';
+}
+
+function headers(conn) {
+  const p = PROVIDERS[conn.provider];
+  const h = { 'content-type': 'application/json' };
+  if (p.format === 'anthropic') {
+    h['x-api-key'] = conn.apiKey;
+    h['anthropic-version'] = '2023-06-01';
+    h['anthropic-dangerous-direct-browser-access'] = 'true';
+  } else if (conn.apiKey) {
+    h.authorization = 'Bearer ' + conn.apiKey;
+  }
+  if (conn.provider === 'openrouter') {
+    h['HTTP-Referer'] = location.origin;
+    h['X-Title'] = 'Chatbox';
+  }
+  return h;
+}
+
+function body(conn, { system, messages, stream, maxTokens, temperature }) {
+  const p = PROVIDERS[conn.provider];
+  const temp = Math.min(p.maxTemp, Math.max(0, temperature ?? conn.temperature ?? 0.9));
+  const max = maxTokens || conn.maxTokens || 600;
+  if (p.format === 'anthropic') {
+    const b = { model: conn.model, max_tokens: max, messages, stream, temperature: temp };
+    if (system) b.system = system;
+    return b;
+  }
+  const msgs = system ? [{ role: 'system', content: system }, ...messages] : messages;
+  return { model: conn.model, messages: msgs, stream, temperature: temp, max_tokens: max };
+}
+
+async function send(conn, url, init) {
+  if (conn.useProxy) {
+    return fetch('proxy', { ...init, headers: { ...init.headers, 'x-target-url': url } });
+  }
+  return fetch(url, init);
+}
+
+async function readError(res) {
+  let msg = '';
+  try {
+    const t = await res.text();
+    try {
+      const j = JSON.parse(t);
+      msg = j.error?.message || j.message || j.error || t;
+    } catch {
+      msg = t;
+    }
+  } catch {}
+  msg = String(msg || res.statusText || 'Request failed').slice(0, 300);
+  const hints = {
+    401: 'The API key was rejected. Check it in this connection.',
+    403: 'The provider refused this key or model.',
+    404: 'The model or URL was not found. Check the model name and base URL.',
+    429: 'Rate limit or credit limit reached. Wait a moment, or check your provider account.',
+    500: 'The provider had an internal error. Try again.',
+    529: 'The provider is overloaded. Try again shortly.',
+  };
+  return new ProviderError(msg, res.status, hints[res.status] || '');
+}
+
+// Server-Sent Events reader: yields the data payload of each event.
+async function* sse(res) {
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i;
+    while ((i = buf.search(/\r?\n\r?\n/)) >= 0) {
+      const raw = buf.slice(0, i);
+      buf = buf.slice(i).replace(/^\r?\n\r?\n/, '');
+      const data = raw
+        .split(/\r?\n/)
+        .filter((l) => l.startsWith('data:'))
+        .map((l) => l.slice(5).replace(/^ /, ''))
+        .join('\n');
+      if (data) yield data;
+    }
+  }
+  if (buf.trim().startsWith('data:')) yield buf.trim().slice(5).trim();
+}
+
+/**
+ * Run one completion.
+ * onDelta(textChunk) is called as text arrives. Resolves with the full text.
+ */
+export async function complete(conn, { system, messages, signal, onDelta = () => {}, stream = true, maxTokens, temperature, character }) {
+  if (!conn) throw new ProviderError('No connection set up yet.', 0, 'Add a connection in Settings.');
+  const p = PROVIDERS[conn.provider];
+  if (p.format === 'demo') return demoReply({ messages, signal, onDelta, character });
+  if (!conn.model?.trim()) throw new ProviderError('This connection has no model name.', 0, 'Add a model name to the connection.');
+  if (conn.provider !== 'custom' && !conn.apiKey?.trim()) throw new ProviderError('This connection has no API key.', 401, 'Add your API key to the connection.');
+
+  let res;
+  try {
+    res = await send(conn, endpoint(conn), {
+      method: 'POST',
+      headers: headers(conn),
+      body: JSON.stringify(body(conn, { system, messages, stream, maxTokens, temperature })),
+      signal,
+    });
+  } catch (e) {
+    if (e.name === 'AbortError') throw e;
+    throw new ProviderError(
+      "Couldn't reach the provider.",
+      0,
+      conn.useProxy
+        ? 'The local server is not running. Start it with "npm start", or turn off "Route through local server".'
+        : 'Check your internet and the base URL. If the provider blocks browser requests, turn on "Route through local server" for this connection.'
+    );
+  }
+  if (!res.ok) throw await readError(res);
+
+  let text = '';
+  if (!stream) {
+    const j = await res.json();
+    text = p.format === 'anthropic' ? (j.content || []).map((b) => b.text || '').join('') : j.choices?.[0]?.message?.content || '';
+    onDelta(text);
+    return text;
+  }
+  for await (const data of sse(res)) {
+    if (data === '[DONE]') break;
+    let j;
+    try {
+      j = JSON.parse(data);
+    } catch {
+      continue;
+    }
+    if (j.error) throw new ProviderError(j.error.message || 'The provider returned an error.', 0);
+    let d = '';
+    if (p.format === 'anthropic') {
+      if (j.type === 'content_block_delta') d = j.delta?.text || '';
+    } else {
+      d = j.choices?.[0]?.delta?.content || '';
+    }
+    if (d) {
+      text += d;
+      onDelta(d);
+    }
+  }
+  return text;
+}
+
+export async function testConnection(conn) {
+  const t0 = performance.now();
+  const text = await complete(conn, {
+    system: '',
+    messages: [{ role: 'user', content: 'Reply with just the word OK.' }],
+    stream: false,
+    maxTokens: 16,
+    temperature: 0,
+  });
+  return { ms: Math.round(performance.now() - t0), text: text.trim() };
+}
+
+// Is the bundled local server available (for routing)?
+let proxyCheck = null;
+export function proxyAvailable() {
+  if (!proxyCheck) {
+    proxyCheck = fetch('proxy/health')
+      .then((r) => r.ok)
+      .catch(() => false);
+  }
+  return proxyCheck;
+}
+
+// --- Demo: canned replies so the app is usable before a key is added. ---
+const DEMO_LINES = [
+  ['smiles and sets a warm cup in front of you', 'This one is on the house. Tell me about your day?'],
+  ['tilts her head, thinking it over', "Hmm, I like that idea. What made you think of it?"],
+  ['laughs softly and wipes the counter', 'You always say the most unexpected things.'],
+  ['leans on the counter, chin in her hand', "Okay, I'm listening. Go on."],
+  ['blushes and looks away for a second', 'W-well, thank you. That was nice of you to say.'],
+];
+async function demoReply({ messages, signal, onDelta, character }) {
+  const n = messages.filter((m) => m.role === 'user').length;
+  const last = [...messages].reverse().find((m) => m.role === 'user')?.content || '';
+  if (/summar/i.test(last) && messages.length === 1) {
+    const out = 'In demo mode no AI writes summaries. Connect a provider to get real summaries of long chats.';
+    onDelta(out);
+    return out;
+  }
+  const [act, say] = DEMO_LINES[n % DEMO_LINES.length];
+  const out = `*${act}* "${say}"\n\n*(Demo reply. Add your API key in Settings to talk to ${character?.name || 'your character'} for real.)*`;
+  const parts = out.split(/(\s+)/);
+  let text = '';
+  for (const part of parts) {
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    await new Promise((r) => setTimeout(r, part.trim() ? 38 : 0));
+    text += part;
+    onDelta(part);
+  }
+  return text;
+}
