@@ -1,6 +1,7 @@
 // Shared UI pieces: markup builders and overlay components (sheets, menus, toasts, dial, ruler).
 import { esc, inkOn, clamp } from './util.js';
 import { icon, arrow } from './icons.js';
+import { avatarSVG } from './avatar.js';
 
 export { icon, arrow };
 
@@ -8,6 +9,15 @@ export const bullet = (t, bg, fg, s = 40, style = '') =>
   `<span class="bullet" style="width:${s}px;height:${s}px;background:${bg};color:${fg || inkOn(bg)};font-size:${Math.round(s * 0.5)}px;${style}">${t}</span>`;
 
 export const lineBullet = (ch, s = 40, style = '') => bullet(esc(ch.line?.letter || ch.name?.[0] || '?'), ch.line?.color || '#ECECEC', null, s, style);
+
+// Round badge showing the character's avatar (uploaded image, else the chibi preset) instead of a letter.
+export const avatarBullet = (ch, s = 40, style = '') => {
+  const bg = ch.line?.color || ch.color || '#2EAA67';
+  const inner = ch.avatarImage
+    ? `<img src="${esc(ch.avatarImage)}" alt="" width="${s}" height="${s}">`
+    : avatarSVG(ch.preset, s, 'happy', bg);
+  return `<span class="bullet bullet-av" style="width:${s}px;height:${s}px;background:${bg};${style}">${inner}</span>`;
+};
 
 export const title2 = (a, b, { tag = 'h1', size = 30 } = {}) =>
   `<${tag} class="t2" style="font-size:${size}px"><span>${a}</span><span class="sub">${b}</span></${tag}>`;

@@ -1,7 +1,7 @@
 import { S, activeConnection, hasStarted, lastMessage, textOf } from '../store.js';
 import { esc, ago, plain } from '../util.js';
 import { avatarTile } from '../avatar.js';
-import { title2, ibtn, bullet, lineBullet, row, tabbar, icon, arrow } from '../ui.js';
+import { title2, ibtn, bullet, lineBullet, avatarBullet, row, tabbar, icon, arrow } from '../ui.js';
 
 export function homeView() {
   const conn = activeConnection();
@@ -21,7 +21,7 @@ export function homeView() {
       <span class="hero-arrow">${arrow(128, '#FFFFFF')}</span>
       <span class="hero-av">${avatarTile(featured, 92, { radius: 26, rot: -4 })}</span>
       <span class="hero-foot">
-        <span class="hero-kicker">${bullet(esc(featured.line.letter), '#FFFFFF', 'var(--green)', 34)}${started[0] ? 'Continue the line' : 'Start a new line'}</span>
+        <span class="hero-kicker">${avatarBullet(featured, 34)}${started[0] ? 'Continue the line' : 'Start a new line'}</span>
         <span class="hero-name">${esc(featured.name)}<span class="hero-sub">${esc(featured.tagline || preview)}</span></span>
         <span class="hero-line" aria-hidden="true">${Array.from({ length: dots }, (_, i) => `<i${i === dots - 1 ? ' class="now"' : ''} style="animation-delay:${0.4 + i * 0.06}s"></i>`).join('')}</span>
       </span></a>`;
@@ -42,7 +42,7 @@ export function homeView() {
     S.characters
       .map(
         (c, i) =>
-          `<a class="line-item" href="#/chat/${c.id}" aria-label="Chat with ${esc(c.name)}">${lineBullet(c, 52, `animation-delay:${0.25 + i * 0.06}s;view-transition-name:line-${c.id}`)}<span class="nm">${esc(c.name)}</span></a>`
+          `<a class="line-item" href="#/chat/${c.id}" aria-label="Chat with ${esc(c.name)}">${avatarBullet(c, 52, `animation-delay:${0.25 + i * 0.06}s;view-transition-name:line-${c.id}`)}<span class="nm">${esc(c.name)}</span></a>`
       )
       .join('') +
     `<a class="line-item line-new" href="#/edit/new" aria-label="New character">${bullet(icon('plus', 22), 'transparent', 'var(--cream)', 52, `animation-delay:${0.25 + S.characters.length * 0.06}s`)}<span class="nm">New</span></a>`;
