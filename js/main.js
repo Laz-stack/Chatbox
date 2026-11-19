@@ -6,6 +6,10 @@ import { editorView } from './views/editor.js';
 import { connectionsView, connectionEditView } from './views/connections.js';
 import { promptsView, finalView, memoryView } from './views/prompts.js';
 import { settingsView, personaView, backupView } from './views/settings.js';
+import { linesView } from './views/lines.js';
+import { faresView } from './views/fares.js';
+import { interchangeView } from './views/interchange.js';
+import { openBuildSheet } from './build.js';
 import { reducedMotion } from './util.js';
 import { toast } from './ui.js';
 
@@ -13,7 +17,10 @@ const app = document.getElementById('app');
 
 const routes = [
   [/^#?\/?$/, () => homeView()],
-  [/^#\/chat\/([^/]+)$/, (id) => chatView(decodeURIComponent(id))],
+  [/^#\/chat\/([^/]+)(?:\/m\/([^/]+))?$/, (id, m) => chatView(decodeURIComponent(id), m && decodeURIComponent(m))],
+  [/^#\/lines(?:\/(\w+))?$/, (f) => linesView(f)],
+  [/^#\/fares$/, () => faresView()],
+  [/^#\/interchange\/([^/]+)$/, (id) => interchangeView(decodeURIComponent(id))],
   [/^#\/edit\/([^/]+)$/, (id) => editorView(decodeURIComponent(id))],
   [/^#\/settings$/, () => settingsView()],
   [/^#\/connections$/, () => connectionsView()],
@@ -47,7 +54,7 @@ document.addEventListener(
   },
   true
 );
-const routeKind = (h) => (/^#\/chat\//.test(h) ? 'chat' : /^#?\/?$/.test(h) ? 'home' : 'other');
+const routeKind = (h) => (/^#\/chat\//.test(h) ? 'chat' : /^#?\/?$/.test(h) ? 'home' : /^#\/lines/.test(h) ? 'lines' : 'other');
 
 // Names stay on a node after a transition; clear them so the next (unrelated) one has no orphans.
 const clearShared = (root) => root.querySelectorAll('[data-av], .hero-arrow').forEach((n) => (n.style.viewTransitionName = ''));
@@ -106,7 +113,8 @@ async function render() {
   depth = view.depth ?? 0;
   document.documentElement.dataset.dir = dir;
   const kind = routeKind(location.hash || '#/');
-  const shared = (lastKind === 'home' && kind === 'chat') || (lastKind === 'chat' && kind === 'home');
+  const listy = (k) => k === 'home' || k === 'lines';
+  const shared = (listy(lastKind) && kind === 'chat') || (lastKind === 'chat' && listy(kind));
   lastKind = kind;
   document.body.dataset.route = kind;
   clearStaleToasts();
@@ -141,6 +149,11 @@ async function render() {
 }
 
 window.addEventListener('hashchange', render);
+
+// The red Build stop in the bar opens the Build sheet on any screen that shows the bar.
+document.addEventListener('click', (e) => {
+  if (e.target.closest('[data-build]')) openBuildSheet();
+});
 
 // Service worker: makes reloads pick up new deploys and lets the app open offline.
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {

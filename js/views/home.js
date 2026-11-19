@@ -1,16 +1,13 @@
-import { S, activeConnection, hasStarted, lastMessage, textOf } from '../store.js';
-import { esc, ago, plain, inkOn, luminance } from '../util.js';
+import { S, activeConnection, lastMessage, textOf, departures, logbook, character, interchange } from '../store.js';
+import { esc, ago, agoLong, plain, inkOn, luminance, boardTime, formatMessage } from '../util.js';
 import { avatarTile } from '../avatar.js';
-import { title2, bullet, avatarBullet, row, tabbar, icon, arrow } from '../ui.js';
+import { title2, bullet, avatarBullet, tabbar, icon, arrow } from '../ui.js';
 import { importCardFiles } from './settings.js';
 
 export function homeView() {
   const conn = activeConnection();
-  const started = S.characters
-    .map((c) => ({ c, chat: S.chats.get(c.id) }))
-    .filter((x) => hasStarted(x.chat))
-    .sort((a, b) => b.chat.updatedAt - a.chat.updatedAt);
-  const featured = started[0]?.c || S.characters[0];
+  const started = departures();
+  const featured = started.find((x) => !x.ix)?.c || S.characters[0];
 
   let hero;
   if (featured) {
@@ -42,25 +39,33 @@ export function homeView() {
     banner = `<a class="banner press" href="#/backup">${bullet(icon('download', 18), '#FE6500', '#0A0A0A', 40)}<span class="bt"><b>Back up your chats</b><span>${S.settings.lastBackup ? 'Last backup ' + ago(S.settings.lastBackup) + ' ago' : 'Everything lives only in this browser'}.</span></span>${icon('chev', 18)}</a>`;
   }
 
-  const lines =
-    S.characters
-      .map(
-        (c, i) =>
-          `<a class="line-item" href="#/chat/${c.id}" aria-label="Chat with ${esc(c.name)}">${avatarBullet(c, 52, `animation-delay:${0.25 + i * 0.06}s`, `line:${c.id}`)}<span class="nm">${esc(c.name)}</span></a>`
-      )
-      .join('') +
-    `<a class="line-item line-new" href="#/edit/new" aria-label="New character">${bullet(icon('plus', 22), 'transparent', 'var(--cream)', 52, `animation-delay:${0.25 + S.characters.length * 0.06}s`)}<span class="nm">New</span></a>`;
+  // Departures board: the three most recent chats, on a cream signboard with a yellow header.
+  const now = new Date();
+  const board = started.length
+    ? `<div class="board"><div class="bd-head"><span>Departures</span><span class="num">${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</span></div>${started
+        .slice(0, 3)
+        .map(
+          ({ c, chat, ix }) =>
+            ix
+              ? `<a class="bd-row press" href="#/chat/${ix.id}" aria-label="Open ${esc(ix.title)}"><span class="num t">${boardTime(chat.updatedAt)}</span><span class="meet sm">${ix.people.map((p, i) => avatarBullet(p, 30, i ? 'margin-left:-14px' : '')).join('')}</span><span class="bd-tx"><b>${esc(ix.title)}</b><span>${esc(plain(textOf(lastMessage(chat))))}</span></span></a>`
+              : `<a class="bd-row press" href="#/chat/${c.id}" aria-label="Chat with ${esc(c.name)}"><span class="num t">${boardTime(chat.updatedAt)}</span>${avatarBullet(c, 30, '', `dep:${c.id}`)}<span class="bd-tx"><b>${esc(c.name)}</b><span>${esc(plain(textOf(lastMessage(chat))) || c.tagline)}</span></span></a>`
+        )
+        .join('')}<a class="bd-foot press" href="#/lines/recent">All departures ${icon('chev', 14)}</a></div>`
+    : `<div class="board"><div class="bd-head"><span>Departures</span></div><a class="bd-empty press" href="#/lines">No departures yet. Pick a line and say hello. ${icon('chev', 14)}</a></div>`;
 
-  const departures = started.slice(0, 8).map(({ c, chat }, i) => {
-    const last = lastMessage(chat);
-    return row({
-      href: `#/chat/${c.id}`,
-      lead: avatarBullet(c, 38, '', `dep:${c.id}`),
-      title: esc(c.name),
-      sub: esc(plain(textOf(last)) || c.tagline),
-      right: `<span class="row-end num">${ago(chat.updatedAt)}</span>`,
-    }).replace('class="row press"', `class="row press" style="animation-delay:${0.35 + i * 0.05}s"`);
-  });
+  // Logbook: starred moments from every chat, each ticket in its character's own colour.
+  const log = logbook();
+  const stub = ({ chat, m }) => {
+    // In an interchange the ticket belongs to whoever said it (you: the first member's colour).
+    const ixr = interchange(chat.characterId);
+    const c = character(m.speaker) || character(chat.characterId) || ixr?.people[0];
+    if (!c) return '';
+    const col = c.line?.color || '#2EAA67';
+    const t = textOf(m);
+    return `<a class="stub press" href="#/chat/${chat.characterId}/m/${m.id}" style="--c:${col};--ink:${inkOn(col)}"><span class="stub-l">${avatarBullet(c, 32)}</span><span class="stub-r"><span class="stub-m"><b>${esc(c.name)}</b><span>${agoLong(m.star)}</span></span><span class="stub-p">${formatMessage(t.length > 200 ? t.slice(0, 197) + '…' : t)}</span></span></a>`;
+  };
+  const logbookHTML = `<div class="blk logbook"><div class="hrow"><h2 class="h">Logbook</h2>${log.length > 3 ? `<a class="small press" href="#/lines/starred">See all ${log.length}</a>` : `<span class="small">${log.length ? log.length + ' starred' : 'Starred moments'}</span>`}</div>
+    ${log.length ? `<div class="roll">${log.slice(0, 3).map(stub).join('')}</div>` : `<div class="log-empty">${icon('star', 20)}<span>Long-press any message in a chat and tap <b>Star</b>. Your favourite moments land here.</span></div>`}</div>`;
 
   const html = `<div class="screen">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
@@ -68,8 +73,8 @@ export function homeView() {
       <label class="ibtn press" title="Import a character card" style="cursor:pointer">${icon('upload')}<span class="vh">Import a character card</span><input type="file" accept=".png,.json,image/png,application/json" id="homeCardIn" class="vh" multiple></label>
     </div>
     ${hero}${banner}
-    <div style="margin-top:22px"><div class="hrow"><h2 class="h">Lines</h2><span class="small">${S.characters.length} character${S.characters.length === 1 ? '' : 's'}</span></div><div class="lines">${lines}</div></div>
-    ${departures.length ? `<div style="margin-top:20px"><div class="hrow"><h2 class="h">Departures</h2><span class="small">Recent chats</span></div><div class="group board">${departures.join('')}</div></div>` : ''}
+    <div class="blk">${board}</div>
+    ${logbookHTML}
   </div>${tabbar('home')}`;
 
   return {

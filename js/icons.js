@@ -31,6 +31,11 @@ const P = {
   asterisk: "<path d='M12 5v14M6 8.5l12 7M18 8.5l-12 7'/>",
   restart: "<path d='M4 12a8 8 0 1 0 2.3-5.7M4 4v5h5'/>",
   card: "<rect x='4' y='3' width='16' height='18' rx='3'/><circle cx='12' cy='10' r='3'/><path d='M8 17c1-2 2.4-3 4-3s3 1 4 3'/>",
+  // Bold plus drawn as railway track: one heavy rail per arm, crossed by sleepers (the Build stop).
+  track: "<path d='M12 3v18M3 12h18' stroke-width='3'/><path d='M9 5.5h6M9 18.5h6M5.5 9v6M18.5 9v6' stroke-width='1.7'/>",
+  search: "<circle cx='11' cy='11' r='6.5'/><path d='M16 16l4.5 4.5'/>",
+  star: "<path d='M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.8z'/>",
+  receipt: "<path d='M6 3h12v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5L6 21z'/><path d='M9 8h6M9 12h6M9 16h3'/>",
   bell: "<path d='M6 16V11a6 6 0 0 1 12 0v5l2 2H4l2-2zM10 20a2 2 0 0 0 4 0'/>",
 };
 
