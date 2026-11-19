@@ -489,9 +489,9 @@ details.layer[open] .peek { display: none; }
 html[data-dir='back']::view-transition-old(root) { animation-name: vtOutBack; }
 html[data-dir='back']::view-transition-new(root) { animation-name: fadeIn, vtInBack; }
 ::view-transition-group(*) { animation-duration: .46s; animation-timing-function: var(--out); }
-::view-transition-group(tabbar) { animation-duration: .3s; }
-::view-transition-old(tabbar) { animation: fadeOut .2s ease both; }
-::view-transition-new(tabbar) { animation: fadeIn .3s ease .05s both; }
+/* Same bar on both tab screens: show the new one at once (no dip); only the active tab changes. */
+::view-transition-old(tabbar) { display: none; }
+::view-transition-new(tabbar) { animation: none; }
 @keyframes vtOut { to { opacity: 0; transform: translateX(-6%); } }
 @keyframes vtIn { from { transform: translateX(14%); } }
 @keyframes vtOutBack { to { opacity: 0; transform: translateX(6%); } }

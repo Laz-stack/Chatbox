@@ -45,6 +45,9 @@ document.addEventListener(
 );
 const routeKind = (h) => (/^#\/chat\//.test(h) ? 'chat' : /^#?\/?$/.test(h) ? 'home' : 'other');
 
+// Names stay on a node after a transition; clear them so the next (unrelated) one has no orphans.
+const clearShared = (root) => root.querySelectorAll('[data-av]').forEach((n) => (n.style.viewTransitionName = ''));
+
 function tagShared(root) {
   let el = root.querySelector('[data-av^="head:"]');
   if (!el) {
@@ -106,6 +109,7 @@ async function render() {
   };
   if (document.startViewTransition && !reducedMotion() && current) {
     if (shared) tagShared(app);
+    else clearShared(app);
     const t = document.startViewTransition(swap);
     t.finished.catch(() => {});
   } else {
