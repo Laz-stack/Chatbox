@@ -107,7 +107,9 @@ export async function chatView(id, focusId = null) {
           ? `<div class="pager"><button type="button" data-alt="-1" aria-label="Previous reply" ${m.alt === 0 ? 'disabled' : ''}>${icon('back', 18)}</button><span class="num" aria-live="polite">${m.alt + 1} / ${m.alts.length}</span><button type="button" data-alt="1" aria-label="Next reply">${icon('chev', 18)}</button></div>`
           : '';
       const read = ttsSupported ? `<button type="button" class="mini press" data-read aria-label="Read aloud">${icon('speaker', 18)}</button>` : '';
-      return pager || read ? `<div class="msg-tools">${pager}${read}</div>` : '';
+      const used = (m.lore?.[m.alt] || []).filter((id) => S.lore.some((e) => e.id === id));
+      const lore = used.length ? `<button type="button" class="mini lore-used press" data-lore aria-label="${used.length} Lorebook entr${used.length === 1 ? 'y' : 'ies'} used">${icon('book', 16)}<span class="num">${used.length}</span></button>` : '';
+      return pager || read || lore ? `<div class="msg-tools">${pager}${read}${lore}</div>` : '';
     }
     function msgHTML(m, i, enter = false) {
       const cls = `msg ${m.role === 'user' ? 'user' : 'ai'}${enter ? ' enter' : ''}`;
@@ -295,6 +297,10 @@ export async function chatView(id, focusId = null) {
         } else rerenderMsg(idx);
       } else {
         target.alts[target.alt] = text;
+        // Which Lorebook entries this reply was written with (per alternate).
+        target.lore ||= {};
+        if (built.loreIds?.length) target.lore[target.alt] = built.loreIds;
+        else delete target.lore[target.alt];
         const mood = detectMood(text);
         const moodChanged = mood !== target.mood;
         target.mood = mood;
@@ -619,6 +625,20 @@ export async function chatView(id, focusId = null) {
       onChip(e);
       const a = e.target.closest('[data-alt]');
       if (a) return switchAlt(+a.dataset.alt);
+      if (e.target.closest('[data-lore]')) {
+        const m = chat.messages[lastAiIndex()];
+        const used = (m?.lore?.[m.alt] || []).map((id) => S.lore.find((x) => x.id === id)).filter(Boolean);
+        openSheet({
+          label: 'Lorebook entries used',
+          html: `<h2 class="sheet-title">Lorebook in this reply</h2><p class="sheet-p">Sent with this reply: a keyword came up in the chat, or the entry is always on.</p><div class="lore-list">${used
+            .map((x) => `<a class="lore-row press" href="#/lore/${x.id}" data-close><span class="lore-main"><span class="lore-t">${esc(x.title || x.keys[0] || 'Untitled entry')}</span><span class="lore-keys">${x.always ? '<span class="kchip always">Always</span>' : ''}${x.keys.slice(0, 5).map((k) => `<span class="kchip">${esc(k)}</span>`).join('')}</span></span>${icon('chev', 18)}</a>`)
+            .join('')}</div>`,
+          onMount(s, close) {
+            s.querySelectorAll('[data-close]').forEach((a) => a.addEventListener('click', () => close()));
+          },
+        });
+        return;
+      }
       if (e.target.closest('[data-read]')) {
         const i = lastAiIndex();
         speak(textOf(chat.messages[i]));

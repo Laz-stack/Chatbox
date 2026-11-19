@@ -39,6 +39,7 @@ export function settingsView() {
     <h2 class="sec">AI</h2>
     ${group(
       row({ href: '#/connections', ic: 'link', title: 'Connections', sub: conn ? `${esc(conn.name)} · ${esc(conn.provider === 'demo' ? 'demo replies' : conn.model)}` : 'None yet' }),
+      row({ href: '#/lore', ic: 'book', bc: 'var(--orange)', fc: '#0A0A0A', title: 'Lorebook', sub: !S.lore.length ? 'World info for your chats' : S.lore.length === 1 ? `1 entry · ${S.lore[0].on ? 'on' : 'off'}` : `${S.lore.filter((e) => e.on).length} of ${S.lore.length} entries on` }),
       row({ href: '#/prompts', ic: 'file', bc: 'var(--red)', fc: '#fff', title: 'Prompts', sub: `Global ${S.settings.globalOn ? 'on' : 'off'} · ${S.connections.filter((c) => c.prompt?.trim()).length} connection prompt${S.connections.filter((c) => c.prompt?.trim()).length === 1 ? '' : 's'}` })
     )}
     <h2 class="sec">Chat</h2>

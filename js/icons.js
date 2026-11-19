@@ -39,6 +39,7 @@ const P = {
   lock: "<rect x='5' y='11' width='14' height='10' rx='2.5'/><path d='M8 11V8a4 4 0 0 1 8 0v3'/>",
   unlock: "<rect x='5' y='11' width='14' height='10' rx='2.5'/><path d='M8 11V8a4 4 0 0 1 7.6-1.7'/>",
   dice: "<rect x='4' y='4' width='16' height='16' rx='3.5'/><circle cx='9' cy='9' r='1.1' fill='currentColor'/><circle cx='15' cy='15' r='1.1' fill='currentColor'/><circle cx='15' cy='9' r='1.1' fill='currentColor'/><circle cx='9' cy='15' r='1.1' fill='currentColor'/>",
+  book: "<path d='M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5z'/><path d='M5 19.5A1.5 1.5 0 0 0 6.5 21H19v-3'/><path d='M9 7h6'/>",
   bell: "<path d='M6 16V11a6 6 0 0 1 12 0v5l2 2H4l2-2zM10 20a2 2 0 0 0 4 0'/>",
 };
 
