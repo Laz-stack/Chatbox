@@ -102,6 +102,9 @@ export function reel(size, { spd = 6, pack = 34, cls = '' } = {}) {
 // ---------- overlays ----------
 const ovRoot = () => document.getElementById('overlay-root');
 let openCount = 0;
+const openClosers = new Set();
+// Close every open sheet and menu (called when the screen changes underneath them).
+export const closeOverlays = () => [...openClosers].forEach((c) => c());
 
 export function openSheet({ html, label = '', onMount, onClose }) {
   const wrap = document.createElement('div');
@@ -118,6 +121,7 @@ export function openSheet({ html, label = '', onMount, onClose }) {
   function close(v) {
     if (closed) return;
     closed = true;
+    openClosers.delete(close);
     openCount--;
     document.removeEventListener('keydown', onKey);
     wrap.classList.add('closing');
@@ -127,6 +131,7 @@ export function openSheet({ html, label = '', onMount, onClose }) {
     }, 300);
     onClose?.(v);
   }
+  openClosers.add(close);
   document.addEventListener('keydown', onKey);
   wrap.querySelector('.scrim').addEventListener('click', () => close());
   dragToDismiss(sheet, wrap.querySelector('.grab'), close);
@@ -171,7 +176,8 @@ export function openMenu(anchor, items, { onClose, spotlight } = {}) {
         : `<button type="button" role="menuitem" data-i="${i}" class="${it.danger ? 'danger' : ''}" style="animation-delay:${0.03 * i}s"><span class="mi">${icon(it.icon, 16)}</span>${esc(it.label)}</button>`
     )
     .join('');
-  wrap.innerHTML = `<div class="menu-scrim"></div><div class="menu" role="menu">${html}</div>`;
+  // The catcher takes taps everywhere, including inside the spotlight cut-out, so the menu always closes.
+  wrap.innerHTML = `<div class="menu-catch"></div><div class="menu-scrim"></div><div class="menu" role="menu">${html}</div>`;
   ovRoot().appendChild(wrap);
   const menu = wrap.querySelector('.menu');
   const r = anchor.getBoundingClientRect();
@@ -207,13 +213,16 @@ export function openMenu(anchor, items, { onClose, spotlight } = {}) {
   function close() {
     if (closed) return;
     closed = true;
+    openClosers.delete(close);
     document.removeEventListener('keydown', onKey);
     wrap.classList.add('closing');
     setTimeout(() => wrap.remove(), 200);
     onClose?.();
   }
+  openClosers.add(close);
   document.addEventListener('keydown', onKey);
   wrap.querySelector('.menu-scrim').addEventListener('click', close);
+  wrap.querySelector('.menu-catch').addEventListener('click', close);
   menu.addEventListener('click', (e) => {
     const b = e.target.closest('button[data-i]');
     if (!b) return;

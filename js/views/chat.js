@@ -1,8 +1,8 @@
-import { S, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, resetChat, recordFare, interchange, isInterchangeId } from '../store.js';
+import { S, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, resetChat, recordFare, interchange, isInterchangeId, chatsFor, startNewChat, deleteChat } from '../store.js';
 import { complete, PROVIDERS } from '../providers.js';
 import { buildPrompt } from '../prompt.js';
 import { shouldSummarize, summarize } from '../memory.js';
-import { esc, uid, formatMessage, fmtNum, estimateTokens, inkOn, detectMood, copyText, download, slug, reducedMotion, motion, lineAccent, EASE_OUT } from '../util.js';
+import { esc, uid, formatMessage, fmtNum, estimateTokens, inkOn, ago, plain, detectMood, copyText, download, slug, reducedMotion, motion, lineAccent, EASE_OUT } from '../util.js';
 import { avatarTile } from '../avatar.js';
 import { sceneSVG } from '../scenes.js';
 import { sceneSheet as openSceneSheet } from '../scenepicker.js';
@@ -48,11 +48,14 @@ export async function chatView(id, focusId = null) {
   const ix = isInterchangeId(id) ? interchange(id) : null;
   // In an Interchange `ch` stands for the room (title, first member's scene and colour);
   // each reply's own speaker comes from speakerOf().
-  const ch = ix ? { ...ix.people[0], id: ix.id, name: ix.title, tagline: `Interchange · ${ix.people.length} lines`, connectionId: null } : character(id);
+  // A chat id ("mika~x7k2") opens that chat; a character id opens its most recent one.
+  const owner = ix ? id : character(id) ? id : S.chats.get(id)?.characterId || id;
+  const ch = ix ? { ...ix.people[0], id: ix.id, name: ix.title, tagline: `Interchange · ${ix.people.length} lines`, connectionId: null } : character(owner);
   if (!ch) return null;
   const speakerOf = (m) => (ix ? ix.people.find((p) => p.id === m?.speaker) || ix.people[0] : ch);
   const group = ix ? { people: ix.people, scene: ix.scene } : null;
   const chat = await getChat(id);
+  if (!chat) return null;
   let ctl = null;
   let busy = false;
   let destroyed = false;
@@ -71,7 +74,7 @@ export async function chatView(id, focusId = null) {
     <div class="chat-meta">
       <a class="pill press" href="#/connections" aria-label="Connection: ${esc(connText(conn0))}. Tap to switch."><span class="dot${conn0?.provider === 'demo' ? ' demo' : ''}" id="connDot"></span><span class="ell" id="connName">${esc(connText(conn0))}</span></a>
       <span class="pill muted" id="tokPill" ${S.settings.showCounter ? '' : 'hidden'} title="Estimated tokens sent with the next reply">${icon('layers', 14)}<span><span class="num" id="tokN">…</span> tokens</span></span>
-      <a class="pill y press end" href="#/memory/${ch.id}" ${ix ? 'hidden' : ''}>${icon('pin', 15)}<span id="noteN">${chat.notes.length}</span>&nbsp;note${chat.notes.length === 1 ? '' : 's'}</a>
+      <a class="pill y press end" href="#/memory/${chat.id}" ${ix ? 'hidden' : ''}>${icon('pin', 15)}<span id="noteN">${chat.notes.length}</span>&nbsp;note${chat.notes.length === 1 ? '' : 's'}</a>
     </div>
     <div class="log" id="log" role="log" aria-live="polite" aria-relevant="additions" aria-label="Chat with ${esc(ch.name)}"></div>
     <div class="chips" id="chips"></div>
@@ -118,7 +121,7 @@ export async function chatView(id, focusId = null) {
       const cut = chat.summary?.upto || 0;
       let h = '';
       chat.messages.forEach((m, i) => {
-        if (cut && i === cut) h += `<a class="stop-line" href="#/memory/${ch.id}">${icon('spark', 14)} Earlier stops summarized</a>`;
+        if (cut && i === cut) h += `<a class="stop-line" href="#/memory/${chat.id}">${icon('spark', 14)} Earlier stops summarized</a>`;
         h += msgHTML(m, i);
       });
       if (!chat.messages.length)
@@ -433,7 +436,7 @@ export async function chatView(id, focusId = null) {
       await save();
       root.querySelector('#noteN').textContent = chat.notes.length;
       updateTokens();
-      toast('Pinned to notes', { action: 'View', onAction: () => (location.hash = `#/memory/${ch.id}`) });
+      toast('Pinned to notes', { action: 'View', onAction: () => (location.hash = `#/memory/${chat.id}`) });
     }
     async function remove(i) {
       const [m] = chat.messages.splice(i, 1);
@@ -465,12 +468,18 @@ export async function chatView(id, focusId = null) {
           ? []
           : [
               { icon: 'image', label: 'Scene', on: sceneSheet },
-              { icon: 'spark', label: 'Memory and notes', on: () => (location.hash = `#/memory/${ch.id}`) },
-              { icon: 'layers', label: 'Final prompt', on: () => (location.hash = `#/final/${ch.id}`) },
+              { icon: 'spark', label: 'Memory and notes', on: () => (location.hash = `#/memory/${chat.id}`) },
+              { icon: 'layers', label: 'Final prompt', on: () => (location.hash = `#/final/${chat.id}`) },
               { icon: 'download', label: 'Export card (PNG)', on: async () => download(await exportCardPng(ch), slug(ch.name) + '.card.png') },
             ]),
         '-',
-        {
+        ...(ix
+          ? []
+          : [
+              { icon: 'plus', label: 'New chat', on: newChatHere },
+              { icon: 'file', label: `Chats with ${ch.name}`, on: chatsSheet },
+            ]),
+        ...(!ix ? [] : [{
           icon: 'restart',
           label: 'Start a new chat',
           danger: true,
@@ -497,9 +506,53 @@ export async function chatView(id, focusId = null) {
               },
             });
           },
-        },
+        }]),
       ])
     );
+
+    // ---------- several chats with one character ----------
+    async function newChatHere() {
+      const c = await startNewChat(ch.id);
+      location.hash = `#/chat/${c.id}`;
+      toast(`New chat with ${ch.name}. Your other chats are under Chats.`, { ms: 2400 });
+    }
+    const chatTitle = (c) => {
+      const firstYou = c.messages.find((m) => m.role === 'user');
+      return firstYou ? plain(textOf(firstYou)).slice(0, 60) : 'Not started yet';
+    };
+    function chatsSheet() {
+      const list = () =>
+        chatsFor(ch.id)
+          .map(
+            (c) =>
+              `<div class="chatrow${c.id === chat.id ? ' here' : ''}"><a class="cr-main press" href="#/chat/${c.id}" data-go><span class="cr-t">${esc(chatTitle(c))}</span><span class="cr-s">${c.messages.length} message${c.messages.length === 1 ? '' : 's'} · ${ago(c.updatedAt) === 'now' ? 'just now' : ago(c.updatedAt) + ' ago'}${c.id === chat.id ? ' · open now' : ''}</span></a><button type="button" class="ibtn ghost press" data-del="${c.id}" aria-label="Delete this chat">${icon('trash', 18)}</button></div>`
+          )
+          .join('');
+      openSheet({
+        label: `Chats with ${ch.name}`,
+        html: `<h2 class="sheet-title">Chats with ${esc(ch.name)}</h2><p class="sheet-p">Each chat is its own story. Notes and memory stay with the chat they were made in.</p>
+          <button type="button" class="btn-primary press" id="newChatBtn"><span>New chat</span>${icon('plus', 24)}</button>
+          <div class="chatlist" id="chatList">${list()}</div>`,
+        onMount(s, close) {
+          s.querySelector('#newChatBtn').onclick = () => (close(), newChatHere());
+          s.querySelector('#chatList').addEventListener('click', async (e) => {
+            if (e.target.closest('[data-go]')) return close();
+            const b = e.target.closest('[data-del]');
+            if (!b) return;
+            const cid = b.dataset.del;
+            if (!(await confirmSheet({ title: 'Delete this chat?', body: 'Its messages, notes and summary go too. Other chats with this character stay.', ok: 'Delete chat', danger: true }))) return;
+            await deleteChat(cid);
+            if (cid === chat.id) {
+              close();
+              location.hash = `#/chat/${ch.id}`;
+              return;
+            }
+            s.querySelector('#chatList').innerHTML = list();
+            toast('Chat deleted');
+          });
+        },
+      });
+    }
 
     function sceneSheet() {
       const chatEl = root.querySelector('#chat');

@@ -101,7 +101,9 @@ export async function load() {
   S.connections = all.get('connections') || [];
   S.characters = all.get('characters') || [];
   S.chats = new Map();
-  for (const [k, v] of all) if (typeof k === 'string' && k.startsWith('chat:')) S.chats.set(k.slice(5), v);
+  // Every chat has its own id. Older data keyed one chat per character; that chat keeps the character's id.
+  for (const [k, v] of all) if (typeof k === 'string' && k.startsWith('chat:')) S.chats.set((v.id ||= k.slice(5)), v);
+  await giveChatsOwnIds();
 
   if (!all.has('seeded')) {
     if (!S.connections.length) S.connections = [demoConnection()];
@@ -118,6 +120,20 @@ export async function load() {
   }
   if (!S.connections.find((c) => c.id === S.settings.activeConnectionId)) {
     S.settings.activeConnectionId = S.connections[0]?.id || null;
+  }
+}
+
+// Older data stored one chat per character under the character's own id. Give each its own chat id
+// ("<characterId>~1"), keeping every message, note and star.
+async function giveChatsOwnIds() {
+  for (const c of [...S.chats.values()]) {
+    if (c.id !== c.characterId || c.id.startsWith('ix-')) continue;
+    const old = c.id;
+    c.id = `${old}~1`;
+    S.chats.delete(old);
+    S.chats.set(c.id, c);
+    await db.set('chat:' + c.id, c);
+    await db.del('chat:' + old);
   }
 }
 
@@ -194,7 +210,9 @@ export async function saveCharacter(ch) {
 
 export async function deleteCharacter(id) {
   S.characters = S.characters.filter((c) => c.id !== id);
-  S.chats.delete(id);
+  const gone = chatsFor(id).map((c) => c.id);
+  gone.forEach((cid) => S.chats.delete(cid));
+  await Promise.all(gone.map((cid) => db.del('chat:' + cid)));
   S.interchanges.forEach((x) => (x.members = x.members.filter((m) => m !== id)));
   await Promise.all([saveCharacters(), saveInterchanges(), db.del('chat:' + id)]);
 }
@@ -218,28 +236,52 @@ export async function deleteConnection(id) {
 // Messages keep every alternate reply in `alts`; `alt` is the one shown.
 export const textOf = (m) => (m ? m.alts[m.alt] ?? '' : '');
 
-export function newChat(charId) {
+// A character can have many chats, each "<characterId>~<random>", so a character id always means
+// "their most recent chat" and a chat id always means that exact chat. An interchange's chat keeps its id.
+export function newChat(charId, id = charId.startsWith('ix-') ? charId : `${charId}~${uid()}`) {
   const ch = character(charId);
   const messages = [];
   if (ch?.firstMessage?.trim()) {
     messages.push({ id: uid(), role: 'assistant', alts: [ch.firstMessage], alt: 0, mood: 'happy', at: Date.now(), first: true });
   }
-  return { characterId: charId, messages, summary: null, notes: [], updatedAt: Date.now(), startedAt: Date.now() };
+  return { id, characterId: charId, messages, summary: null, notes: [], updatedAt: Date.now(), startedAt: Date.now() };
 }
 
-export async function getChat(charId) {
-  if (!S.chats.has(charId)) {
-    const c = newChat(charId);
-    S.chats.set(charId, c);
-    await db.set('chat:' + charId, c);
-  }
-  return S.chats.get(charId);
+// All chats with one character (or interchange), most recent first.
+export const chatsFor = (ownerId) => [...S.chats.values()].filter((c) => c.characterId === ownerId).sort((a, b) => b.updatedAt - a.updatedAt);
+export const latestChat = (ownerId) => chatsFor(ownerId)[0] || null;
+
+// A chat id opens that chat; a character or interchange id opens its most recent chat (creating one if none).
+export async function getChat(id) {
+  const isOwner = !!character(id) || S.interchanges.some((x) => x.id === id);
+  if (isOwner) {
+    const latest = latestChat(id);
+    if (latest) return latest;
+  } else if (S.chats.has(id)) return S.chats.get(id);
+  if (!character(id) && !S.interchanges.some((x) => x.id === id)) return null;
+  const c = newChat(id);
+  S.chats.set(c.id, c);
+  await db.set('chat:' + c.id, c);
+  return c;
 }
 
 export async function saveChat(chat, touch = true) {
   if (touch) chat.updatedAt = Date.now();
-  S.chats.set(chat.characterId, chat);
-  await db.set('chat:' + chat.characterId, chat);
+  chat.id ||= chat.characterId;
+  S.chats.set(chat.id, chat);
+  await db.set('chat:' + chat.id, chat);
+}
+
+// A fresh chat with the same character; the old ones stay.
+export async function startNewChat(charId) {
+  const c = newChat(charId, `${charId}~${uid()}`);
+  await saveChat(c);
+  return c;
+}
+
+export async function deleteChat(chatId) {
+  S.chats.delete(chatId);
+  await db.del('chat:' + chatId);
 }
 
 export async function resetChat(charId) {
@@ -256,11 +298,11 @@ export const hasStarted = (chat) => !!chat && chat.messages.some((m) => m.role =
 // Chats that have started, newest first: [{ c, chat }] for characters.
 // Interchange items carry `ix` (with .people and .title) and `c` = their first member.
 export function departures() {
-  const lines = S.characters.map((c) => ({ c, chat: S.chats.get(c.id) }));
+  const lines = S.characters.flatMap((c) => chatsFor(c.id).map((chat) => ({ c, chat })));
   const groups = S.interchanges
     .map((x) => interchange(x.id))
     .filter(Boolean)
-    .map((ix) => ({ ix, c: ix.people[0], chat: S.chats.get(ix.id) }));
+    .map((ix) => ({ ix, c: ix.people[0], chat: latestChat(ix.id) }));
   return [...lines, ...groups].filter((x) => hasStarted(x.chat)).sort((a, b) => b.chat.updatedAt - a.chat.updatedAt);
 }
 
@@ -302,7 +344,9 @@ export async function restore(data) {
   S.fares = { months: {}, ...(data.fares || {}) };
   S.interchanges = data.interchanges || [];
   S.chats = new Map();
-  for (const c of data.chats || []) S.chats.set(c.characterId, c);
+  for (const c of data.chats || []) S.chats.set((c.id ||= c.characterId), c);
+  for (const c of [...S.chats.values()])
+    if (c.id === c.characterId && !c.id.startsWith('ix-')) S.chats.delete(c.id), S.chats.set((c.id = `${c.id}~1`), c);
   await Promise.all([
     saveSettings(),
     savePersona(),
@@ -310,7 +354,7 @@ export async function restore(data) {
     saveCharacters(),
     saveFares(),
     saveInterchanges(),
-    ...[...S.chats.values()].map((c) => db.set('chat:' + c.characterId, c)),
+    ...[...S.chats.values()].map((c) => db.set('chat:' + c.id, c)),
   ]);
 }
 

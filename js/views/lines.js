@@ -1,6 +1,6 @@
 // Lines: every character (and later every Interchange), all departures, the full Logbook,
 // and a search across names, taglines and every message in every chat.
-import { S, textOf, departures, logbook, character, lastMessage, interchange } from '../store.js';
+import { S, textOf, departures, logbook, character, lastMessage, interchange, latestChat, chatsFor } from '../store.js';
 import { esc, ago, agoLong, plain, inkOn, debounce, formatMessage } from '../util.js';
 import { title2, avatarBullet, tabbar, icon } from '../ui.js';
 
@@ -17,27 +17,28 @@ const colorVars = (c) => {
 };
 
 function lineRow(c) {
-  const chat = S.chats.get(c.id);
+  const chat = latestChat(c.id);
+  const n = chatsFor(c.id).filter((x) => x.messages.some((m) => m.role === 'user')).length;
   const when = chat && chat.messages.some((m) => m.role === 'user') ? ago(chat.updatedAt) : 'new';
-  return `<a class="ix press" href="#/chat/${c.id}" style="${colorVars(c)}" aria-label="Chat with ${esc(c.name)}">${avatarBullet(c, 44, '', `line:${c.id}`)}<span class="row-tx"><span class="row-t">${esc(c.name)}</span><span class="row-s">${esc(c.tagline || 'No tagline')}</span></span><span class="ix-t num">${when}</span></a>`;
+  return `<a class="ix press" href="#/chat/${c.id}" style="${colorVars(c)}" aria-label="Chat with ${esc(c.name)}">${avatarBullet(c, 44, '', `line:${c.id}`)}<span class="row-tx"><span class="row-t">${esc(c.name)}</span><span class="row-s">${esc(c.tagline || 'No tagline')}${n > 1 ? ` · ${n} chats` : ''}</span></span><span class="ix-t num">${when}</span></a>`;
 }
 
 function ixRow(ix) {
-  const chat = S.chats.get(ix.id);
+  const chat = latestChat(ix.id);
   const when = chat && chat.messages.some((m) => m.role === 'user') ? ago(chat.updatedAt) : 'new';
   return `<a class="ix ixg press" href="#/chat/${ix.id}" aria-label="Open ${esc(ix.title)}"><span class="meet">${ix.people.map((p, i) => avatarBullet(p, 40, i ? 'margin-left:-14px' : '')).join('')}</span><span class="row-tx"><span class="row-t">${esc(ix.title)}</span><span class="row-s">Interchange · ${ix.people.map((p) => esc(p.name)).join(', ')}</span></span><span class="ix-t num">${when}</span></a>`;
 }
 
 function departureRow({ c, chat, ix }) {
   if (ix) return ixRow(ix);
-  return `<a class="ix press" href="#/chat/${c.id}" style="${colorVars(c)}" aria-label="Chat with ${esc(c.name)}">${avatarBullet(c, 44, '', `line:${c.id}`)}<span class="row-tx"><span class="row-t">${esc(c.name)}</span><span class="row-s">${esc(plain(textOf(lastMessage(chat))))}</span></span><span class="ix-t num">${ago(chat.updatedAt)}</span></a>`;
+  return `<a class="ix press" href="#/chat/${chat.id}" style="${colorVars(c)}" aria-label="Chat with ${esc(c.name)}">${avatarBullet(c, 44, '', `line:${c.id}`)}<span class="row-tx"><span class="row-t">${esc(c.name)}</span><span class="row-s">${esc(plain(textOf(lastMessage(chat))))}</span></span><span class="ix-t num">${ago(chat.updatedAt)}</span></a>`;
 }
 
 function starRow({ chat, m }) {
   const c = character(m.speaker) || character(chat.characterId) || interchange(chat.characterId)?.people[0];
   if (!c) return '';
   const t = textOf(m);
-  return `<a class="stub press" href="#/chat/${chat.characterId}/m/${m.id}" style="${colorVars(c)}"><span class="stub-l">${avatarBullet(c, 32)}</span><span class="stub-r"><span class="stub-m"><b>${esc(c.name)}</b><span>${agoLong(m.star)}</span></span><span class="stub-p">${formatMessage(t.length > 240 ? t.slice(0, 237) + '…' : t)}</span></span></a>`;
+  return `<a class="stub press" href="#/chat/${chat.id}/m/${m.id}" style="${colorVars(c)}"><span class="stub-l">${avatarBullet(c, 32)}</span><span class="stub-r"><span class="stub-m"><b>${esc(c.name)}</b><span>${agoLong(m.star)}</span></span><span class="stub-p">${formatMessage(t.length > 240 ? t.slice(0, 237) + '…' : t)}</span></span></a>`;
 }
 
 // Highlight the query inside an escaped snippet around the first match.
@@ -55,10 +56,10 @@ function searchResults(q) {
   const ql = q.toLowerCase();
   const lines = S.characters.filter((c) => (c.name + ' ' + (c.tagline || '')).toLowerCase().includes(ql));
   const hits = [];
-  const rooms = [...S.characters.map((c) => ({ id: c.id, c })), ...S.interchanges.map((x) => interchange(x.id)).filter(Boolean).map((ix) => ({ id: ix.id, ix }))];
-  for (const r of rooms) {
-    const chat = S.chats.get(r.id);
-    if (!chat) continue;
+  for (const chat of S.chats.values()) {
+    const ixr = interchange(chat.characterId);
+    const r = { id: chat.id, c: character(chat.characterId), ix: ixr };
+    if (!r.c && !r.ix) continue;
     for (const m of chat.messages) {
       const t = textOf(m);
       if (!t.toLowerCase().includes(ql)) continue;
