@@ -4,6 +4,7 @@ import { avatarTile, avatarSVG, PRESETS, PRESET_KEYS, EXPRESSIONS } from '../ava
 import { sceneSVG, SCENES } from '../scenes.js';
 import { sceneSheet } from '../scenepicker.js';
 import { exportCardPng, exportCardJson } from '../cards.js';
+import { blueprintHTML, bindBlueprint } from './blueprint-ui.js';
 import { topbar, ibtn, field, area, group, row, toggleRow, bindSwitch, bullet, icon, arrow, openSheet, openMenu, toast, confirmSheet } from '../ui.js';
 
 const COLOR_NAMES = { '#2EAA67': 'Green', '#FB4DAA': 'Pink', '#FE6500': 'Orange', '#B8ACFE': 'Lilac', '#FDCD15': 'Yellow', '#065BFE': 'Blue', '#ECECEC': 'Silver', '#E70404': 'Red' };
@@ -52,7 +53,7 @@ export function editorView(id) {
           <div class="swatches" id="swatches" role="group" aria-label="Line colour">${LINE_COLORS.map((c) => `<button type="button" class="swatch press" data-c="${c}" aria-label="${COLOR_NAMES[c] || c}" title="${COLOR_NAMES[c] || c}" aria-pressed="${c === d.line.color}">${bullet('', c, null, 32)}</button>`).join('')}</div>
         </div>
       </div>
-      ${area('fPersona', 'Persona prompt', d.persona, { rows: 7, ph: 'Who they are, how they talk, what they want. Use {{char}} for their name and {{user}} for yours.', right: `<span class="counter" id="cPersona">0 / 6,000</span>` })}
+      ${blueprintHTML(d)}
       ${area('fFirst', 'First message', d.firstMessage, { rows: 3, ph: 'How they open the chat. *Actions* go in asterisks.' })}
       <div><div class="hrow"><h2 class="h">Expressions</h2><span class="small">Swap with the reply's mood</span></div><div id="exprRow">${exprRow()}</div></div>
       ${group(
@@ -107,6 +108,17 @@ export function editorView(id) {
     });
     $('#fTag').addEventListener('input', (e) => (d.tagline = e.target.value));
     $('#fPersona').addEventListener('input', (e) => ((d.persona = e.target.value), count()));
+    bindBlueprint(root, d, {
+      onName(n) {
+        d.name = n || '';
+        $('#fName').value = d.name;
+        if (autoLetter) {
+          d.line.letter = (d.name.trim()[0] || '').toUpperCase();
+          $('#fLetter').value = d.line.letter;
+        }
+        paintBullet();
+      },
+    });
     $('#fFirst').addEventListener('input', (e) => (d.firstMessage = e.target.value));
     $('#swatches').addEventListener('click', (e) => {
       const b = e.target.closest('[data-c]');

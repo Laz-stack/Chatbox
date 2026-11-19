@@ -1,4 +1,5 @@
 // Character card import/export.
+import { compileSheet } from './blueprint.js';
 // Reads Tavern-style cards (V1/V2/V3 JSON, or PNG with a "chara"/"ccv3" text chunk)
 // and writes V2 cards as JSON or as a PNG with the card embedded.
 import { blankCharacter, LINE_COLORS, S } from './store.js';
@@ -108,7 +109,7 @@ export function characterToCard(ch) {
     spec_version: '2.0',
     data: {
       name: ch.name,
-      description: ch.persona,
+      description: compileSheet(ch),
       personality: '',
       scenario: '',
       first_mes: ch.firstMessage,
