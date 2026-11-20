@@ -5,7 +5,7 @@ import { openSheet, ruler, bindRuler, icon, arrow } from './ui.js';
 
 // value: { scene, blur, dim }. onPreview(d) is called live while picking (optional);
 // onSave(d) when the button is pressed. Closing without saving calls onPreview(original).
-export function sceneSheet({ value, cta = 'Use this scene', onPreview, onSave }) {
+export function sceneSheet({ value, cta = 'Use this scene', onPreview, onSave, portrait = '' }) {
   const orig = { ...value };
   const d = { ...value };
   let saved = false;
@@ -13,7 +13,7 @@ export function sceneSheet({ value, cta = 'Use this scene', onPreview, onSave })
   openSheet({
     label: 'Scene',
     html: `<div class="sheet-head"><h2 class="t2" style="font-size:28px"><span>Scene</span><span class="sub">Shown softly behind the chat</span></h2></div>
-      <div class="grid3" id="scGrid">${SCENES.map((s) => `<button type="button" class="pick press" data-k="${s.key}" aria-pressed="${s.key === d.scene}"><span class="thumb scene">${sceneSVG(s.key)}${check}</span><span class="nm">${esc(s.name)}</span></button>`).join('')}</div>
+      <div class="grid3" id="scGrid">${(portrait ? [...SCENES.slice(0, -1), { key: 'portrait', name: 'Portrait' }, SCENES.at(-1)] : SCENES).map((s) => `<button type="button" class="pick press" data-k="${s.key}" aria-pressed="${s.key === d.scene}"><span class="thumb scene${s.key === 'portrait' ? ' duo' : ''}">${s.key === 'portrait' ? portrait : sceneSVG(s.key)}${check}</span><span class="nm">${esc(s.name)}</span></button>`).join('')}</div>
       <div class="stack" style="margin:18px 0">${ruler('scBlur', 'Blur', d.blur, 20)}${ruler('scDim', 'Dim', d.dim, 100)}</div>
       <button type="button" class="btn-primary press" id="scSave"><span>${cta}</span>${arrow(30)}</button>`,
     onMount(s, close) {
