@@ -1697,3 +1697,7 @@ button.chr-row { width: 100%; }
 .mkp-o.hot, .mkp-o:focus-visible { background: var(--yellow); box-shadow: 0 0 0 4px rgba(253, 205, 21, .25); outline: none; }
 .mkp-o.hot small, .mkp-o:focus-visible small { color: var(--yellow); }
 .mkp.still .mkp-o, .mkp.still .mkp-rail, .mkp.still .mkp-scrim { transition: none; }
+
+/* Text weight (Reading text › Weight): the character's and narrator's text only */
+.chat .msg.ai:not(.scene) .bubble, .tx-prev-bubble .bubble { font-weight: var(--read-wb, 500); }
+.chat .scn .scn-narr, .chat .msg.scene .bubble.scn, .tx-prev .scn-narr, .tx-prev .scn-t { font-weight: var(--read-ws, 400); }

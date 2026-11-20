@@ -1,6 +1,6 @@
 // Depot › Reading text: size, font and colours for chat messages, with live previews of both layouts.
 import { S, saveSettings } from '../store.js';
-import { SIZES, FONTS, DIALOGUE, NARRATION, BUBBLES, MY_BUBBLES, LAYOUTS, WIDTHS, ALIGNS, TRACKS, PARAS, DEFAULT_TEXT, textPrefs, applyText } from '../textstyle.js';
+import { SIZES, FONTS, WEIGHTS, DIALOGUE, NARRATION, BUBBLES, MY_BUBBLES, LAYOUTS, WIDTHS, ALIGNS, TRACKS, PARAS, DEFAULT_TEXT, textPrefs, applyText } from '../textstyle.js';
 import { esc, formatMessage } from '../util.js';
 import { topbar, title2, icon, openSheet } from '../ui.js';
 
@@ -44,6 +44,7 @@ const PICS = {
   width: (k) => `<span class="tx-pic w ${k}" aria-hidden="true"><i></i><i></i><i></i></span>`,
   align: (k) => `<span class="tx-pic a ${k}" aria-hidden="true"><i></i><i></i><i></i></span>`,
   track: (k) => `<span class="tx-pic t" aria-hidden="true" style="letter-spacing:${{ tight: '-0.07em', normal: '0', wide: '0.22em' }[k]}">Aa</span>`,
+  weight: (k) => `<span class="tx-pic t" aria-hidden="true" style="font-weight:${WEIGHTS[k].b + 100}">Aa</span>`,
   para: (k) => `<span class="tx-pic p ${k}" aria-hidden="true"><i></i><i></i><i></i><i></i></span>`,
 };
 const seg = (name, label, list, cur) =>
@@ -51,7 +52,8 @@ const seg = (name, label, list, cur) =>
     .map(([k, o]) => `<button type="button" class="press" role="radio" aria-checked="${cur === k}" data-${name}="${k}">${PICS[name](k)}<b>${o.label}</b></button>`)
     .join('')}</div>`;
 const shapeRows = (t, all = true) =>
-  `<p class="tx-lbl">Width <span>character and narrator only</span></p>${seg('width', 'Text width', WIDTHS, t.width)}
+  `<p class="tx-lbl">Weight <span>character and narrator only</span></p>${seg('weight', 'Text weight', WEIGHTS, t.weight)}
+    <p class="tx-lbl">Width <span>character and narrator only</span></p>${seg('width', 'Text width', WIDTHS, t.width)}
     <p class="tx-lbl">Alignment <span>character and narrator only</span></p>${seg('align', 'Text alignment', ALIGNS, t.align)}` +
   (all ? `<p class="tx-lbl">Letter spacing <span>character and narrator only</span></p>${seg('track', 'Letter spacing', TRACKS, t.track)}
     <p class="tx-lbl">Paragraph spacing <span>character and narrator only</span></p>${seg('para', 'Paragraph spacing', PARAS, t.para)}` : '');
@@ -59,9 +61,9 @@ const shapeRows = (t, all = true) =>
 // Mark the chosen option in a group (the page and the quick sheet both use this).
 function bindPrefs(root, after = () => {}) {
   root.addEventListener('click', async (e) => {
-    const b = e.target.closest('[data-size],[data-font],[data-dialogue],[data-narration],[data-bubble],[data-me],[data-layout],[data-width],[data-align],[data-track],[data-para]');
+    const b = e.target.closest('[data-size],[data-font],[data-dialogue],[data-narration],[data-bubble],[data-me],[data-weight],[data-layout],[data-width],[data-align],[data-track],[data-para]');
     if (!b) return;
-    const k = ['size', 'font', 'dialogue', 'narration', 'bubble', 'me', 'layout', 'width', 'align', 'track', 'para'].find((x) => b.dataset[x] != null);
+    const k = ['size', 'font', 'dialogue', 'narration', 'bubble', 'me', 'weight', 'layout', 'width', 'align', 'track', 'para'].find((x) => b.dataset[x] != null);
     await setPref(k, b.dataset[k]);
     b.parentElement.querySelectorAll('[role=radio]').forEach((x) => x.setAttribute('aria-checked', x === b));
     after();
