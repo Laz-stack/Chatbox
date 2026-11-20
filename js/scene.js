@@ -68,6 +68,23 @@ export function parseScene(text) {
   return blocks.filter((b) => b.text.trim() || b.kind === 'say');
 }
 
+// A reply written for one known speaker (Take turns, or older messages): paragraphs of plain prose
+// are narration; paragraphs with speech ("…") or *actions* are that speaker's. Same block shape as parseScene.
+export function splitTurn(text, name) {
+  const blocks = [];
+  for (const para of (text || '').split(/\n\s*\n/)) {
+    const t = para.trim();
+    if (!t) continue;
+    const said = /["“”]/.test(t) || (/^\*/.test(t) && !/^\*\(/.test(t));
+    const prev = blocks[blocks.length - 1];
+    if (said && prev?.kind === 'say') prev.text += '\n\n' + t;
+    else blocks.push(said ? { kind: 'say', name, text: t } : { kind: 'narr', text: t });
+  }
+  return blocks;
+}
+// The same reply rewritten in scene format ("Name: …"), for a scene's history.
+export const turnAsScene = (text, name) => splitTurn(text, name).map((b) => (b.kind === 'say' ? `${name}: ${b.text.replace(/\n\s*\n/g, ' ')}` : b.text)).join('\n\n');
+
 // Who a parsed name refers to: a cast member, you, or a passenger.
 export function resolveSpeaker(name, people, youName) {
   const n = (name || '').trim().toLowerCase();

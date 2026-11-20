@@ -846,3 +846,8 @@ textarea.bp-ta.tall { min-height: 96px; }
 .bp-mature-off { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 16px; background: var(--plate); font: 500 13.5px/1.45 var(--font); color: var(--cream); }
 .bp-mature-off .ic { flex: none; margin-top: 1px; color: var(--cream); }
 .bp-mature-off b { font-weight: 800; color: var(--white); }
+
+/* Reply chips never squeeze: they keep one line and the row scrolls sideways. */
+.chips { overflow-x: auto; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chips button { flex: none; white-space: nowrap; }

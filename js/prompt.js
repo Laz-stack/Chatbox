@@ -5,7 +5,7 @@ import { estimateTokens } from './util.js';
 import { textOf, matchLore } from './store.js';
 import { PROVIDERS } from './providers.js';
 import { compileSheet } from './blueprint.js';
-import { sceneSystem, STEER } from './scene.js';
+import { sceneSystem, STEER, turnAsScene } from './scene.js';
 
 export const macro = (t, ch, persona) =>
   (t || '').replace(/\{\{\s*char\s*\}\}/gi, ch?.name || 'Character').replace(/\{\{\s*user\s*\}\}/gi, persona?.name?.trim() || 'the user');
@@ -94,7 +94,8 @@ export function buildPrompt({ char, chat, conn, settings, persona, upto = null, 
       const own = group?.people.find((p) => p.id === x.speaker) || char;
       const t = macro(textOf(x), own, persona);
       if (isScene) {
-        if (x.role === 'assistant') return { role: 'assistant', content: t };
+        // Replies from Take turns (one speaker each) are rewritten as "Name: …" so the scene keeps its format.
+        if (x.role === 'assistant') return { role: 'assistant', content: x.speaker ? turnAsScene(t, nameOf(x.speaker)) : t };
         if (x.dir) return { role: 'user', content: `[${STEER[x.dir]?.note || t}]` };
         if (x.as) return { role: 'user', content: `[${you} writes this line for ${nameOf(x.as)}]\n${nameOf(x.as)}: ${t}` };
         return { role: 'user', content: `${you}: ${t}` };
