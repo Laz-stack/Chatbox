@@ -23,6 +23,8 @@ import { exportCardPng } from '../cards.js';
 import { chatSound, silence, signal, ambienceNow, musicPlaying } from '../sound.js';
 import { soundSheet } from './soundsheet.js';
 import { bindMarkButton } from '../markpicker.js';
+import { helperComplete } from '../helper.js';
+import { extractJson } from '../blueprint.js';
 import { ibtn, avatarBullet, icon, arrow, openMenu, openSheet, toast, clearToasts, confirmSheet, autosize, reel, groupAvatar, toggleRow, bindSwitch } from '../ui.js';
 
 // Streams text into a bubble word by word, keeping *actions* italic as they arrive.
@@ -112,6 +114,7 @@ export async function chatView(id, focusId = null) {
   if (!chat) return null;
   let ctl = null;
   let vmStopAll = null; // set by the voice mode in mount(); unmount stops it
+  let watchOff = null; // set by watch mode in mount(); unmount stops it
   let busy = false;
   let destroyed = false;
 
@@ -140,6 +143,7 @@ export async function chatView(id, focusId = null) {
       <button type="submit" class="send press" id="sendBtn" aria-label="Send" disabled>${arrow(22, 'currentColor')}</button>
     </form>
     <section class="vbar" id="vbar" hidden aria-label="Voice mode"></section>
+    ${ix && !scene ? `<section class="wbar" id="wbar" hidden aria-live="polite" aria-label="Watching"><div class="wb-t"><b id="wbT"></b><small id="wbS"></small><div class="wb-line" aria-hidden="true">${ix.people.map((p, k) => `<i style="left:calc(${(k / Math.max(1, ix.people.length - 1)) * 100}% - ${(k / Math.max(1, ix.people.length - 1)) * 16}px);--c:${p.line?.color || '#2EAA67'}"></i>`).join('')}<span class="wb-train"></span></div></div><button type="button" class="wb-stop press" id="wbStop">Stop</button></section>` : ''}
     <form class="findbar" id="findbar" hidden role="search" aria-label="Find in this chat">
       <button type="button" class="ibtn ghost press" id="fbClose" aria-label="Close find">${icon('x', 20)}</button>
       <label class="fb-field"><input id="fbIn" type="search" placeholder="Find in this chat" aria-label="Find in this chat" autocomplete="off" enterkeyhint="search"><span class="num" id="fbN" aria-live="polite"></span></label>
@@ -628,37 +632,137 @@ export async function chatView(id, focusId = null) {
       if (last?.role === 'assistant' && last.first) h = writeChip();
       if (last?.role === 'assistant' && !last.first) {
         h = `<button type="button" class="press" data-chip="regen">${icon('refresh', 16)}Regenerate</button><button type="button" class="press" data-chip="continue">${icon('chev', 16)}Continue</button>` + writeChip();
-        if (ix) h += `<button type="button" class="press" data-chip="reply">${icon('chev', 16)}${chat.next && chat.next !== 'either' ? esc(speakerOf({ speaker: chat.next }).name) + ' speaks' : 'Next line'}</button>`;
+        if (ix) h += `<button type="button" class="press" data-chip="reply">${icon('chev', 16)}${!isMode(chat.next) ? esc(speakerOf({ speaker: chat.next }).name) + ' speaks' : 'Next line'}</button>`;
       }
       else if (last?.role === 'user') h = `<button type="button" class="press" data-chip="reply">${icon('refresh', 16)}Get a reply</button>`;
+      if (ix && !scene && chat.messages.length) h = `<button type="button" class="press chip-watch" data-chip="watch">${icon('talk', 16)}Watch them</button>` + h;
       chips.innerHTML = h;
     }
     // ---------- Interchange: who answers next ----------
     function renderNext() {
       const bar = root.querySelector('#nextbar');
       if (!bar) return;
-      const cur = chat.next || 'either';
+      const cur = !chat.next || chat.next === 'either' ? 'turns' : chat.next;
+      const mode = (k, l) => `<button type="button" class="ns either press${cur === k ? ' on' : ''}" role="radio" aria-checked="${cur === k}" data-next="${k}">${l}</button>`;
       bar.innerHTML =
         '<span class="nb-l">Next stop</span>' +
+        mode('turns', 'Take turns') +
+        mode('story', 'Story picks') +
         ix.people
           .map((p) => {
             const col = p.line?.color || '#2EAA67';
             return `<button type="button" class="ns press${cur === p.id ? ' on' : ''}" role="radio" aria-checked="${cur === p.id}" data-next="${p.id}" style="--c:${col};--ink:${inkOn(col)}">${avatarBullet(p, 26)}${esc(p.name)}${cur === p.id ? icon('check', 15) : ''}</button>`;
           })
-          .join('') +
-        `<button type="button" class="ns either press${cur === 'either' ? ' on' : ''}" role="radio" aria-checked="${cur === 'either'}" data-next="either">Either</button>`;
+          .join('');
     }
-    // Picked speaker, else whoever you addressed by name, else anyone but the last to speak.
-    function pickSpeaker() {
-      if (chat.next && chat.next !== 'either') return speakerOf({ speaker: chat.next });
-      const lastUser = [...chat.messages].reverse().find((m) => m.role === 'user');
-      const said = (lastUser ? textOf(lastUser) : '').toLowerCase();
-      const named = ix.people.filter((p) => new RegExp(`\\b${p.name.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(said));
-      if (named.length === 1) return named[0];
-      const lastAi = [...chat.messages].reverse().find((m) => m.role === 'assistant');
-      const pool = ix.people.filter((p) => p.id !== lastAi?.speaker);
-      const from = pool.length ? pool : ix.people;
-      return from[Math.floor(Math.random() * from.length)];
+    // Who answers: the member you picked; else whoever you addressed by name; else Take turns (the
+    // next in order after the last to speak) or Story picks (the Helper reads the scene and chooses).
+    const isMode = (v) => !v || v === 'either' || v === 'turns' || v === 'story';
+    function nextInTurn() {
+      const lastAi = [...chat.messages].reverse().find((m) => m.role === 'assistant' && m.speaker);
+      const k = ix.people.findIndex((p) => p.id === lastAi?.speaker);
+      return ix.people[(k + 1) % ix.people.length];
+    }
+    async function storyPick() {
+      const conn = connectionFor(ch);
+      if (!conn || conn.provider === 'demo') return null;
+      const you = me().name?.trim() || 'User';
+      const recent = chat.messages
+        .filter((m) => !m.dir && !m.error)
+        .slice(-8)
+        .map((m) => `${m.role === 'user' ? you : speakerOf(m).name}: ${named(textOf(m), speakerOf(m), you, me()).slice(0, 500)}`)
+        .join('\n\n');
+      const out = await helperComplete(conn, 'next', {
+        system: 'You direct a group roleplay. Reply with ONE JSON object and nothing else.',
+        messages: [{ role: 'user', content: `Cast: ${ix.people.map((p) => p.name).join(', ')}.\n\nRecent story:\n${recent}\n\nWho in the cast would most naturally speak next: someone who was addressed, has a reason to react, or has been quiet; not the same person again unless it clearly fits. Return {"next":"<one name from the cast>"}.` }],
+        stream: false,
+        maxTokens: 300,
+        temperature: 0.3,
+      });
+      const r = resolveSpeaker(String(extractJson(out).next || ''), ix.people, '');
+      return r.kind === 'line' ? r.who : null;
+    }
+    async function chooseSpeaker(watching = false) {
+      if (!isMode(chat.next)) return speakerOf({ speaker: chat.next });
+      if (!watching) {
+        const lastUser = [...chat.messages].reverse().find((m) => m.role === 'user' && !m.dir);
+        const said = (lastUser ? textOf(lastUser) : '').toLowerCase();
+        const named_ = ix.people.filter((p) => new RegExp(`\\b${p.name.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(said));
+        if (named_.length === 1) return named_[0];
+      }
+      if (chat.next === 'story') {
+        const p = await storyPick().catch(() => null);
+        if (p) return p;
+      }
+      return nextInTurn();
+    }
+    let forced = null; // Watch mode decides the speaker before each turn
+
+    // ---------- Watch mode: the cast talks among themselves ----------
+    const watch = { on: false, n: 0, turn: 0 };
+    watchOff = () => (watch.on = false);
+    function watchSheet() {
+      let n = 4;
+      openSheet({
+        label: 'Watch them talk',
+        html: `<h2 class="sheet-title">Watch them talk</h2><p class="sheet-p">They talk among themselves${chat.next === 'story' ? ', the story picking who speaks' : ', taking turns'}. Tap Stop to jump back in. Each turn is one reply.</p>
+          <div class="wt-opts" role="radiogroup" aria-label="How many turns">${[[2, '2'], [4, '4'], [8, '8'], [Infinity, 'Until I stop']].map(([k, l]) => `<button type="button" class="press" role="radio" aria-checked="${k === n}" data-wn="${k}">${l}</button>`).join('')}</div>
+          <div class="sheet-actions"><button type="button" class="btn-primary press" id="wtGo"><span>Start watching</span></button></div>`,
+        onMount(s, close) {
+          s.querySelector('.wt-opts').addEventListener('click', (e) => {
+            const b = e.target.closest('[data-wn]');
+            if (!b) return;
+            n = +b.dataset.wn;
+            s.querySelectorAll('[data-wn]').forEach((x) => x.setAttribute('aria-checked', x === b));
+          });
+          s.querySelector('#wtGo').addEventListener('click', () => (close(), setTimeout(() => startWatch(n), 300)));
+        },
+      });
+    }
+    function paintWatch(sp) {
+      const bar = root.querySelector('#wbar');
+      bar.querySelector('#wbT').textContent = `Watching · turn ${watch.turn}${Number.isFinite(watch.n) ? ` of ${watch.n}` : ''}`;
+      bar.querySelector('#wbS').textContent = sp ? `${sp.name} is speaking` : 'Choosing who speaks…';
+      const k = sp ? ix.people.indexOf(sp) : -1;
+      const tr = bar.querySelector('.wb-train');
+      if (k >= 0) tr.style.left = `calc(${(k / Math.max(1, ix.people.length - 1)) * 100}% - ${(k / Math.max(1, ix.people.length - 1)) * 22}px)`;
+    }
+    async function startWatch(n) {
+      if (busy || watch.on) return;
+      Object.assign(watch, { on: true, n, turn: 0 });
+      const bar = root.querySelector('#wbar');
+      bar.hidden = false;
+      root.querySelector('#composer').hidden = true;
+      chips.hidden = true;
+      root.querySelector('#nextbar')?.setAttribute('hidden', '');
+      bar.querySelector('#wbStop').focus({ preventScroll: true });
+      while (watch.on && watch.turn < n) {
+        watch.turn++;
+        paintWatch(null);
+        const sp = await chooseSpeaker(true);
+        if (!watch.on || destroyed) break;
+        forced = sp;
+        paintWatch(sp);
+        await generate('reply');
+        forced = null;
+        if (!watch.on || destroyed || log.querySelector('.err')) break;
+        await new Promise((r) => setTimeout(r, 900));
+      }
+      stopWatch(false);
+    }
+    function stopWatch(abort = true) {
+      const was = watch.on;
+      watch.on = false;
+      if (abort && busy) ctl?.abort();
+      if (destroyed) return;
+      const bar = root.querySelector('#wbar');
+      if (bar.hidden) return;
+      bar.hidden = true;
+      root.querySelector('#composer').hidden = false;
+      chips.hidden = false;
+      root.querySelector('#nextbar')?.removeAttribute('hidden');
+      renderChips();
+      if (was) input.focus({ preventScroll: true });
     }
     const nearBottom = () => log.scrollHeight - log.scrollTop - log.clientHeight < 140;
     const toBottom = (smooth = false) => log.scrollTo({ top: log.scrollHeight, behavior: smooth && !reducedMotion() ? 'smooth' : 'auto' });
@@ -698,7 +802,7 @@ export async function chatView(id, focusId = null) {
       let idx;
       if (mode === 'reply') {
         target = { id: uid(), role: 'assistant', alts: [''], alt: 0, mood: 'happy', at: Date.now() };
-        if (ix && !scene) target.speaker = pickSpeaker().id;
+        if (ix && !scene) target.speaker = (forced || (await chooseSpeaker())).id;
         chat.messages.push(target);
         idx = chat.messages.length - 1;
       } else {
@@ -2185,6 +2289,7 @@ export async function chatView(id, focusId = null) {
       const b = e.target.closest('[data-chip]');
       if (!b || busy) return;
       if (b.dataset.chip === 'write') return writeForMe();
+      if (b.dataset.chip === 'watch') return watchSheet();
       generate(b.dataset.chip);
     };
     // Chat details: who's on board, the connection, tokens and notes (moved out of the header).
@@ -2360,6 +2465,7 @@ export async function chatView(id, focusId = null) {
       root.querySelector('#fbClose').addEventListener('click', closeFind);
       inp.addEventListener('keydown', (e) => e.key === 'Escape' && closeFind());
     }
+    root.querySelector('#wbStop')?.addEventListener('click', () => stopWatch(true));
     root.querySelector('#sndBtn').addEventListener('click', () => soundSheet({ chat, ch, ix, onChange: updSnd }));
   }
 
@@ -2368,6 +2474,7 @@ export async function chatView(id, focusId = null) {
     depth: 1,
     mount,
     unmount() {
+      watchOff?.();
       destroyed = true;
       silence();
       ctl?.abort();
