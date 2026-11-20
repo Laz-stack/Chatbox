@@ -3,6 +3,7 @@
 // 5 Notes and summary, then the chat history (trimmed to fit the context size).
 import { estimateTokens } from './util.js';
 import { bondsLayer } from './chronicle.js';
+import { clockLayer } from './clock.js';
 import { textOf, matchLore } from './store.js';
 import { PROVIDERS } from './providers.js';
 import { compileSheet } from './blueprint.js';
@@ -85,6 +86,8 @@ export function buildPrompt({ char, chat, conn, settings, persona, upto = null, 
   // Bonds: how the cast feels about you right now (Route map › Bonds).
   const bonds = bondsLayer(chat, group?.people || [char], persona?.name?.trim() || 'the user');
   if (bonds) memory.push(bonds);
+  const time = clockLayer(chat);
+  if (time) memory.push(time);
   if (memory.length) layers.push({ key: 'notes', name: 'Notes and summary', text: memory.join('\n\n') });
 
   const system = layers.map((l) => l.text).join('\n\n');
@@ -110,6 +113,8 @@ export function buildPrompt({ char, chat, conn, settings, persona, upto = null, 
         if (x.as) return { role: 'user', content: `[${you} writes this line for ${nameOf(x.as)}]\n${nameOf(x.as)}: ${t}` };
         return { role: 'user', content: `${you}: ${t}` };
       }
+      // Stage directions (time skips, While you were away) are notes for the AI, never your words.
+      if (x.dir) return { role: 'user', content: `[${STEER[x.dir]?.note || t}]` };
       if (!group) return { role: x.role, content: t };
       if (x.role === 'assistant' && x.speaker === char.id) return { role: 'assistant', content: t };
       return { role: 'user', content: `${x.role === 'user' ? you : nameOf(x.speaker)}: ${t}` };
