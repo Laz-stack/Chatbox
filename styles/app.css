@@ -1677,3 +1677,23 @@ button.chr-row { width: 100%; }
 .notes .add-row textarea::placeholder { color: var(--muted); }
 .note-ta { min-height: 140px; white-space: pre-wrap; line-height: 1.5; }
 .sum-tx { margin: 10px 0 12px; font: 400 14px/1.55 var(--font); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* ---------- The mark button and its stops (hold the composer's * button) ---------- */
+.mk-btn { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.mk-btn.held { transform: scale(.92); }
+.mk-g { display: block; font: 900 32px/1 var(--font); transform: translateY(8px); }
+.mkp { position: fixed; inset: 0; z-index: 70; }
+.mkp-scrim { position: absolute; inset: 0; background: rgba(10, 10, 10, .78); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); opacity: 0; transition: opacity .18s ease; }
+.mkp.on .mkp-scrim { opacity: 1; }
+.mkp-rail { position: absolute; width: 4px; border-radius: 2px; background: var(--rail, var(--cream)); transform: scaleY(0); transform-origin: bottom; transition: transform .3s var(--out); }
+.mkp.on .mkp-rail { transform: none; }
+.mkp-o { position: absolute; width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: var(--cream); color: var(--bg); opacity: 0; transform: translateY(18px) scale(.4); transition: transform .32s var(--spring) var(--d, 0ms), opacity .14s ease var(--d, 0ms), background .12s ease, box-shadow .12s ease; }
+.mkp.on .mkp-o { opacity: 1; transform: none; }
+.mkp.off .mkp-o, .mkp.off .mkp-rail { opacity: 0; transition: opacity .14s ease; }
+.mkp-o .ic { width: 22px; height: 22px; }
+.mkp-o .mk-g { font-size: 30px; transform: translateY(7px); }
+.mkp-o small { position: absolute; left: 58px; top: 50%; transform: translateY(-50%); font: 800 14px/1 var(--font); color: var(--cream); white-space: nowrap; pointer-events: none; }
+.mkp-o.cur:not(.hot) { box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--cream); }
+.mkp-o.hot, .mkp-o:focus-visible { background: var(--yellow); box-shadow: 0 0 0 4px rgba(253, 205, 21, .25); outline: none; }
+.mkp-o.hot small, .mkp-o:focus-visible small { color: var(--yellow); }
+.mkp.still .mkp-o, .mkp.still .mkp-rail, .mkp.still .mkp-scrim { transition: none; }
