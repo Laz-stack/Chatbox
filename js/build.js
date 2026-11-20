@@ -3,6 +3,8 @@
 import { S } from './store.js';
 import { openSheet, icon, arrow, avatarBullet } from './ui.js';
 import { startImport } from './views/import.js';
+import { setPicked, prepare } from './frompicture.js';
+import { toast } from './ui.js';
 
 export function openBuildSheet() {
   const few = S.characters.slice(0, 3);
@@ -19,9 +21,21 @@ export function openBuildSheet() {
           ? `<a class="bopt yel press" href="#/interchange/new" data-close>${meet}<span class="bo-tx"><b>Interchange</b><span>A group chat where 2–5 lines meet</span></span>${arrow(28, 'currentColor')}</a>`
           : `<div class="bopt off">${meet}<span class="bo-tx"><b>Interchange</b><span>Make at least two lines first, then let them meet.</span></span></div>`
       }
+      <label class="bopt imp press"><span class="bo-ic">${icon('image', 28)}</span><span class="bo-tx"><b>From a picture</b><span>The AI writes a character from an image</span></span>${arrow(28, 'currentColor')}<input type="file" class="vh" id="buildPic" accept="image/*"></label>
       <label class="bopt imp press"><span class="bo-ic">${icon('upload', 28)}</span><span class="bo-tx"><b>Import</b><span>A card, a ZIP of cards and lorebooks, or a lorebook</span></span>${arrow(28, 'currentColor')}<input type="file" class="vh" id="buildImport" multiple accept=".zip,.png,.json,application/zip,image/png,application/json"></label>`,
     onMount(s, close) {
       s.querySelectorAll('[data-close]').forEach((a) => a.addEventListener('click', () => close()));
+      s.querySelector('#buildPic').addEventListener('change', async (e) => {
+        const f = e.target.files[0];
+        close();
+        if (!f) return;
+        try {
+          setPicked(await prepare(f));
+          location.hash = '#/from-picture';
+        } catch (err) {
+          toast(err.message, { kind: 'err' });
+        }
+      });
       s.querySelector('#buildImport').addEventListener('change', (e) => {
         const files = [...e.target.files];
         close();

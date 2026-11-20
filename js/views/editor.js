@@ -1,4 +1,4 @@
-import { S, character, blankCharacter, saveCharacter, deleteCharacter, getChat, connection, LINE_COLORS, newChat, saveChat } from '../store.js';
+import { S, character, blankCharacter, takeDraft, saveCharacter, deleteCharacter, getChat, connection, LINE_COLORS, newChat, saveChat } from '../store.js';
 import { esc, resizeImage, download, slug, motion } from '../util.js';
 import { avatarTile, avatarSVG, PRESETS, PRESET_KEYS, EXPRESSIONS } from '../avatar.js';
 import { sceneSVG, SCENES } from '../scenes.js';
@@ -11,7 +11,8 @@ const COLOR_NAMES = { '#2EAA67': 'Green', '#FB4DAA': 'Pink', '#FE6500': 'Orange'
 
 export function editorView(id) {
   const isNew = id === 'new';
-  const src = isNew ? blankCharacter() : character(id);
+  const fromDraft = isNew ? takeDraft() : null;
+  const src = isNew ? fromDraft || blankCharacter() : character(id);
   if (!src) return null;
   const d = structuredClone(src);
   let autoLetter = !d.line.letter || d.line.letter === (d.name?.[0] || '').toUpperCase();
@@ -68,8 +69,11 @@ export function editorView(id) {
   </div>`;
 
   function mount(root) {
+    // Arriving with a character written from a picture: start at the name.
+    if (fromDraft) setTimeout(() => root.querySelector('#fName')?.focus(), 350);
     const $ = (s) => root.querySelector(s);
-    const pristine = JSON.stringify(d);
+    // A character written from a picture isn't saved yet: leaving asks first.
+    const pristine = fromDraft ? '' : JSON.stringify(d);
     let leaving = false;
     root.querySelector('.topbar a').addEventListener('click', async (e) => {
       if (leaving || JSON.stringify(d) === pristine) return;

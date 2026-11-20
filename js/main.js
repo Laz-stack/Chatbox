@@ -16,6 +16,7 @@ import { routeView, bondsView, diaryView } from './views/chronicle.js';
 import { syncView } from './views/sync.js';
 import { adventureView } from './views/adventure.js';
 import { worldMapView } from './views/worldmap.js';
+import { fromPictureView } from './views/frompicture.js';
 import { startAutoSync, syncOn, signedIn, localChanges } from './sync.js';
 import { applyText } from './textstyle.js';
 import { openBuildSheet } from './build.js';
@@ -46,6 +47,7 @@ const routes = [
   [/^#\/sync$/, () => syncView()],
   [/^#\/adventure\/([^/]+)$/, (id) => adventureView(decodeURIComponent(id))],
   [/^#\/map\/([^/]+)$/, (id) => worldMapView(decodeURIComponent(id))],
+  [/^#\/from-picture$/, () => fromPictureView()],
   [/^#\/route\/([^/]+)$/, (id) => routeView(decodeURIComponent(id))],
   [/^#\/bonds\/([^/]+)(?:\/(them))?$/, (id, t) => bondsView(decodeURIComponent(id), t || 'you')],
   [/^#\/diary\/([^/]+)(?:\/([^/]+))?$/, (id, e) => diaryView(decodeURIComponent(id), e && decodeURIComponent(e))],
@@ -165,6 +167,9 @@ async function render() {
     html.classList.toggle('vt-tap', !!fromTap);
     tap = null;
     const t = document.startViewTransition(swap);
+    // A transition skipped by a quick second tap isn't an error worth a toast.
+    t.ready.catch(() => {});
+    t.updateCallbackDone?.catch(() => {});
     t.finished.catch(() => {}).finally(() => html.classList.remove('vt-tap', 'vt-arrow-ink'));
   } else {
     await swap();

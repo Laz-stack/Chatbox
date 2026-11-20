@@ -63,6 +63,14 @@ export function newConnection(provider = 'anthropic') {
   };
 }
 
+// A filled-in character handed to the editor once (Build › From a picture).
+let draft = null;
+export const setDraft = (d) => (draft = d);
+export const takeDraft = () => {
+  const d = draft;
+  draft = null;
+  return d;
+};
 export function blankCharacter() {
   const used = new Set(S.characters.map((c) => c.line?.color));
   const color = LINE_COLORS.find((c) => !used.has(c)) || LINE_COLORS[S.characters.length % LINE_COLORS.length];
