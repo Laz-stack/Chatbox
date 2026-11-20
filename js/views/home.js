@@ -3,6 +3,7 @@ import { esc, ago, agoLong, plain, inkOn, luminance, boardTime, formatMessage } 
 import { avatarTile } from '../avatar.js';
 import { title2, bullet, avatarBullet, tabbar, icon, arrow, groupAvatar } from '../ui.js';
 import { startImport } from './import.js';
+import { chapterAt } from '../chapters.js';
 
 export function homeView() {
   const conn = activeConnection();
@@ -17,12 +18,18 @@ export function homeView() {
     const preview = plain(named(textOf(lastMessage(chat)), featured, 'you', personaFor(chat)) || featured.tagline || 'Start the conversation');
     // The hero is painted in the character's own line colour, with ink that reads on it.
     const lc = featured.line?.color || '#2EAA67';
+    // Where you left off: the chapter you're in and the last line, and how long ago.
+    const said = chat ? [...chat.messages].reverse().find((m) => !m.dir && !m.error && textOf(m).trim()) : null;
+    const cur = chat && said ? chapterAt(chat, chat.messages.length - 1) : null;
+    const where = cur ? `Chapter ${chat.chapters.indexOf(cur) + 1} · ${cur.title}` : featured.tagline || preview;
+    const lastLine = said ? plain(named(textOf(said), featured, 'you', personaFor(chat))).replace(/\s+/g, ' ').trim() : '';
+    const when = said?.at || chat?.updatedAt;
     hero = `<a class="hero press" href="#/chat/${featured.id}" style="--line:${lc};--on:${inkOn(lc)};--ring:${luminance(lc) > 0.55 ? '#0A0A0A' : '#FFFFFF'}" aria-label="${started[0] ? 'Continue chatting with' : 'Start chatting with'} ${esc(featured.name)}">
       <span class="hero-arrow">${arrow(128, 'currentColor')}</span>
       <span class="hero-av" data-av="hero:${esc(featured.id)}">${avatarTile(featured, 92, { radius: 26, rot: -4 })}</span>
       <span class="hero-foot">
-        <span class="hero-kicker">${avatarBullet(featured, 34)}${started[0] ? 'Continue the chat' : 'Start a chat'}</span>
-        <span class="hero-name">${esc(featured.name)}<span class="hero-sub">${esc(featured.tagline || preview)}</span></span>
+        <span class="hero-kicker">${avatarBullet(featured, 34)}${started[0] ? (when ? `Continue · ${agoLong(when)}` : 'Continue the chat') : 'Start a chat'}</span>
+        <span class="hero-name">${esc(featured.name)}<span class="hero-sub">${esc(started[0] ? where : featured.tagline || preview)}</span>${started[0] && lastLine ? `<span class="hero-q">“${esc(lastLine.slice(0, 140))}”</span>` : ''}</span>
         <span class="hero-line" aria-hidden="true">${Array.from({ length: dots }, (_, i) => `<i${i === dots - 1 ? ' class="now"' : ''} style="animation-delay:${0.4 + i * 0.06}s"></i>`).join('')}</span>
       </span></a>`;
   } else {

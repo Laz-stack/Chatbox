@@ -101,7 +101,10 @@ export async function chatView(id, focusId = null) {
   const me = () => personaFor(chat);
   const sceneKey = () => hereOf(chat)?.scene || ch.scene;
   // A picture set as this chat's background wins over the scene art.
-  const sceneInner = () => (chat.bgPic && S.images?.[chat.bgPic] ? `<img class="scene-pic" src="${esc(S.images[chat.bgPic])}" alt="">` : sceneKey() && sceneKey() !== 'none' ? sceneSVG(sceneKey()) : '');
+  // The character's portrait, duotoned into their line colour (Scene › Portrait).
+  const portraitHTML = () => `<div class="scene-duo" style="--accent:${lineAccent(ch.line?.color)}">${avatarTile(ch, 420, { radius: 0 })}</div>`;
+  const isPortrait = () => !ix && !chat.bgPic && sceneKey() === 'portrait';
+  const sceneInner = () => (chat.bgPic && S.images?.[chat.bgPic] ? `<img class="scene-pic" src="${esc(S.images[chat.bgPic])}" alt="">` : isPortrait() ? portraitHTML() : sceneKey() && sceneKey() !== 'none' && sceneKey() !== 'portrait' ? sceneSVG(sceneKey()) : '');
   const sceneId = () => chat.bgPic || sceneKey() || '';
   const youWho = () => ({ name: me().name?.trim() || 'You', preset: me().preset, avatarImage: me().avatarImage, line: { color: '#FDCD15' } });
   const chat = await getChat(id);
@@ -116,7 +119,7 @@ export async function chatView(id, focusId = null) {
   // Short placeholder: a long name would wrap the composer onto several lines.
   const callName = scene ? 'the scene' : ix ? 'the interchange' : ch.name.length > 14 ? ch.name.split(/\s+/)[0].slice(0, 14) : ch.name;
   const html = `<div class="chat" id="chat" style="--blur:${ch.sceneBlur ?? 4}px;--dim:${(ch.sceneDim ?? 60) / 100};--accent:${lineAccent(ch.line?.color)}">
-    <div class="chat-scene" id="scene" aria-hidden="true" data-k="${esc(sceneId())}">${sceneInner()}</div>
+    <div class="chat-scene${isPortrait() ? ' duo' : ''}" id="scene" aria-hidden="true" data-k="${esc(sceneId())}">${sceneInner()}</div>
     <header class="chat-head">
       ${ibtn('back', 'Back to home', { href: '#/' })}
       <button type="button" class="chat-who press" id="whoBtn" aria-haspopup="dialog" aria-label="${esc(ch.name)}: chat details">${ix ? groupAvatar(ix, 36) : avatarBullet(ch, 36, '', `head:${ch.id}`)}<span class="who-tx"><span class="who-n">${esc(ch.name)}</span><span class="who-s"><span class="who-meta" id="meta"><span class="dot${conn0?.provider === 'demo' ? ' demo' : ''}" id="connDot"></span><span class="ell" id="connName">${esc(connText(conn0))}</span><span id="tokPill" ${S.settings.showCounter ? '' : 'hidden'}>· <span class="num" id="tokN">…</span></span><span id="noteWrap" ${!ix && chat.notes.length ? '' : 'hidden'}>· ${icon('pin', 12)}<span id="noteN">${chat.notes.length}</span></span></span><span id="status" hidden></span></span></span></button>
@@ -288,11 +291,11 @@ export async function chatView(id, focusId = null) {
       el.outerHTML = msgHTML(chat.messages[i], i);
     }
     // ---------- Chapters: a break in the log before each chapter's first message ----------
-    function placeChapters() {
+    function placeChapters(fresh = null) {
       log.querySelectorAll('.chap').forEach((x) => x.remove());
       sortChapters(chat).forEach((c, k) => {
         const el = log.querySelector(`.msg[data-id="${CSS.escape(c.msgId)}"]`);
-        el?.insertAdjacentHTML('beforebegin', `<button type="button" class="chap press" data-chap="${esc(c.id)}" aria-label="Chapter ${k + 1}: ${esc(c.title)}. Chapter options"><span class="chap-n">Chapter ${k + 1}</span><b>${esc(c.title)}</b></button>`);
+        el?.insertAdjacentHTML('beforebegin', `<button type="button" class="chap press${c.id === fresh ? ' fresh' : ''}" data-chap="${esc(c.id)}" aria-label="Chapter ${k + 1}: ${esc(c.title)}. Chapter options"><span class="chap-n">Chapter ${k + 1}</span><b>${esc(c.title)}</b></button>`);
       });
     }
     const chapterById = (id) => (chat.chapters || []).find((c) => c.id === id);
@@ -504,8 +507,9 @@ export async function chatView(id, focusId = null) {
       meta.hidden = kind !== 'idle';
       status.hidden = kind === 'idle';
       status.classList.toggle('busy', kind !== 'idle');
-      if (kind === 'typing') status.innerHTML = 'typing <span class="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span>';
-      else if (kind === 'you') status.innerHTML = 'writing your line <span class="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span>';
+      const train = '<span class="trk" aria-hidden="true"><b></b></span>';
+      if (kind === 'typing') status.innerHTML = `${train}typing`;
+      else if (kind === 'you') status.innerHTML = `${train}writing your line`;
       else if (kind === 'summary') status.innerHTML = `${reel(16, { spd: 0.8 })} summarizing`;
       else status.textContent = '';
     }
@@ -696,8 +700,11 @@ export async function chatView(id, focusId = null) {
         if (res.stations.length && chat.picAuto && picConn() && !destroyed) runPaint(target, chat.picStyle || picPrefs().style);
         await saveChat(chat, false);
         const i = chat.messages.indexOf(target);
-        if (!destroyed && target.chron && i >= 0) rerenderMsg(i);
-        if (!destroyed && res.chapter) placeChapters();
+        if (!destroyed && target.chron && i >= 0) {
+          rerenderMsg(i);
+          log.querySelectorAll(`.msg[data-i="${i}"] .chr-seg`).forEach((x) => x.closest('.chr-row').classList.add('fresh'));
+        }
+        if (!destroyed && res.chapter) placeChapters(res.chapter.id);
         if (!destroyed) res.chapter ? signal('chapter') : res.stations.length ? signal('station') : null;
         if (!destroyed && (res.time || res.place)) soundNow();
         if (!destroyed) updateClock();
@@ -718,8 +725,8 @@ export async function chatView(id, focusId = null) {
       });
       if (c.place) rows.push(`<a class="chr-row press" href="#/map/${encodeURIComponent(chat.id)}">${icon('route', 13)}<span>${c.place.created ? 'New place' : 'Now at'} · ${esc(c.place.name)}</span></a>`);
       if (c.adv?.length) rows.push(`<a class="chr-row press" href="#/adventure/${encodeURIComponent(chat.id)}">${icon('dice', 13)}<span>${esc(advRowText(c.adv))}</span></a>`);
-      if (c.chapter && chapterById(c.chapter.id)) rows.push(`<button type="button" class="chr-row press" data-chapgo="${esc(c.chapter.id)}">${icon('book', 13)}<span>New chapter · ${esc(chapterById(c.chapter.id).title)}</span></button>`);
-      for (const s of c.stations || []) rows.push(`<a class="chr-row press" href="#/route/${encodeURIComponent(chat.id)}">${icon('route', 13)}<span>New station · ${esc(s)}</span></a>`);
+      if (c.chapter && chapterById(c.chapter.id)) rows.push(`<button type="button" class="chr-row press" data-chapgo="${esc(c.chapter.id)}"><span class="chr-seg" aria-hidden="true"></span><span>New chapter · ${esc(chapterById(c.chapter.id).title)}</span></button>`);
+      for (const s of c.stations || []) rows.push(`<a class="chr-row press" href="#/route/${encodeURIComponent(chat.id)}"><span class="chr-seg" aria-hidden="true"></span><span>New station · ${esc(s)}</span></a>`);
       return rows.filter(Boolean).length ? `<div class="chr">${rows.join('')}</div>` : '';
     }
 
@@ -1131,7 +1138,7 @@ export async function chatView(id, focusId = null) {
     function setScene() {
       const el = root.querySelector('#scene');
       const k = sceneId();
-      if (el && el.dataset.k !== k) (el.dataset.k = k), (el.innerHTML = sceneInner());
+      if (el && el.dataset.k !== k) (el.dataset.k = k), (el.innerHTML = sceneInner()), el.classList.toggle('duo', isPortrait());
       soundNow();
     }
     // Arriving from the World map: the scene starts at the new place.
@@ -1768,11 +1775,13 @@ export async function chatView(id, focusId = null) {
       const apply = (d) => {
         chatEl.style.setProperty('--blur', d.blur + 'px');
         chatEl.style.setProperty('--dim', d.dim / 100);
-        sceneEl.innerHTML = d.scene !== 'none' ? sceneSVG(d.scene) : '';
+        sceneEl.innerHTML = d.scene === 'portrait' ? portraitHTML() : d.scene !== 'none' ? sceneSVG(d.scene) : '';
+        sceneEl.classList.toggle('duo', d.scene === 'portrait');
       };
       openSceneSheet({
         value: { scene: ch.scene, blur: ch.sceneBlur ?? 4, dim: ch.sceneDim ?? 60 },
         cta: `Use for ${esc(ch.name)}`,
+        portrait: ix ? '' : portraitHTML(),
         onPreview: apply,
         async onSave(d) {
           Object.assign(ch, { scene: d.scene, sceneBlur: d.blur, sceneDim: d.dim });
@@ -1962,6 +1971,12 @@ export async function chatView(id, focusId = null) {
       setTimeout(() => maybeAway(), 700);
     }
     soundNow();
+    // Arrival: the line colour draws under the header once as the chat opens.
+    if (!reducedMotion()) {
+      const cEl = root.querySelector('#chat');
+      cEl.classList.add('arrive');
+      setTimeout(() => cEl.classList.remove('arrive'), 1300);
+    }
     root.querySelector('#sndBtn').addEventListener('click', () => soundSheet({ chat, ch, ix, onChange: updSnd }));
   }
 
