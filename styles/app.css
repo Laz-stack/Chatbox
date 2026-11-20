@@ -1221,3 +1221,8 @@ textarea.bp-ta.tall { min-height: 96px; }
 .msg.dirline .scn-dir { margin: 4px 0 !important; }
 .msg.enter.dirline .scn-dir, .msg.scene.dir.enter .scn-dir { animation: riseIn .4s var(--out) both; }
 @media (prefers-reduced-motion: reduce) { .msg.dirline .scn-dir { animation: none !important; } }
+
+/* ================= Lines cleanup ================= */
+.ix .row-t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chips-f.more { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 48px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 48px), transparent); }
+.ln-all { display: flex; align-items: center; justify-content: center; gap: 4px; min-height: 44px; margin-top: 10px; color: var(--cream); font: 700 14px/1 var(--font); text-decoration: underline; text-underline-offset: 3px; }

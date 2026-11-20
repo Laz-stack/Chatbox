@@ -3,7 +3,9 @@ import * as db from './db.js';
 import { uid, setImageResolver } from './util.js';
 import { bondsAt } from './chronicle.js';
 
-export const LINE_COLORS = ['#2EAA67', '#FB4DAA', '#FE6500', '#B8ACFE', '#FDCD15', '#065BFE', '#ECECEC', '#E70404'];
+// A character's line colour. Never red (action) or yellow (selected): those mean something else in the app.
+export const LINE_COLORS = ['#2EAA67', '#FB4DAA', '#FE6500', '#B8ACFE', '#065BFE', '#12A5A5', '#5BC2F2', '#8A5530', '#ECECEC'];
+const RESERVED = ['#E70404', '#FDCD15'];
 
 export const DEFAULT_GLOBAL =
   'Write actions in *asterisks* and dialogue in quotes. Keep replies under 120 words unless asked for more. Never speak or act for {{user}}. Stay in character.';
@@ -134,6 +136,18 @@ export async function load() {
     S.settings.includeKeysInBackup = false;
     S.settings.migrated = 1;
     await saveSettings();
+  }
+  // One-time: characters on red or yellow lines move to a free line colour.
+  if ((S.settings.migrated || 0) < 2) {
+    const used = new Set(S.characters.map((c) => c.line?.color));
+    for (const c of S.characters) {
+      if (!RESERVED.includes((c.line?.color || '').toUpperCase())) continue;
+      const free = LINE_COLORS.find((x) => !used.has(x)) || LINE_COLORS[S.characters.indexOf(c) % LINE_COLORS.length];
+      used.add(free);
+      c.line = { ...c.line, color: free };
+    }
+    S.settings.migrated = 2;
+    await Promise.all([saveCharacters(), saveSettings()]);
   }
   if (!S.connections.find((c) => c.id === S.settings.activeConnectionId)) {
     S.settings.activeConnectionId = S.connections[0]?.id || null;

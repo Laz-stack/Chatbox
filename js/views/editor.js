@@ -7,7 +7,7 @@ import { exportCardPng, exportCardJson } from '../cards.js';
 import { blueprintHTML, bindBlueprint } from './blueprint-ui.js';
 import { topbar, ibtn, field, area, group, row, toggleRow, bindSwitch, bullet, icon, arrow, openSheet, openMenu, toast, confirmSheet } from '../ui.js';
 
-const COLOR_NAMES = { '#2EAA67': 'Green', '#FB4DAA': 'Pink', '#FE6500': 'Orange', '#B8ACFE': 'Lilac', '#FDCD15': 'Yellow', '#065BFE': 'Blue', '#ECECEC': 'Silver', '#E70404': 'Red' };
+const COLOR_NAMES = { '#2EAA67': 'Green', '#FB4DAA': 'Pink', '#FE6500': 'Orange', '#B8ACFE': 'Lilac', '#065BFE': 'Blue', '#12A5A5': 'Teal', '#5BC2F2': 'Sky', '#8A5530': 'Brown', '#ECECEC': 'Silver' };
 
 export function editorView(id) {
   const isNew = id === 'new';
