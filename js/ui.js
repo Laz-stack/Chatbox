@@ -273,6 +273,10 @@ export function confirmSheet({ title, body = '', ok = 'Confirm', danger = false 
   });
 }
 
+// Clear toasts that would sit over a sheet the user just opened (their action is done or moot).
+export function clearToasts() {
+  document.querySelectorAll('#toast-root .toast:not(.err)').forEach((t) => (t.classList.add('out'), setTimeout(() => t.remove(), 260)));
+}
 export function toast(msg, { kind = '', action = '', onAction, ms = 3600 } = {}) {
   const root = document.getElementById('toast-root');
   const t = document.createElement('div');

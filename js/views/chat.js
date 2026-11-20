@@ -23,7 +23,7 @@ import { exportCardPng } from '../cards.js';
 import { chatSound, silence, signal, ambienceNow, musicPlaying } from '../sound.js';
 import { soundSheet } from './soundsheet.js';
 import { bindMarkButton } from '../markpicker.js';
-import { ibtn, avatarBullet, icon, arrow, openMenu, openSheet, toast, confirmSheet, autosize, reel, groupAvatar, toggleRow, bindSwitch } from '../ui.js';
+import { ibtn, avatarBullet, icon, arrow, openMenu, openSheet, toast, clearToasts, confirmSheet, autosize, reel, groupAvatar, toggleRow, bindSwitch } from '../ui.js';
 
 // Streams text into a bubble word by word, keeping *actions* italic as they arrive.
 class StreamRenderer {
@@ -140,6 +140,12 @@ export async function chatView(id, focusId = null) {
       <button type="submit" class="send press" id="sendBtn" aria-label="Send" disabled>${arrow(22, 'currentColor')}</button>
     </form>
     <section class="vbar" id="vbar" hidden aria-label="Voice mode"></section>
+    <form class="findbar" id="findbar" hidden role="search" aria-label="Find in this chat">
+      <button type="button" class="ibtn ghost press" id="fbClose" aria-label="Close find">${icon('x', 20)}</button>
+      <label class="fb-field"><input id="fbIn" type="search" placeholder="Find in this chat" aria-label="Find in this chat" autocomplete="off" enterkeyhint="search"><span class="num" id="fbN" aria-live="polite"></span></label>
+      <button type="button" class="ibtn ghost press" id="fbUp" aria-label="Previous match">${icon('chev', 20)}</button>
+      <button type="button" class="ibtn ghost press" id="fbDown" aria-label="Next match">${icon('chev', 20)}</button>
+    </form>
   </div>`;
 
   async function mount(root) {
@@ -155,6 +161,9 @@ export async function chatView(id, focusId = null) {
       for (let i = chat.messages.length - 1; i >= 0; i--) if (chat.messages[i].role === 'assistant') return i;
       return -1;
     };
+    // A bookmark's ribbon on the bubble's corner, in the chat's line colour.
+    const markOf = (m) => (chat.marks || []).find((b) => b.msgId === m.id);
+    const ribbon = (m) => (markOf(m) ? `<span class="rib" role="img" aria-label="Bookmark: ${esc(markOf(m).title)}"></span>` : '');
     // The model's thinking for this version of the reply, folded into a pill.
     function thinkHTML(m) {
       const t = m.think?.[m.alt];
@@ -245,7 +254,7 @@ export async function chatView(id, focusId = null) {
         else if (m.as) inner = blockHTML({ kind: 'line', who: speakerOf({ speaker: m.as }) }, textOf(m), { by: true });
         else inner = blockHTML({ kind: 'you' }, textOf(m));
       } else inner = sceneParts(textOf(m), m).join('');
-      return `<div class="msg scene ${m.role === 'user' ? 'mine' : 'ai'}${m.dir ? ' dir' : ''}${enter ? ' enter' : ''}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="msg-col">${m.role === 'assistant' ? thinkHTML(m) : ''}<div class="bubble scn">${inner}${star}</div>${m.role === 'assistant' ? picsHTML(m) + chronHTML(m) + toolsHTML(m, i) : ''}</div></div>${m.role === 'user' ? rollHTML(m, enter) : movesHTML(m, i)}`;
+      return `<div class="msg scene ${m.role === 'user' ? 'mine' : 'ai'}${m.dir ? ' dir' : ''}${enter ? ' enter' : ''}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="msg-col">${m.role === 'assistant' ? thinkHTML(m) : ''}<div class="bubble scn">${ribbon(m)}${inner}${star}</div>${m.role === 'assistant' ? picsHTML(m) + chronHTML(m) + toolsHTML(m, i) : ''}</div></div>${m.role === 'user' ? rollHTML(m, enter) : movesHTML(m, i)}`;
     }
     function renderAboard() {
       const bar = document.querySelector('#aboard');
@@ -267,10 +276,10 @@ export async function chatView(id, focusId = null) {
       if (m.dir) return `<div class="msg dirline${enter ? ' enter' : ''}" data-i="${i}" data-id="${m.id}">${dirSign(m)}</div>`;
       const cls = `msg ${m.role === 'user' ? 'user' : 'ai'}${enter ? ' enter' : ''}`;
       const star = m.star || m.quotes?.length ? `<span class="star-b" title="In your Logbook">${icon('star', 13)}</span>` : '';
-      if (m.role === 'user') return `<div class="${cls}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="bubble">${formatMessage(named(textOf(m), ch, 'you', me()))}${star}</div></div>${rollHTML(m, enter)}`;
+      if (m.role === 'user') return `<div class="${cls}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="bubble">${ribbon(m)}${formatMessage(named(textOf(m), ch, 'you', me()))}${star}</div></div>${rollHTML(m, enter)}`;
       const sp = speakerOf(m);
       const tag = ix ? `<span class="spk-tag" style="--c:${sp.line?.color || '#2EAA67'};--ink:${inkOn(sp.line?.color || '#2EAA67')}">${esc(sp.name)}</span>` : '';
-      return `<div class="${cls}${m.star || m.quotes?.length ? ' starred' : ''}" data-i="${i}" data-id="${m.id}">${avatarTile(sp, 30, { expr: m.mood || 'happy', radius: 10, cls: 'msg-av' })}<div class="msg-col">${thinkHTML(m)}<div class="bubble">${tag}${formatMessage(showAi(named(textOf(m), sp, 'you', me())))}${star}</div>${picsHTML(m)}${chronHTML(m)}${toolsHTML(m, i)}</div></div>${movesHTML(m, i)}`;
+      return `<div class="${cls}${m.star || m.quotes?.length ? ' starred' : ''}" data-i="${i}" data-id="${m.id}">${avatarTile(sp, 30, { expr: m.mood || 'happy', radius: 10, cls: 'msg-av' })}<div class="msg-col">${thinkHTML(m)}<div class="bubble">${ribbon(m)}${tag}${formatMessage(showAi(named(textOf(m), sp, 'you', me())))}${star}</div>${picsHTML(m)}${chronHTML(m)}${toolsHTML(m, i)}</div></div>${movesHTML(m, i)}`;
     }
     function renderAll() {
       const cut = chat.summary?.upto || 0;
@@ -453,6 +462,151 @@ export async function chatView(id, focusId = null) {
       chatSound(chat, ch);
       updSnd();
       setTimeout(updSnd, 700); // music starts once its file is read
+    }
+
+    // ---------- Bookmarks: save points to come back to, or branch from ----------
+    function bookmarkSheet(i) {
+      const m = chat.messages[i];
+      const guess = plain(named(textOf(m), speakerOf(m), 'you', me())).replace(/["“”*`]/g, '').split(/\s+/).filter(Boolean).slice(0, 5).join(' ');
+      openSheet({
+        label: 'Bookmark',
+        html: `<h2 class="sheet-title">Bookmark this moment</h2><form id="bmF"><input class="mk-in" id="bmIn" maxlength="60" value="${esc(guess)}" aria-label="Bookmark name" autocomplete="off"><p class="fhint">A save point: jump back to it from ⋯ › Bookmarks${ix ? '' : ', or start a new chat from there'}.</p><div class="sheet-actions"><button type="submit" class="btn-primary press"><span>Bookmark</span></button></div></form>`,
+        onMount(s, close) {
+          const inp = s.querySelector('#bmIn');
+          setTimeout(() => (inp.focus(), inp.select()), 80);
+          s.querySelector('#bmF').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            (chat.marks ||= []).push({ id: uid(), msgId: m.id, title: inp.value.trim().slice(0, 60) || 'A moment', at: Date.now() });
+            close();
+            await saveChat(chat, false);
+            rerenderMsg(i);
+            toast('Bookmarked', { action: 'Bookmarks', onAction: bookmarksSheet });
+          });
+        },
+      });
+    }
+    async function unbookmark(i) {
+      const m = chat.messages[i];
+      chat.marks = (chat.marks || []).filter((b) => b.msgId !== m.id);
+      await saveChat(chat, false);
+      rerenderMsg(i);
+      toast('Bookmark removed');
+    }
+    function jumpTo(msgId) {
+      const el = log.querySelector(`.msg[data-id="${CSS.escape(msgId)}"]`);
+      if (!el) return;
+      el.scrollIntoView({ block: 'center', behavior: reducedMotion() ? 'auto' : 'smooth' });
+      el.classList.add('found');
+      setTimeout(() => el.classList.remove('found'), 2200);
+    }
+    function bookmarksSheet() {
+      const pos = new Map(chat.messages.map((m, k) => [m.id, k]));
+      const list = (chat.marks || []).filter((b) => pos.has(b.msgId)).sort((a, b) => pos.get(a.msgId) - pos.get(b.msgId));
+      const line = ix ? '#ECECEC' : ch.line?.color || '#2EAA67';
+      let open = null;
+      const rows = () =>
+        list
+          .map((b) => {
+            const k = pos.get(b.msgId);
+            const day = chat.messages[k]?.at ? new Date(chat.messages[k].at).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+            return `<li class="${open === b.id ? 'open' : ''}"><button type="button" class="bm-hit press" data-bm="${esc(b.id)}" aria-expanded="${open === b.id}"><b>${esc(b.title)}</b><small>Message ${k + 1}${day ? ` · ${day}` : ''}${k === chat.messages.length - 1 ? ' · latest' : ''}</small></button>${
+              open === b.id
+                ? `<div class="bm-acts"><button type="button" class="press" data-bmgo="${esc(b.id)}">${icon('chev', 15)}Jump there</button>${ix ? '' : `<button type="button" class="press" data-bmbranch="${esc(b.id)}">${icon('track', 15)}Branch from here</button>`}<button type="button" class="press" data-bmrm="${esc(b.id)}">Remove</button></div>`
+                : ''
+            }</li>`;
+          })
+          .join('');
+      clearToasts();
+      openSheet({
+        label: 'Bookmarks',
+        html: `<h2 class="sheet-title">Bookmarks</h2><p class="sheet-p">${list.length ? `Save points in this chat: jump back${ix ? '' : ', or start a new chat from there'}.` : 'No bookmarks yet. Long-press a message and choose Bookmark to save a moment you want to come back to.'}</p>${list.length ? `<ol class="bm-rail" id="bmRail" style="--c:${line}">${rows()}</ol>` : ''}`,
+        onMount(s, close) {
+          s.addEventListener('click', async (e) => {
+            const h = e.target.closest('[data-bm]');
+            const go = e.target.closest('[data-bmgo]');
+            const br = e.target.closest('[data-bmbranch]');
+            const rm = e.target.closest('[data-bmrm]');
+            const find = (id) => list.find((b) => b.id === id);
+            if (h) return (open = open === h.dataset.bm ? null : h.dataset.bm), (s.querySelector('#bmRail').innerHTML = rows());
+            if (go) return close(), setTimeout(() => jumpTo(find(go.dataset.bmgo).msgId), 320);
+            if (br) return close(), branch(pos.get(find(br.dataset.bmbranch).msgId));
+            if (rm) {
+              const b = find(rm.dataset.bmrm);
+              chat.marks = chat.marks.filter((x) => x !== b);
+              list.splice(list.indexOf(b), 1);
+              await saveChat(chat, false);
+              rerenderMsg(pos.get(b.msgId));
+              s.querySelector('#bmRail').innerHTML = rows();
+            }
+          });
+        },
+      });
+    }
+
+    // ---------- Find in this chat: a tray where the composer was ----------
+    const find = { q: '', hits: [], at: -1 };
+    const unmark = () => {
+      log.querySelectorAll('mark.fm').forEach((mk) => mk.replaceWith(document.createTextNode(mk.textContent)));
+      log.querySelectorAll('.bubble').forEach((b) => b.normalize());
+    };
+    function markAll(q) {
+      unmark();
+      find.hits = [];
+      if (q.length < 2) return;
+      const ql = q.toLowerCase();
+      for (const b of log.querySelectorAll('.msg .bubble')) {
+        const walker = document.createTreeWalker(b, NodeFilter.SHOW_TEXT);
+        const nodes = [];
+        while (walker.nextNode()) nodes.push(walker.currentNode);
+        for (const node of nodes) {
+          if (node.parentElement.closest('.rib, .spk-tag, .star-b')) continue;
+          const t = node.textContent;
+          let at = t.toLowerCase().indexOf(ql);
+          if (at < 0) continue;
+          const frag = document.createDocumentFragment();
+          let last = 0;
+          while (at >= 0) {
+            frag.append(t.slice(last, at));
+            const mk = document.createElement('mark');
+            mk.className = 'fm';
+            mk.textContent = t.slice(at, at + q.length);
+            frag.append(mk);
+            find.hits.push(mk);
+            last = at + q.length;
+            at = t.toLowerCase().indexOf(ql, last);
+          }
+          frag.append(t.slice(last));
+          node.replaceWith(frag);
+        }
+      }
+    }
+    function showHit(k) {
+      const n = find.hits.length;
+      const out = root.querySelector('#fbN');
+      if (!n) return (find.at = -1), (out.textContent = find.q.length >= 2 ? 'No matches' : '');
+      find.at = ((k % n) + n) % n;
+      find.hits.forEach((mk, j) => mk.classList.toggle('cur', j === find.at));
+      out.textContent = `${find.at + 1} of ${n}`;
+      find.hits[find.at].scrollIntoView({ block: 'center', behavior: reducedMotion() ? 'auto' : 'smooth' });
+    }
+    function openFind() {
+      const fb = root.querySelector('#findbar');
+      fb.hidden = false;
+      root.querySelector('#composer').hidden = true;
+      chips.hidden = true;
+      root.querySelector('#nextbar')?.setAttribute('hidden', '');
+      const inp = root.querySelector('#fbIn');
+      inp.value = find.q;
+      setTimeout(() => inp.focus(), 30);
+      if (find.q) markAll(find.q), showHit(find.hits.length - 1);
+    }
+    function closeFind() {
+      unmark();
+      find.hits = [];
+      root.querySelector('#findbar').hidden = true;
+      root.querySelector('#composer').hidden = false;
+      chips.hidden = false;
+      root.querySelector('#nextbar')?.removeAttribute('hidden');
     }
 
     const writeChip = () => `<button type="button" class="press" data-chip="write">${icon('edit', 16)}Write for me</button>`;
@@ -1425,6 +1579,7 @@ export async function chatView(id, focusId = null) {
           ...(m.role === 'assistant' ? [{ icon: 'image', label: 'Picture this', on: () => pictureSheet(m) }] : []),
           { icon: 'route', label: (chat.route || []).some((s) => s.msgId === m.id) ? 'On the route map' : 'Mark on route map', on: () => ((chat.route || []).some((s) => s.msgId === m.id) ? (location.hash = `#/route/${encodeURIComponent(chat.id)}`) : markSheet(m)) },
           ...((chat.chapters || []).some((c) => c.msgId === m.id) ? [] : [{ icon: 'book', label: 'Start a chapter here', on: () => chapterNameSheet({ m }) }]),
+          markOf(m) ? { icon: 'pin', label: 'Remove bookmark', on: () => unbookmark(i) } : { icon: 'pin', label: 'Bookmark…', on: () => bookmarkSheet(i) },
           ...(ix ? [] : [{ icon: 'track', label: 'Branch from here', on: () => branch(i) }]),
           '-',
           { icon: 'trash', label: 'Delete', danger: true, on: () => remove(i) },
@@ -1570,6 +1725,8 @@ export async function chatView(id, focusId = null) {
         '-',
         { icon: 'user', label: `You: ${me().name?.trim() || 'You'}`, on: personaSheet },
         { icon: 'download', label: 'Export as story', on: exportStory },
+        { icon: 'search', label: 'Find in this chat', on: openFind },
+        { icon: 'pin', label: `Bookmarks${(chat.marks || []).length ? ` (${chat.marks.length})` : ''}`, on: bookmarksSheet },
         { icon: 'speaker', label: 'Sound', on: () => soundSheet({ chat, ch, ix, onChange: updSnd }) },
         { icon: 'sliders', label: 'Reading text', on: textSheet },
         { icon: 'talk', label: 'Reply style', on: () => replyStyleSheet(() => updateTokens()) },
@@ -1745,6 +1902,7 @@ export async function chatView(id, focusId = null) {
       let cur = m.alt;
       const n = m.alts.length;
       const tag = (k) => `${k + 1}${m.altNote?.[k] ? ` · ${esc(m.altNote[k])}` : k === 0 ? ' · First' : ''}`;
+      clearToasts();
       openSheet({
         label: 'Versions',
         html: `<h2 class="sheet-title">Versions</h2><p class="sheet-p" id="cvSay" aria-live="polite"></p>
@@ -2183,6 +2341,24 @@ export async function chatView(id, focusId = null) {
       const cEl = root.querySelector('#chat');
       cEl.classList.add('arrive');
       setTimeout(() => cEl.classList.remove('arrive'), 1300);
+    }
+    {
+      const fb = root.querySelector('#findbar');
+      const inp = root.querySelector('#fbIn');
+      let t = 0;
+      inp.addEventListener('input', () => {
+        clearTimeout(t);
+        t = setTimeout(() => {
+          find.q = inp.value.trim();
+          markAll(find.q);
+          showHit(find.hits.length - 1); // start from the newest match
+        }, 160);
+      });
+      fb.addEventListener('submit', (e) => (e.preventDefault(), showHit(find.at - 1)));
+      root.querySelector('#fbUp').addEventListener('click', () => showHit(find.at - 1));
+      root.querySelector('#fbDown').addEventListener('click', () => showHit(find.at + 1));
+      root.querySelector('#fbClose').addEventListener('click', closeFind);
+      inp.addEventListener('keydown', (e) => e.key === 'Escape' && closeFind());
     }
     root.querySelector('#sndBtn').addEventListener('click', () => soundSheet({ chat, ch, ix, onChange: updSnd }));
   }
