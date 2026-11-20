@@ -2,6 +2,7 @@
 // 1 Global prompt, 2 Connection prompt, 3 Character persona, 4 Your persona,
 // 5 Notes and summary, then the chat history (trimmed to fit the context size).
 import { estimateTokens } from './util.js';
+import { bondsLayer } from './chronicle.js';
 import { textOf, matchLore } from './store.js';
 import { PROVIDERS } from './providers.js';
 import { compileSheet } from './blueprint.js';
@@ -81,6 +82,9 @@ export function buildPrompt({ char, chat, conn, settings, persona, upto = null, 
   const memory = [];
   if (chat.summary?.text) memory.push('Story so far:\n' + chat.summary.text.trim());
   if (chat.notes?.length) memory.push('Remember:\n' + chat.notes.map((n) => '- ' + m(n.text)).join('\n'));
+  // Bonds: how the cast feels about you right now (Route map › Bonds).
+  const bonds = bondsLayer(chat, group?.people || [char], persona?.name?.trim() || 'the user');
+  if (bonds) memory.push(bonds);
   if (memory.length) layers.push({ key: 'notes', name: 'Notes and summary', text: memory.join('\n\n') });
 
   const system = layers.map((l) => l.text).join('\n\n');

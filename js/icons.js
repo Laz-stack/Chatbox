@@ -1,5 +1,7 @@
 // One stroke icon set (24px grid, 1.9 stroke) plus the transit-sign arrow.
 const P = {
+  route: "<circle cx='6' cy='19' r='2.6'/><circle cx='18' cy='5' r='2.6'/><path d='M8.6 19h8.4a3.5 3.5 0 0 0 0-7H7a3.5 3.5 0 0 1 0-7h8.4'/>",
+  heart: "<path d='M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7a4.3 4.3 0 0 1 7.5 2.8C19.5 15.4 12 20 12 20Z'/>",
   back: "<path d='M15 5l-7 7 7 7'/>",
   chev: "<path d='M9 5l7 7-7 7'/>",
   x: "<path d='M6 6l12 12M18 6L6 18'/>",

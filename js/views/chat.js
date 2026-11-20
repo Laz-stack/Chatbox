@@ -1,4 +1,4 @@
-import { S, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, named, resetChat, recordFare, interchange, isInterchangeId, chatsFor, startNewChat, deleteChat, blankCharacter, saveInterchange, personaFor, personaById, newChat } from '../store.js';
+import { S, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, named, resetChat, recordFare, interchange, isInterchangeId, chatsFor, startNewChat, deleteChat, blankCharacter, saveInterchange, personaFor, personaById, newChat, branchChat } from '../store.js';
 import { textSheet } from './text.js';
 import { replyStyleSheet } from './settings.js';
 import { textPrefs } from '../textstyle.js';
@@ -6,6 +6,7 @@ import { STEER, parseScene, splitTurn, hasCastLines, resolveSpeaker, passengersI
 import { complete, PROVIDERS } from '../providers.js';
 import { buildPrompt } from '../prompt.js';
 import { shouldSummarize, summarize } from '../memory.js';
+import { chronicle, chronicleDue, trackingOn, changeText, markStation, undoReply } from '../chronicle.js';
 import { esc, uid, formatMessage, markProse, fmtNum, estimateTokens, inkOn, ago, plain, detectMood, copyText, download, slug, reducedMotion, motion, lineAccent, EASE_OUT } from '../util.js';
 import { avatarTile } from '../avatar.js';
 import { sceneSVG } from '../scenes.js';
@@ -206,7 +207,7 @@ export async function chatView(id, focusId = null) {
         else if (m.as) inner = blockHTML({ kind: 'line', who: speakerOf({ speaker: m.as }) }, textOf(m), { by: true });
         else inner = blockHTML({ kind: 'you' }, textOf(m));
       } else inner = sceneParts(textOf(m), m).join('');
-      return `<div class="msg scene ${m.role === 'user' ? 'mine' : 'ai'}${m.dir ? ' dir' : ''}${enter ? ' enter' : ''}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="msg-col"><div class="bubble scn">${inner}${star}</div>${m.role === 'assistant' ? toolsHTML(m, i) : ''}</div></div>`;
+      return `<div class="msg scene ${m.role === 'user' ? 'mine' : 'ai'}${m.dir ? ' dir' : ''}${enter ? ' enter' : ''}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="msg-col"><div class="bubble scn">${inner}${star}</div>${m.role === 'assistant' ? chronHTML(m) + toolsHTML(m, i) : ''}</div></div>`;
     }
     function renderAboard() {
       const bar = document.querySelector('#aboard');
@@ -223,7 +224,7 @@ export async function chatView(id, focusId = null) {
       if (m.role === 'user') return `<div class="${cls}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="bubble">${formatMessage(named(textOf(m), ch, 'you', me()))}${star}</div></div>`;
       const sp = speakerOf(m);
       const tag = ix ? `<span class="spk-tag" style="--c:${sp.line?.color || '#2EAA67'};--ink:${inkOn(sp.line?.color || '#2EAA67')}">${esc(sp.name)}</span>` : '';
-      return `<div class="${cls}${m.star || m.quotes?.length ? ' starred' : ''}" data-i="${i}" data-id="${m.id}">${avatarTile(sp, 30, { expr: m.mood || 'happy', radius: 10, cls: 'msg-av' })}<div class="msg-col"><div class="bubble">${tag}${formatMessage(showAi(named(textOf(m), sp, 'you', me())))}${star}</div>${toolsHTML(m, i)}</div></div>`;
+      return `<div class="${cls}${m.star || m.quotes?.length ? ' starred' : ''}" data-i="${i}" data-id="${m.id}">${avatarTile(sp, 30, { expr: m.mood || 'happy', radius: 10, cls: 'msg-av' })}<div class="msg-col"><div class="bubble">${tag}${formatMessage(showAi(named(textOf(m), sp, 'you', me())))}${star}</div>${chronHTML(m)}${toolsHTML(m, i)}</div></div>`;
     }
     function renderAll() {
       const cut = chat.summary?.upto || 0;
@@ -344,6 +345,9 @@ export async function chatView(id, focusId = null) {
         if (mode === 'regen') {
           target.alts.push('');
           target.alt = target.alts.length - 1;
+          // A new version: take back what the old one changed in Bonds, and read it again later.
+          if (target.chron) undoReply(chat, target);
+          if (chat.chron) chat.chron.upto = Math.min(chat.chron.upto, chat.messages.indexOf(target));
         }
       }
       const upto = mode === 'continue' ? idx + 1 : idx;
@@ -473,6 +477,56 @@ export async function chatView(id, focusId = null) {
         if (!destroyed) setStatus('idle');
       }
       if (!destroyed) updateTokens();
+      // Route map and Bonds: a short background read every couple of replies.
+      if (!error && text.trim() && trackingOn(S.settings) && chronicleDue(chat)) runChronicle(conn);
+    }
+
+    async function runChronicle(conn) {
+      const target = chat.messages[chat.messages.length - 1];
+      try {
+        const res = await chronicle({ chat, cast: ix ? ix.people : [ch], persona: me(), conn, settings: S.settings });
+        if (res.changes.length || res.stations.length) target.chron = { bonds: res.changes, stations: res.stations.map((s) => s.title) };
+        await saveChat(chat, false);
+        const i = chat.messages.indexOf(target);
+        if (!destroyed && target.chron && i >= 0) rerenderMsg(i);
+      } catch (e) {
+        console.warn('chronicle failed', e);
+        await saveChat(chat, false);
+      }
+    }
+
+    // The slim rows under a reply: what changed in Bonds, and new stations on the Route map.
+    function chronHTML(m) {
+      const c = m.chron;
+      if (!c) return '';
+      const cast = ix ? ix.people : [ch];
+      const rows = (c.bonds || []).map((x) => {
+        const p = cast.find((q) => q.id === x.who);
+        return p ? `<a class="chr-row press" href="#/bonds/${encodeURIComponent(chat.id)}"><span class="chr-dot" style="background:${p.line?.color || '#2EAA67'}" aria-hidden="true"></span><span>${esc(p.name)} · ${esc(changeText(x.d))}${x.why ? ` · ${esc(x.why)}` : ''}</span></a>` : '';
+      });
+      for (const s of c.stations || []) rows.push(`<a class="chr-row press" href="#/route/${encodeURIComponent(chat.id)}">${icon('route', 13)}<span>New station · ${esc(s)}</span></a>`);
+      return rows.filter(Boolean).length ? `<div class="chr">${rows.join('')}</div>` : '';
+    }
+
+    // Long-press › Mark on route map: name the moment, it becomes a station.
+    function markSheet(m) {
+      const guess = plain(textOf(m)).replace(/["“”*`]/g, '').split(/\s+/).filter(Boolean).slice(0, 5).join(' ');
+      openSheet({
+        label: 'Mark on route map',
+        html: `<h2 class="sheet-title">Mark on route map</h2><form id="mkF"><input class="mk-in" id="mkIn" maxlength="60" value="${esc(guess)}" aria-label="Station name" autocomplete="off"><p class="fhint">Give the moment a short name.</p><div class="sheet-actions"><button type="submit" class="btn-primary press"><span>Add station</span></button></div></form>`,
+        onMount(s, close) {
+          const inp = s.querySelector('#mkIn');
+          setTimeout(() => (inp.focus(), inp.select()), 80);
+          s.querySelector('#mkF').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const st = markStation(chat, m, inp.value);
+            close();
+            if (!st) return toast('That message is already on the map');
+            await saveChat(chat, false);
+            toast('Added to the route map', { action: 'Open', onAction: () => (location.hash = `#/route/${encodeURIComponent(chat.id)}`) });
+          });
+        },
+      });
     }
 
     function showError(e, mode) {
@@ -614,6 +668,7 @@ export async function chatView(id, focusId = null) {
           ...(lines.length ? [{ icon: 'star', label: m.quotes?.length ? `Star a line (${m.quotes.length} starred)` : 'Star a line', on: () => starLineSheet(m, i, lines) }] : []),
           { icon: 'star', label: m.star ? 'Remove star from reply' : lines.length ? 'Star whole reply' : 'Star to Logbook', on: () => toggleStar(m, i) },
           { icon: 'pin', label: 'Pin to notes', on: () => pin(m) },
+          { icon: 'route', label: (chat.route || []).some((s) => s.msgId === m.id) ? 'On the route map' : 'Mark on route map', on: () => ((chat.route || []).some((s) => s.msgId === m.id) ? (location.hash = `#/route/${encodeURIComponent(chat.id)}`) : markSheet(m)) },
           ...(ix ? [] : [{ icon: 'track', label: 'Branch from here', on: () => branch(i) }]),
           '-',
           { icon: 'trash', label: 'Delete', danger: true, on: () => remove(i) },
@@ -711,6 +766,7 @@ export async function chatView(id, focusId = null) {
     async function remove(i) {
       const [m] = chat.messages.splice(i, 1);
       if (chat.summary && i < chat.summary.upto) chat.summary.upto--;
+      if (chat.chron && i < chat.chron.upto) chat.chron.upto--;
       const el = log.querySelector(`.msg[data-i="${i}"]`);
       if (el) await motion(el, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.94)' }], { duration: 180, easing: 'ease-in' }).finished.catch(() => {});
       renderAll();
@@ -721,6 +777,7 @@ export async function chatView(id, focusId = null) {
         onAction: async () => {
           chat.messages.splice(i, 0, m);
           if (chat.summary && i < chat.summary.upto) chat.summary.upto++;
+          if (chat.chron && i < chat.chron.upto) chat.chron.upto++;
           renderAll();
           await save();
           updateTokens();
@@ -745,6 +802,10 @@ export async function chatView(id, focusId = null) {
               { icon: 'layers', label: 'Final prompt', on: () => (location.hash = `#/final/${chat.id}`) },
               { icon: 'download', label: 'Export card (PNG)', on: async () => download(await exportCardPng(ch), slug(ch.name) + '.card.png') },
             ]),
+        { icon: 'route', label: 'Route map', on: () => (location.hash = `#/route/${encodeURIComponent(chat.id)}`) },
+        { icon: 'heart', label: 'Bonds', on: () => (location.hash = `#/bonds/${encodeURIComponent(chat.id)}`) },
+        { icon: 'book', label: 'Diary', on: () => (location.hash = `#/diary/${encodeURIComponent(chat.id)}`) },
+        '-',
         { icon: 'user', label: `You: ${me().name?.trim() || 'You'}`, on: personaSheet },
         { icon: 'download', label: 'Export as story', on: exportStory },
         { icon: 'sliders', label: 'Reading text', on: textSheet },
@@ -789,13 +850,7 @@ export async function chatView(id, focusId = null) {
 
     // ---------- branch: a new chat that starts as a copy of this one up to message i ----------
     async function branch(i) {
-      const c = newChat(ch.id, `${ch.id}~${uid()}`);
-      c.messages = structuredClone(chat.messages.slice(0, i + 1));
-      c.notes = structuredClone(chat.notes || []);
-      if (chat.personaId) c.personaId = chat.personaId;
-      if (chat.summary && chat.summary.upto <= i + 1) c.summary = structuredClone(chat.summary);
-      c.branchOf = { chat: chat.id, at: chat.messages[i].id };
-      await saveChat(c);
+      const c = await branchChat(chat, i);
       location.hash = `#/chat/${c.id}`;
       toast('Branched here. The original is under Chats.', { action: 'Back', ms: 5000, onAction: () => (location.hash = `#/chat/${chat.id}`) });
     }
