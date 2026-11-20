@@ -1,7 +1,8 @@
 import { S, connection, newConnection, saveConnection, deleteConnection, saveSettings, activeConnection } from '../store.js';
 import { PROVIDERS, testConnection, proxyAvailable } from '../providers.js';
 import { esc, motion, uid } from '../util.js';
-import { topbar, title2, ibtn, bullet, field, area, toggleRow, bindSwitch, icon, arrow, dial, bindDial, toast, confirmSheet } from '../ui.js';
+import { topbar, title2, ibtn, bullet, field, area, toggleRow, bindSwitch, icon, arrow, dial, bindDial, toast, confirmSheet, openSheet, row } from '../ui.js';
+import { helper } from '../helper.js';
 
 const LETTER_BG = { anthropic: '#FDCD15', openai: '#ECECEC', openrouter: '#B8ACFE', custom: '#2EAA67', demo: '#333333' };
 
@@ -10,7 +11,7 @@ export function connectionsView() {
   const card = (c, i) => {
     const on = c.id === active?.id;
     const p = PROVIDERS[c.provider] || PROVIDERS.openai;
-    const tags = [on ? '<span class="tag hl">Active</span>' : '', c.prompt?.trim() ? '<span class="tag">Own prompt</span>' : '<span class="tag">Global only</span>', c.provider !== 'demo' ? `<span class="tag num">temp ${(+c.temperature).toFixed(1)}</span>` : ''].join('');
+    const tags = [on ? '<span class="tag hl">Active</span>' : '', helper()?.id === c.id ? '<span class="tag">Helper</span>' : '', c.prompt?.trim() ? '<span class="tag">Own prompt</span>' : '<span class="tag">Global only</span>', c.provider !== 'demo' ? `<span class="tag num">temp ${(+c.temperature).toFixed(1)}</span>` : ''].join('');
     return `<div class="conn${on ? ' active' : ''}" style="animation-delay:${0.06 * i}s">
       <a class="conn-main" href="#/connection/${c.id}" aria-label="Edit ${esc(c.name || p.label)}">${bullet(esc((c.name || p.label)[0].toUpperCase()), on ? '#0A0A0A' : LETTER_BG[c.provider] || '#ECECEC', on ? '#FDCD15' : null, 54)}
         <span class="conn-tx"><span class="conn-n">${esc(c.name || p.label)}</span><span class="conn-m num">${esc(c.provider === 'demo' ? p.sub : c.model || 'no model set')}</span><span class="tags">${tags}</span></span></a>
@@ -22,13 +23,24 @@ export function connectionsView() {
     ${title2('Connections', 'Where replies come from', { tag: 'h1' })}
     <div class="stack" style="margin-top:18px;gap:12px" role="radiogroup" aria-label="Active connection">${S.connections.map(card).join('')}</div>
     <a class="dashed press" href="#/connection/new" style="margin-top:12px">${icon('plus', 20)}Add a connection</a>
+    <h2 class="sec" style="margin-top:26px">Helper</h2>
+    <div class="group">${row({ id: 'helperRow', ic: 'spark', bc: 'var(--lilac)', fc: '#0A0A0A', title: 'Background jobs', sub: `<span id="helperSub">${helperSub()}</span>` })}</div>
+    <p class="fhint">Runs Route map and Bonds, summaries, diaries, Lorebook Enhance, the character builder and card import. A cheaper, faster model here saves money; chats still reply with their own connection.</p>
     <div class="note" style="margin-top:18px">${icon('shield', 18)}<span>The active connection answers every chat unless a character picks its own. Keys stay in this browser and go only to the provider you choose.</span></div>
   </div>`;
   return {
     html,
     depth: 1,
     mount(root) {
+      // After picking a Helper: update the row and the card tags in place (no re-render behind the sheet).
+      const helperChanged = () => {
+        root.querySelector('#helperSub').innerHTML = helperSub();
+        const stack = root.querySelector('.stack[role=radiogroup]');
+        stack.classList.add('still');
+        stack.innerHTML = S.connections.map(card).join('');
+      };
       root.addEventListener('click', async (e) => {
+        if (e.target.closest('#helperRow')) return helperSheet(helperChanged);
         const b = e.target.closest('[data-use]');
         if (!b) return;
         S.settings.activeConnectionId = b.dataset.use;
@@ -39,6 +51,57 @@ export function connectionsView() {
       });
     },
   };
+}
+
+const connName = (c) => c.name || PROVIDERS[c.provider]?.label || 'Connection';
+const helperSub = () => {
+  const h = helper();
+  return h ? `${esc(connName(h))} · ${esc(h.model || 'no model')}` : 'Same connection as each chat';
+};
+
+// Pick the Helper connection: a cheaper model for the work behind the scenes.
+// Only connections that can actually answer: a model set, and a key unless it's a custom address.
+const usable = (c) => c.provider !== 'demo' && c.model?.trim() && (c.apiKey?.trim() || c.provider === 'custom');
+function helperSheet(onChange) {
+  const list = S.connections.filter(usable);
+  const cur = helper()?.id || '';
+  const opt = (id, t, s) => `<button type="button" class="hp-opt press" role="radio" aria-checked="${cur === id}" tabindex="${cur === id ? 0 : -1}" data-h="${id}"><span class="hp-dot" aria-hidden="true"></span><span class="row-tx"><span class="row-t">${t}</span><span class="row-s">${s}</span></span></button>`;
+  openSheet({
+    label: 'Helper connection',
+    html: `<h2 class="sheet-title">Background jobs</h2><p class="sheet-p">Pick a cheaper, faster model for the work behind the scenes. Replies in your chats don’t change.</p>
+      <div class="hp-list" role="radiogroup" aria-label="Helper connection">${opt('', 'Same as each chat', 'No helper: every job uses the chat’s own connection')}${list.map((c) => opt(c.id, esc(connName(c)), esc(c.model || 'no model set'))).join('')}</div>
+      ${list.length < 2 ? `<p class="fhint">Tip: add a second connection with a cheaper model (Duplicate one to reuse its key), then pick it here.</p>` : ''}
+      <div class="hp-tog"${cur ? '' : ' hidden'}>${toggleRow('tHelpCreative', 'Diaries and character builder too', 'Turn off to keep these on each chat’s own connection', S.settings.helperCreative !== false)}</div>`,
+    onMount(s) {
+      const radios = () => [...s.querySelectorAll('[data-h]')];
+      const choose = async (b) => {
+        S.settings.helperId = b.dataset.h || null;
+        await saveSettings();
+        radios().forEach((x) => (x.setAttribute('aria-checked', x === b), (x.tabIndex = x === b ? 0 : -1)));
+        s.querySelector('.hp-tog').hidden = !b.dataset.h;
+        onChange();
+      };
+      s.querySelector('.hp-list').addEventListener('click', (e) => {
+        const b = e.target.closest('[data-h]');
+        if (b) choose(b);
+      });
+      // Arrow keys move between options, like a native radio group.
+      s.querySelector('.hp-list').addEventListener('keydown', (e) => {
+        const all = radios();
+        const i = all.indexOf(document.activeElement);
+        const d = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
+        if (i < 0 || !d) return;
+        e.preventDefault();
+        const next = all[(i + d + all.length) % all.length];
+        next.focus();
+        choose(next);
+      });
+      bindSwitch(s.querySelector('#tHelpCreative'), async (on) => {
+        S.settings.helperCreative = on;
+        await saveSettings();
+      });
+    },
+  });
 }
 
 export function connectionEditView(id) {

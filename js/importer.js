@@ -1,7 +1,8 @@
 // Import anything people share: a ZIP, a card PNG/JSON (V2/V3), or a SillyTavern lorebook.
 // readFiles() turns the files into a plan the review screen shows; applyPlan() saves what was chosen.
 import { pngTextChunks, b64utf8 } from './cards.js';
-import { complete, PROVIDERS } from './providers.js';
+import { PROVIDERS } from './providers.js';
+import { helperComplete } from './helper.js';
 import { extractJson } from './blueprint.js';
 import { S, blankCharacter, saveCharacter, saveChat, newChat, LINE_COLORS, saveInterchange, saveLore, saveImages } from './store.js';
 import { resizeImage, uid } from './util.js';
@@ -102,7 +103,7 @@ async function splitByAI(conn, d, names) {
   const ask =
     `This card describes several characters${names.length ? ` (${names.join(', ')})` : ''}. Return {"characters":[{"name":"...","tagline":"short role, under 10 words","sheet":"their appearance, personality, speech and relationships in 120 to 200 words, using only facts from the card"}]}. ` +
     'Only main characters, not background extras.';
-  const text = await complete(conn, { system, messages: [{ role: 'user', content: `${str(d.description).slice(0, 30000)}\n\n${ask}` }], stream: false, maxTokens: 3000, temperature: 0.3 });
+  const text = await helperComplete(conn, 'import', { system, messages: [{ role: 'user', content: `${str(d.description).slice(0, 30000)}\n\n${ask}` }], stream: false, maxTokens: 3000, temperature: 0.3 });
   const out = extractJson(text);
   return (out.characters || []).filter((c) => c?.name).map((c) => ({ key: str(c.name).toLowerCase(), name: str(c.name).slice(0, 60), tagline: str(c.tagline).slice(0, 80), text: str(c.sheet) }));
 }

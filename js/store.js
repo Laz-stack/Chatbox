@@ -321,6 +321,7 @@ export async function saveConnection(c) {
 export async function deleteConnection(id) {
   S.connections = S.connections.filter((c) => c.id !== id);
   if (S.settings.activeConnectionId === id) S.settings.activeConnectionId = S.connections[0]?.id || null;
+  if (S.settings.helperId === id) S.settings.helperId = null;
   S.characters.forEach((c) => {
     if (c.connectionId === id) c.connectionId = null;
   });

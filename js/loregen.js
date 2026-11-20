@@ -1,5 +1,6 @@
 // Lorebook Enhance: the AI expands an entry's text and suggests keywords, keeping every fact given.
-import { complete, PROVIDERS } from './providers.js';
+import { PROVIDERS } from './providers.js';
+import { helperComplete } from './helper.js';
 import { extractJson } from './blueprint.js';
 
 const str = (v) => (v == null ? '' : String(v).trim());
@@ -17,7 +18,7 @@ export async function enhanceLore({ conn, entry, context = [], signal }) {
     'Keep every fact already given and contradict none. Present tense, no story narration, no dialogue. ' +
     'keywords: 3 to 6 short words or names people would naturally say in chat when this comes up, including the existing ones. ' +
     'title: keep it, or write a short one if it is empty.';
-  const text = await complete(conn, { system, messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: Math.max(conn.maxTokens || 600, 900), temperature: 0.8, signal });
+  const text = await helperComplete(conn, 'enhance', { system, messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: Math.max(conn.maxTokens || 600, 900), temperature: 0.8, signal });
   const out = extractJson(text);
   const keys = (Array.isArray(out.keywords) ? out.keywords : String(out.keywords || '').split(',')).map(str).filter(Boolean);
   return { title: str(out.title).slice(0, 80), keys, text: str(out.text).slice(0, 3000) };
