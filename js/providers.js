@@ -184,8 +184,24 @@ export async function generateImage(conn, { model, prompt, signal }) {
   if (p.format === 'demo') return demoPicture(prompt);
   if (p.format === 'anthropic') throw new ProviderError('Anthropic models can’t paint pictures.', 0, 'Pick an OpenAI or OpenRouter connection for Pictures.');
   const m = model || conn.model;
+  // "Failed to fetch": the request never reached the provider. Say why it usually happens.
+  const reach = async (url, init) => {
+    try {
+      return await send(conn, url, init);
+    } catch (e) {
+      if (e.name === 'AbortError') throw e;
+      throw new ProviderError(
+        'Couldn’t reach the picture service (the request was blocked or the connection dropped).',
+        0,
+        conn.provider === 'custom' ? 'This connection is a custom address, which may not allow picture requests from the browser. Pick an OpenRouter or OpenAI connection for Pictures.' : conn.useProxy ? 'This connection routes through a local server that isn’t running here. Turn that off in the connection’s More options.' : 'Check your internet connection and try again.'
+      );
+    }
+  };
   if (conn.provider === 'openrouter') {
-    const res = await send(conn, baseOf(conn) + '/chat/completions', { method: 'POST', headers: headers(conn), body: JSON.stringify({ model: m, messages: [{ role: 'user', content: prompt }], modalities: ['image', 'text'] }), signal });
+    // Some image models answer with text and pictures, some only pictures: try both shapes.
+    const ask = (modalities) => reach(baseOf(conn) + '/chat/completions', { method: 'POST', headers: headers(conn), body: JSON.stringify({ model: m, messages: [{ role: 'user', content: prompt }], modalities }), signal });
+    let res = await ask(['image', 'text']);
+    if (!res.ok && (res.status === 400 || res.status === 404)) res = await ask(['image']);
     if (!res.ok) throw await readError(res);
     const j = await res.json();
     const url = j.choices?.[0]?.message?.images?.[0]?.image_url?.url;
@@ -194,7 +210,7 @@ export async function generateImage(conn, { model, prompt, signal }) {
   }
   // gpt-image models always answer with base64; others are asked for it too (a plain link may not load here).
   const size = /^gpt-image/.test(m) ? { size: '1536x1024' } : /dall-e-3/.test(m) ? { size: '1792x1024', response_format: 'b64_json' } : { response_format: 'b64_json' };
-  const res = await send(conn, baseOf(conn) + '/images/generations', { method: 'POST', headers: headers(conn), body: JSON.stringify({ model: m, prompt, n: 1, ...size }), signal });
+  const res = await reach(baseOf(conn) + '/images/generations', { method: 'POST', headers: headers(conn), body: JSON.stringify({ model: m, prompt, n: 1, ...size }), signal });
   if (!res.ok) throw await readError(res);
   const d = (await res.json()).data?.[0];
   if (d?.b64_json) return 'data:image/png;base64,' + d.b64_json;
