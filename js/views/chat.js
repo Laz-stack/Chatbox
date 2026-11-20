@@ -1,4 +1,4 @@
-import { S, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, named, resetChat, recordFare, interchange, isInterchangeId, chatsFor, startNewChat, deleteChat, blankCharacter, saveInterchange, personaFor, personaById, newChat, branchChat } from '../store.js';
+import { S, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, named, resetChat, recordFare, interchange, isInterchangeId, chatsFor, startNewChat, deleteChat, blankCharacter, saveInterchange, personaFor, personaById, newChat, branchChat, saveImages } from '../store.js';
 import { textSheet } from './text.js';
 import { replyStyleSheet } from './settings.js';
 import { textPrefs } from '../textstyle.js';
@@ -10,13 +10,14 @@ import { chronicle, chronicleDue, trackingOn, changeText, markStation, undoReply
 import { clockOn, chipText, longText, partOfDay, clockSheet } from '../clock.js';
 import { advOn, roll, RESULT, suggestMoves, advRowText } from '../adventure.js';
 import { hereOf, untravel } from '../worldmap.js';
+import { STYLES, picConn, picPrefs, providerName, paint, picSrc, altOf, squareOf, isDemoPics, gcPictures } from '../pictures.js';
 import { esc, uid, formatMessage, markProse, fmtNum, estimateTokens, inkOn, ago, plain, detectMood, copyText, download, slug, reducedMotion, motion, lineAccent, EASE_OUT } from '../util.js';
 import { avatarTile } from '../avatar.js';
 import { sceneSVG } from '../scenes.js';
 import { sceneSheet as openSceneSheet } from '../scenepicker.js';
 import { speak, stopSpeaking, ttsSupported } from '../tts.js';
 import { exportCardPng } from '../cards.js';
-import { ibtn, avatarBullet, icon, arrow, openMenu, openSheet, toast, confirmSheet, autosize, reel, groupAvatar } from '../ui.js';
+import { ibtn, avatarBullet, icon, arrow, openMenu, openSheet, toast, confirmSheet, autosize, reel, groupAvatar, toggleRow, bindSwitch } from '../ui.js';
 
 // Streams text into a bubble word by word, keeping *actions* italic as they arrive.
 class StreamRenderer {
@@ -94,6 +95,9 @@ export async function chatView(id, focusId = null) {
   // Who you are in this chat (its own pick, else your default persona).
   const me = () => personaFor(chat);
   const sceneKey = () => hereOf(chat)?.scene || ch.scene;
+  // A picture set as this chat's background wins over the scene art.
+  const sceneInner = () => (chat.bgPic && S.images?.[chat.bgPic] ? `<img class="scene-pic" src="${esc(S.images[chat.bgPic])}" alt="">` : sceneKey() && sceneKey() !== 'none' ? sceneSVG(sceneKey()) : '');
+  const sceneId = () => chat.bgPic || sceneKey() || '';
   const youWho = () => ({ name: me().name?.trim() || 'You', preset: me().preset, avatarImage: me().avatarImage, line: { color: '#FDCD15' } });
   const chat = await getChat(id);
   if (!chat) return null;
@@ -106,7 +110,7 @@ export async function chatView(id, focusId = null) {
   // Short placeholder: a long name would wrap the composer onto several lines.
   const callName = scene ? 'the scene' : ix ? 'the interchange' : ch.name.length > 14 ? ch.name.split(/\s+/)[0].slice(0, 14) : ch.name;
   const html = `<div class="chat" id="chat" style="--blur:${ch.sceneBlur ?? 4}px;--dim:${(ch.sceneDim ?? 60) / 100};--accent:${lineAccent(ch.line?.color)}">
-    <div class="chat-scene" id="scene" aria-hidden="true" data-k="${esc(sceneKey() || '')}">${sceneKey() && sceneKey() !== 'none' ? sceneSVG(sceneKey()) : ''}</div>
+    <div class="chat-scene" id="scene" aria-hidden="true" data-k="${esc(sceneId())}">${sceneInner()}</div>
     <header class="chat-head">
       ${ibtn('back', 'Back to home', { href: '#/' })}
       <button type="button" class="chat-who press" id="whoBtn" aria-haspopup="dialog" aria-label="${esc(ch.name)}: chat details">${ix ? groupAvatar(ix, 36) : avatarBullet(ch, 36, '', `head:${ch.id}`)}<span class="who-tx"><span class="who-n">${esc(ch.name)}</span><span class="who-s"><span class="who-meta" id="meta"><span class="dot${conn0?.provider === 'demo' ? ' demo' : ''}" id="connDot"></span><span class="ell" id="connName">${esc(connText(conn0))}</span><span id="tokPill" ${S.settings.showCounter ? '' : 'hidden'}>· <span class="num" id="tokN">…</span></span><span id="noteWrap" ${!ix && chat.notes.length ? '' : 'hidden'}>· ${icon('pin', 12)}<span id="noteN">${chat.notes.length}</span></span></span><span id="status" hidden></span></span></span></button>
@@ -222,7 +226,7 @@ export async function chatView(id, focusId = null) {
         else if (m.as) inner = blockHTML({ kind: 'line', who: speakerOf({ speaker: m.as }) }, textOf(m), { by: true });
         else inner = blockHTML({ kind: 'you' }, textOf(m));
       } else inner = sceneParts(textOf(m), m).join('');
-      return `<div class="msg scene ${m.role === 'user' ? 'mine' : 'ai'}${m.dir ? ' dir' : ''}${enter ? ' enter' : ''}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="msg-col"><div class="bubble scn">${inner}${star}</div>${m.role === 'assistant' ? chronHTML(m) + toolsHTML(m, i) : ''}</div></div>${m.role === 'user' ? rollHTML(m, enter) : movesHTML(m, i)}`;
+      return `<div class="msg scene ${m.role === 'user' ? 'mine' : 'ai'}${m.dir ? ' dir' : ''}${enter ? ' enter' : ''}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="msg-col"><div class="bubble scn">${inner}${star}</div>${m.role === 'assistant' ? picsHTML(m) + chronHTML(m) + toolsHTML(m, i) : ''}</div></div>${m.role === 'user' ? rollHTML(m, enter) : movesHTML(m, i)}`;
     }
     function renderAboard() {
       const bar = document.querySelector('#aboard');
@@ -247,7 +251,7 @@ export async function chatView(id, focusId = null) {
       if (m.role === 'user') return `<div class="${cls}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="bubble">${formatMessage(named(textOf(m), ch, 'you', me()))}${star}</div></div>${rollHTML(m, enter)}`;
       const sp = speakerOf(m);
       const tag = ix ? `<span class="spk-tag" style="--c:${sp.line?.color || '#2EAA67'};--ink:${inkOn(sp.line?.color || '#2EAA67')}">${esc(sp.name)}</span>` : '';
-      return `<div class="${cls}${m.star || m.quotes?.length ? ' starred' : ''}" data-i="${i}" data-id="${m.id}">${avatarTile(sp, 30, { expr: m.mood || 'happy', radius: 10, cls: 'msg-av' })}<div class="msg-col"><div class="bubble">${tag}${formatMessage(showAi(named(textOf(m), sp, 'you', me())))}${star}</div>${chronHTML(m)}${toolsHTML(m, i)}</div></div>${movesHTML(m, i)}`;
+      return `<div class="${cls}${m.star || m.quotes?.length ? ' starred' : ''}" data-i="${i}" data-id="${m.id}">${avatarTile(sp, 30, { expr: m.mood || 'happy', radius: 10, cls: 'msg-av' })}<div class="msg-col"><div class="bubble">${tag}${formatMessage(showAi(named(textOf(m), sp, 'you', me())))}${star}</div>${picsHTML(m)}${chronHTML(m)}${toolsHTML(m, i)}</div></div>${movesHTML(m, i)}`;
     }
     function renderAll() {
       const cut = chat.summary?.upto || 0;
@@ -516,6 +520,7 @@ export async function chatView(id, focusId = null) {
         const res = await chronicle({ chat, cast: ix ? ix.people : [ch], persona: me(), conn, settings: S.settings });
         if (res.changes.length || res.stations.length || res.time || res.ties || res.adv || res.place) target.chron = { bonds: res.changes, stations: res.stations.map((s) => s.title), ...(res.time ? { time: res.time } : {}), ...(res.ties ? { ties: res.ties } : {}), ...(res.adv ? { adv: res.adv } : {}), ...(res.place ? { place: res.place } : {}) };
         if (res.place) setScene();
+        if (res.stations.length && chat.picAuto && picConn() && !destroyed) runPaint(target, chat.picStyle || picPrefs().style);
         await saveChat(chat, false);
         const i = chat.messages.indexOf(target);
         if (!destroyed && target.chron && i >= 0) rerenderMsg(i);
@@ -614,12 +619,180 @@ export async function chatView(id, focusId = null) {
       await save();
       generate('reply');
     }
+    // ---------- scene pictures ----------
+    function picsHTML(m) {
+      if (!m.pics?.length) return '';
+      return m.pics
+        .filter((p) => (p.alt || 0) === (m.alt || 0)) // pictures belong to the version they show
+        .map((p) => (picSrc(p) ? `<figure class="pic" data-pic="${p.id}"><button type="button" class="pic-open" data-picid="${p.id}" aria-label="Open picture: ${esc(altOf(p))}"><img class="pic-img" src="${esc(picSrc(p))}" alt="${esc(altOf(p))}"></button><figcaption><span>${esc(p.caption || STYLES[p.style]?.label || 'Scene')}</span><button type="button" class="pic-more press" data-picmore="${p.id}" aria-label="Picture options">${icon('more', 18)}</button></figcaption></figure>` : ''))
+        .join('');
+    }
+    const picOwner = (pid) => chat.messages.find((x) => x.pics?.some((p) => p.id === pid));
+    function pictureSheet(m) {
+      const pc = picConn();
+      let style = chat.picStyle || picPrefs().style;
+      const who = (ix ? speakerOf(m) : ch).name;
+      openSheet({
+        label: 'Picture this',
+        html: `<h2 class="sheet-title">Picture this</h2>
+          <p class="sheet-p">${pc ? `Paints this moment with ${esc(who)}’s look${hereOf(chat) ? `, ${esc(hereOf(chat).name)}` : ''}${clockOn(chat) ? `, ${esc(partOfDay(chat.clock.min))}` : ''}. ${isDemoPics(pc) ? 'Demo pictures are free placeholders.' : `One picture, billed by ${esc(providerName(pc))}.`}` : 'Pictures need an image model: an OpenAI or OpenRouter connection set under Connections › Pictures.'}</p>
+          ${pc ? `<div class="ck-chips" role="radiogroup" aria-label="Style">${Object.entries(STYLES).map(([k, s]) => `<button type="button" class="press" role="radio" aria-checked="${style === k}" data-style="${k}">${s.label}</button>`).join('')}</div>
+          <div class="ck-tog">${toggleRow('picAuto', 'Paint each new station', 'A picture whenever the Route map gets a new station. Each one is billed.', !!chat.picAuto)}</div>` : ''}
+          <button type="button" class="pic-go press" id="picGo">${icon(pc ? 'image' : 'link', 18)}${pc ? 'Paint it' : 'Set up Pictures'}</button>`,
+        onMount(s, close) {
+          s.querySelector('.ck-chips')?.addEventListener('click', (e) => {
+            const b = e.target.closest('[data-style]');
+            if (!b) return;
+            style = b.dataset.style;
+            s.querySelectorAll('[data-style]').forEach((x) => x.setAttribute('aria-checked', x === b));
+          });
+          const tog = s.querySelector('#picAuto');
+          if (tog) bindSwitch(tog, async (on) => ((chat.picAuto = on), await saveChat(chat)));
+          s.querySelector('#picGo').addEventListener('click', async () => {
+            close();
+            if (!pc) return void (location.hash = '#/connections');
+            chat.picStyle = style;
+            await saveChat(chat, false);
+            runPaint(m, style);
+          });
+        },
+      });
+    }
+    // The plate shows the scene being described line by line, like a departure board, then the picture.
+    async function runPaint(m, style) {
+      const el = log.querySelector(`.msg[data-id="${CSS.escape(m.id)}"] .msg-col`);
+      if (!el) return;
+      const ctlP = new AbortController();
+      const plate = document.createElement('figure');
+      plate.className = 'pic painting';
+      plate.innerHTML = `<div class="pic-board" aria-hidden="true"><span class="pic-wait">Describing the scene…</span></div><figcaption><span class="pic-status" role="status">Painting · ${esc(STYLES[style]?.label || '')}</span><button type="button" class="pic-cancel press">Cancel</button></figcaption>`;
+      const bubble = el.querySelector('.bubble');
+      bubble.after(plate);
+      if (nearBottom()) toBottom(true);
+      plate.querySelector('.pic-cancel').addEventListener('click', () => ctlP.abort());
+      const board = plate.querySelector('.pic-board');
+      let timer = 0;
+      try {
+        const rec = await paint({
+          chat,
+          cast: ix ? ix.people : [ch],
+          m,
+          persona: me(),
+          textConn: connectionFor(ch),
+          style,
+          signal: ctlP.signal,
+          onPrompt: (p) => {
+            const words = p.toUpperCase().split(/\s+/);
+            const lines = [];
+            for (let k = 0; k < words.length; k += 6) lines.push(words.slice(k, k + 6).join(' '));
+            board.innerHTML = '';
+            if (reducedMotion()) return void (board.innerHTML = lines.map((l) => `<span>${esc(l)}</span>`).join(''));
+            let k = 0;
+            timer = setInterval(() => {
+              if (k >= lines.length) return clearInterval(timer);
+              const s = document.createElement('span');
+              s.textContent = lines[k++];
+              board.appendChild(s);
+            }, 220);
+          },
+        });
+        clearInterval(timer);
+        (m.pics ||= []).push(rec);
+        await saveChat(chat);
+        if (destroyed) return;
+        const i = chat.messages.indexOf(m);
+        if (i >= 0) rerenderMsg(i);
+        log.querySelector(`[data-pic="${rec.id}"]`)?.classList.add('fresh');
+        toast('Painted');
+      } catch (e) {
+        clearInterval(timer);
+        if (e.name === 'AbortError') return plate.remove();
+        plate.classList.add('failed');
+        board.removeAttribute('aria-hidden');
+        board.innerHTML = `<b>Couldn’t paint this one.</b><span>${esc(e.message || '')}${e.hint ? ' ' + esc(e.hint) : ''}</span>`;
+        const cap = plate.querySelector('figcaption');
+        cap.innerHTML = `<span role="status">Couldn’t paint</span><button type="button" class="pic-cancel press">Paint again</button>`;
+        cap.querySelector('button').addEventListener('click', () => (plate.remove(), runPaint(m, style)));
+      }
+    }
+    async function picAction(pid, what) {
+      const m = picOwner(pid);
+      const p = m?.pics.find((x) => x.id === pid);
+      if (!p) return;
+      const who = ix ? speakerOf(m) : ch;
+      if (what === 'bg') {
+        chat.bgPic = chat.bgPic === p.key ? null : p.key;
+        await saveChat(chat);
+        setScene();
+        toast(chat.bgPic ? 'Set as this chat’s background' : 'Background picture removed');
+      } else if (what === 'portrait') {
+        who.avatarImage = await squareOf(picSrc(p));
+        await saveCharacter(who);
+        renderAll();
+        toast(`${who.name}’s portrait updated`);
+      } else if (what === 'again') runPaint(m, p.style);
+      else if (what === 'delete') {
+        if (!(await confirmSheet({ title: 'Delete this picture?', body: 'It’s removed from this chat and from the app.', ok: 'Delete', danger: true }))) return;
+        m.pics = m.pics.filter((x) => x !== p);
+        if (chat.bgPic === p.key) (chat.bgPic = null), setScene();
+        await saveChat(chat);
+        await gcPictures();
+        rerenderMsg(chat.messages.indexOf(m));
+      }
+    }
+    const picItems = (pid) => {
+      const m = picOwner(pid);
+      const p = m?.pics.find((x) => x.id === pid);
+      const who = m && (ix ? speakerOf(m) : ch);
+      return [
+        { icon: 'image', label: chat.bgPic === p?.key ? 'Remove as background' : 'Use as background', on: () => picAction(pid, 'bg') },
+        // Only for characters shown as a letter.
+        ...(who && !who.avatarImage && who.preset === 'initial' ? [{ icon: 'user', label: `Use as ${who.name}’s portrait`, on: () => picAction(pid, 'portrait') }] : []),
+        { icon: 'refresh', label: 'Paint again (new picture)', on: () => picAction(pid, 'again') },
+        { icon: 'trash', label: 'Delete picture', on: () => picAction(pid, 'delete') },
+      ];
+    };
+    log.addEventListener('click', (e) => {
+      const more = e.target.closest('[data-picmore]');
+      if (more) return openMenu(more, picItems(more.dataset.picmore));
+      const opener = e.target.closest('.pic-open');
+      if (!opener) return;
+      e.stopImmediatePropagation();
+      const img = opener.querySelector('img');
+      const pid = opener.dataset.picid;
+      const p = picOwner(pid)?.pics.find((x) => x.id === pid);
+      const lb = document.createElement('div');
+      lb.className = 'lightbox pic-lb';
+      lb.setAttribute('role', 'dialog');
+      lb.setAttribute('aria-modal', 'true');
+      lb.setAttribute('aria-label', 'Picture');
+      lb.innerHTML = `<img src="${esc(img.getAttribute('src'))}" alt="${esc(img.alt)}"><div class="pic-lb-bar"><details><summary>${icon('chev', 16)}What was painted</summary><p>${esc(p?.prompt || '')}</p></details><div class="pic-lb-acts">${picItems(pid).map((x, k) => `<button type="button" class="press" data-k="${k}">${icon(x.icon, 16)}${esc(x.label)}</button>`).join('')}<button type="button" class="press" data-close>${icon('x', 16)}Close</button></div></div>`;
+      const shut = () => (lb.remove(), removeEventListener('keydown', esc1), opener.isConnected && opener.focus());
+      // Escape closes; Tab stays inside the picture view.
+      const esc1 = (k) => {
+        if (k.key === 'Escape') return shut();
+        if (k.key !== 'Tab') return;
+        const f = [...lb.querySelectorAll('button, summary')];
+        const i = f.indexOf(document.activeElement);
+        if (k.shiftKey && i <= 0) (k.preventDefault(), f[f.length - 1].focus());
+        else if (!k.shiftKey && i === f.length - 1) (k.preventDefault(), f[0].focus());
+      };
+      lb.addEventListener('click', (ev) => {
+        const b = ev.target.closest('[data-k]');
+        if (b) return shut(), picItems(pid)[+b.dataset.k].on();
+        if (ev.target.closest('[data-close]') || ev.target === lb || ev.target.tagName === 'IMG') shut();
+      });
+      addEventListener('keydown', esc1);
+      document.body.appendChild(lb);
+      lb.querySelector('[data-close]').focus();
+    }, true);
+
     // ---------- world map ----------
     // The background follows where the story is (a place's scene), else the character's own.
     function setScene() {
       const el = root.querySelector('#scene');
-      const k = sceneKey();
-      if (el && el.dataset.k !== k) (el.dataset.k = k), (el.innerHTML = k && k !== 'none' ? sceneSVG(k) : '');
+      const k = sceneId();
+      if (el && el.dataset.k !== k) (el.dataset.k = k), (el.innerHTML = sceneInner());
     }
     // Arriving from the World map: the scene starts at the new place.
     {
@@ -866,6 +1039,7 @@ export async function chatView(id, focusId = null) {
           ...(lines.length ? [{ icon: 'star', label: m.quotes?.length ? `Star a line (${m.quotes.length} starred)` : 'Star a line', on: () => starLineSheet(m, i, lines) }] : []),
           { icon: 'star', label: m.star ? 'Remove star from reply' : lines.length ? 'Star whole reply' : 'Star to Logbook', on: () => toggleStar(m, i) },
           { icon: 'pin', label: 'Pin to notes', on: () => pin(m) },
+          ...(m.role === 'assistant' ? [{ icon: 'image', label: 'Picture this', on: () => pictureSheet(m) }] : []),
           { icon: 'route', label: (chat.route || []).some((s) => s.msgId === m.id) ? 'On the route map' : 'Mark on route map', on: () => ((chat.route || []).some((s) => s.msgId === m.id) ? (location.hash = `#/route/${encodeURIComponent(chat.id)}`) : markSheet(m)) },
           ...(ix ? [] : [{ icon: 'track', label: 'Branch from here', on: () => branch(i) }]),
           '-',
@@ -971,6 +1145,7 @@ export async function chatView(id, focusId = null) {
       renderAll();
       await save();
       updateTokens();
+      setTimeout(() => gcPictures(), 6000); // its pictures go once Undo is no longer offered
       toast('Message deleted', {
         action: 'Undo',
         onAction: async () => {
