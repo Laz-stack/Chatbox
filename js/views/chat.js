@@ -22,6 +22,7 @@ import { speak, stopSpeaking, ttsSupported } from '../tts.js';
 import { exportCardPng } from '../cards.js';
 import { chatSound, silence, signal, ambienceNow, musicPlaying } from '../sound.js';
 import { soundSheet } from './soundsheet.js';
+import { bindMarkButton } from '../markpicker.js';
 import { ibtn, avatarBullet, icon, arrow, openMenu, openSheet, toast, confirmSheet, autosize, reel, groupAvatar, toggleRow, bindSwitch } from '../ui.js';
 
 // Streams text into a bubble word by word, keeping *actions* italic as they arrive.
@@ -132,7 +133,7 @@ export async function chatView(id, focusId = null) {
     ${ix && !scene ? '<div class="nextbar" id="nextbar" role="radiogroup" aria-label="Who answers next"></div>' : ''}
     <form class="composer" id="composer">
       ${scene ? `<button type="button" class="ibtn as-btn press" id="asBtn" aria-label="Speaking as you. Tap to speak as someone else." aria-haspopup="menu">${avatarBullet(youWho(), 32)}</button>` : ''}
-      ${ibtn('asterisk', 'Add an *action*', { id: 'actBtn', attrs: 'title="Add an *action*: wraps the selection in asterisks"' })}
+      <button type="button" class="ibtn press mk-btn" id="actBtn" aria-haspopup="dialog"></button>
       <button type="button" class="dice-btn press" id="diceBtn" aria-pressed="false" aria-label="Roll a d20 with your next line" ${advOn(chat) ? '' : 'hidden'}>d20</button>
       <textarea id="input" rows="1" placeholder="${scene ? 'What you do or say…' : `Message ${esc(callName)}…`}" aria-label="Message ${esc(ch.name)}" enterkeyhint="send"></textarea>
       ${sttSupported ? `<button type="button" class="mic-btn press" id="micBtn" aria-pressed="false" aria-label="Talk instead of typing">${icon('mic', 20)}</button>` : ''}
@@ -1806,15 +1807,20 @@ export async function chatView(id, focusId = null) {
         send();
       }
     });
-    root.querySelector('#actBtn').addEventListener('click', () => {
-      const s = input.selectionStart;
-      const e = input.selectionEnd;
-      const v = input.value;
-      input.value = v.slice(0, s) + '*' + v.slice(s, e) + '*' + v.slice(e);
-      input.focus();
-      input.setSelectionRange(s + 1, e + 1);
-      fit();
-      sendBtn.disabled = !input.value.trim();
+    // The mark button: tap wraps the selection (or puts a pair at the caret) in *, " or ';
+    // hold it to pick another mark.
+    bindMarkButton(root.querySelector('#actBtn'), {
+      color: () => (ix ? '#ECECEC' : lineAccent(ch.line?.color)),
+      onTap(mark) {
+        const s = input.selectionStart;
+        const e = input.selectionEnd;
+        const v = input.value;
+        input.value = v.slice(0, s) + mark.k + v.slice(s, e) + mark.k + v.slice(e);
+        input.focus();
+        input.setSelectionRange(s + 1, e + 1);
+        fit();
+        sendBtn.disabled = !input.value.trim();
+      },
     });
 
     const onChip = (e) => {
