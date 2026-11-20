@@ -16,6 +16,12 @@ export const DIALOGUE = {
   white: { label: 'White', dark: '#FFFFFF', cream: '#0A0A0A' },
   parchment: { label: 'Parchment', dark: '#F2E6C9', cream: '#5A4410' },
   sand: { label: 'Sand', dark: '#E3C99A', cream: '#6B4E1A' },
+  rose: { label: 'Rose', dark: '#FFB3C7', cream: '#9A1D47' },
+  peach: { label: 'Peach', dark: '#FFC59E', cream: '#87390D' },
+  mint: { label: 'Mint', dark: '#9EE6C2', cream: '#11603F' },
+  teal: { label: 'Teal', dark: '#86E0E0', cream: '#0A5858' },
+  sky: { label: 'Sky', dark: '#9FD3FF', cream: '#124A80' },
+  lilac: { label: 'Lilac', dark: '#CDBEFF', cream: '#4A2D99' },
   // On black: the speaker's colour lightened; in cream bubbles: the character's colour darkened (set in CSS).
   line: { label: 'Speaker’s line colour', dark: '#FFFFFF', cream: '#0A0A0A' },
 };
@@ -23,6 +29,33 @@ export const NARRATION = {
   grey: { label: 'Grey', dark: '#9B9B9B' },
   soft: { label: 'Soft grey', dark: '#BDBDBD' },
   warm: { label: 'Warm grey', dark: '#D9D6CC' },
+  sepia: { label: 'Sepia', dark: '#CDB99A' },
+  blue: { label: 'Blue grey', dark: '#A9B9CF' },
+  lilac: { label: 'Lilac grey', dark: '#BFB5DA' },
+  sage: { label: 'Sage', dark: '#B2C3AE' },
+};
+// The character's bubble (Bubbles layout). Light ones keep dark text, dark ones light text; every
+// speech colour above stays at 4.5:1 or more on each. No black: it would vanish into the background.
+export const BUBBLES = {
+  cream: { label: 'Cream', bg: '#ECECEC' },
+  white: { label: 'White', bg: '#FFFFFF' },
+  paper: { label: 'Paper', bg: '#F2E9DA' },
+  mist: { label: 'Mist', bg: '#DDE4EC' },
+  sage: { label: 'Sage', bg: '#DCE6DA' },
+  blush: { label: 'Blush', bg: '#F2DDE4' },
+  lilac: { label: 'Lilac', bg: '#E4DEF4' },
+  line: { label: 'Character’s line colour', bg: 'line' },
+  plate: { label: 'Charcoal', bg: '#262626', dark: true },
+  night: { label: 'Night', bg: '#17233A', dark: true },
+  plum: { label: 'Plum', bg: '#2B1F36', dark: true },
+  forest: { label: 'Forest', bg: '#17291F', dark: true },
+};
+// Your own bubble.
+export const MY_BUBBLES = {
+  yellow: { label: 'Yellow (Signboard)', bg: '#FDCD15' },
+  cream: { label: 'Cream', bg: '#ECECEC' },
+  white: { label: 'White', bg: '#FFFFFF' },
+  plate: { label: 'Charcoal', bg: '#262626', dark: true },
 };
 export const LAYOUTS = { bubbles: { label: 'Bubbles', note: 'Messages in bubbles' }, story: { label: 'Story', note: 'Narration as text, speech on a line' } };
 // The character's and narrator's text only (your own lines keep the standard look).
@@ -31,7 +64,7 @@ export const ALIGNS = { left: { label: 'Left' }, right: { label: 'Right' }, just
 export const TRACKS = { tight: { label: 'Tight', v: '-0.015em' }, normal: { label: 'Normal', v: '0em' }, wide: { label: 'Wide', v: '0.035em' } };
 // em: the gap between paragraphs inside one message; gap: between story blocks.
 export const PARAS = { tight: { label: 'Tight', em: '.5lh', gap: '12px' }, normal: { label: 'Normal', em: '1lh', gap: '20px' }, wide: { label: 'Wide', em: '1.7lh', gap: '30px' } };
-export const DEFAULT_TEXT = { size: 'm', font: 'archivo', dialogue: 'white', narration: 'soft', layout: 'bubbles', width: 'wide', align: 'left', track: 'normal', para: 'normal' };
+export const DEFAULT_TEXT = { size: 'm', font: 'archivo', dialogue: 'white', narration: 'soft', bubble: 'cream', me: 'yellow', layout: 'bubbles', width: 'wide', align: 'left', track: 'normal', para: 'normal' };
 export const textPrefs = () => ({ ...DEFAULT_TEXT, ...(S.settings.text || {}) });
 
 const loaded = new Set();
@@ -52,7 +85,21 @@ export function applyText(t = textPrefs()) {
   r.setProperty('--read-bubble', `${15 + d}px`);
   r.setProperty('--read-font', (FONTS[t.font] || FONTS.archivo).css);
   r.setProperty('--dlg-dark', (DIALOGUE[t.dialogue] || DIALOGUE.white).dark);
-  r.setProperty('--dlg-cream', (DIALOGUE[t.dialogue] || DIALOGUE.white).cream);
+  const bub = BUBBLES[t.bubble] || BUBBLES.cream;
+  const me = MY_BUBBLES[t.me] || MY_BUBBLES.yellow;
+  const root = document.documentElement.classList;
+  // Speech inside the bubble: the dark-ground value on a dark bubble, else the light-ground one.
+  r.setProperty('--dlg-cream', (DIALOGUE[t.dialogue] || DIALOGUE.white)[bub.dark ? 'dark' : 'cream']);
+  if (bub.bg === 'line') r.removeProperty('--bub-bg');
+  else r.setProperty('--bub-bg', bub.bg);
+  r.setProperty('--bub-ink', bub.dark ? '#ECECEC' : '#0A0A0A');
+  r.setProperty('--bub-act', bub.dark ? '#B4B4B4' : '#555555');
+  root.toggle('bub-line', bub.bg === 'line');
+  root.toggle('bub-dark', !!bub.dark);
+  r.setProperty('--me-bg', me.bg);
+  r.setProperty('--me-ink', me.dark ? '#ECECEC' : '#0A0A0A');
+  r.setProperty('--me-act', me.dark ? '#B4B4B4' : 'rgba(10, 10, 10, .7)');
+  root.toggle('me-dark', !!me.dark);
   r.setProperty('--narr-dark', (NARRATION[t.narration] || NARRATION.soft).dark);
   document.documentElement.classList.toggle('dlg-line', t.dialogue === 'line');
   r.setProperty('--read-track', (TRACKS[t.track] || TRACKS.normal).v);

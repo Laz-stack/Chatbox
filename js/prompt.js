@@ -13,7 +13,7 @@ import { compileSheet } from './blueprint.js';
 import { sceneSystem, STEER, turnAsScene, hasCastLines } from './scene.js';
 
 export const macro = (t, ch, persona) =>
-  (t || '').replace(/\{\{\s*char\s*\}\}/gi, ch?.name || 'Character').replace(/\{\{\s*user\s*\}\}/gi, persona?.name?.trim() || 'the user');
+  (t || '').replace(/\{\{?\s*char\s*\}?\}|<\s*bot\s*>/gi, ch?.name || 'Character').replace(/\{\{?\s*user\s*\}?\}|<\s*user\s*>/gi, persona?.name?.trim() || 'the user');
 
 // group: { people: [characters], scene: '', mode: 'turns' | 'scene', passengers } inside an Interchange.
 // In 'scene' mode (a Carriage) one reply narrates the whole scene and voices every character.
