@@ -274,39 +274,95 @@ export async function deleteInterchange(id) {
 // ---------- Fares: tokens per connection and per line, by calendar month ----------
 export const monthKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 
-// Record one journey (a reply): estimated input and output tokens, against its connection and line.
-export async function recordFare(conn, lineId, inTok, outTok) {
+// Cost bookkeeping on one record. `cost`/`costN`: dollars the provider reported (OpenRouter
+// reports what it bills for each request); `uin`/`uout`: tokens with no reported cost, priced
+// with the connection's typed prices. Records from before this kept only tokens: those become
+// unreported tokens the first time they are touched.
+export function costShape(o) {
+  if (o.costN == null) (o.costN = 0), (o.cost = 0), (o.uin = o.in || 0), (o.uout = o.out || 0);
+  return o;
+}
+function addCost(o, inTok, outTok, cost) {
+  costShape(o);
+  o.in = (o.in || 0) + inTok;
+  o.out = (o.out || 0) + outTok;
+  if (cost != null && Number.isFinite(+cost)) (o.cost += +cost), o.costN++;
+  else (o.uin += inTok), (o.uout += outTok);
+}
+// A cost that came in late (a stopped reply, looked up afterwards): those tokens are no longer unpriced.
+function settleCost(o, inTok, outTok, u) {
+  if (!o) return;
+  costShape(o);
+  o.uin = Math.max(0, o.uin - inTok);
+  o.uout = Math.max(0, o.uout - outTok);
+  o.in = Math.max(0, o.in + (u.inTok ?? inTok) - inTok);
+  o.out = Math.max(0, o.out + (u.outTok ?? outTok) - outTok);
+  o.cost += +u.cost;
+  o.costN++;
+}
+
+// One request's meter: pass `onUsage` to complete(), then `commit` with what to record.
+// `commit(write)` calls write(inTok, outTok, cost) with the provider's numbers when it sent them,
+// and a cost that arrives later (a stopped OpenRouter reply) settles the same record.
+export function meter() {
+  let use = null;
+  let settle = null;
+  return {
+    onUsage(u) {
+      if (u.late && settle) settle(u);
+      else use = u;
+    },
+    get usage() {
+      return use;
+    },
+    async commit(inTok, outTok, write) {
+      const i = use?.inTok ?? inTok;
+      const o = use?.outTok ?? outTok;
+      const fn = await write(i, o, use?.cost ?? null);
+      if (use?.cost == null && typeof fn === 'function') settle = (u) => u.cost != null && fn(i, o, u);
+    },
+  };
+}
+
+// Record one journey (a reply): input and output tokens (the provider's count when it sent one,
+// else estimated) and its cost when reported, against its connection and line.
+export async function recordFare(conn, lineId, inTok, outTok, cost = null) {
   if (!conn) return;
   const k = monthKey();
   const mo = (S.fares.months[k] ||= { conns: {}, lines: {} });
   const c = (mo.conns[conn.id] ||= { name: '', model: '', in: 0, out: 0, rides: 0 });
   c.name = conn.name || conn.provider;
   c.model = conn.provider === 'demo' ? 'Demo replies' : conn.model;
-  c.in += inTok;
-  c.out += outTok;
   c.rides++;
   const l = (mo.lines[lineId] ||= { in: 0, out: 0, byConn: {} });
-  l.in += inTok;
-  l.out += outTok;
   const lc = (l.byConn[conn.id] ||= { in: 0, out: 0 });
-  lc.in += inTok;
-  lc.out += outTok;
+  for (const o of [c, l, lc]) addCost(o, inTok, outTok, cost);
   await saveFares();
+  return async (i, o, u) => {
+    const m = S.fares.months[k];
+    const ln = m?.lines[lineId];
+    for (const x of [m?.conns[conn.id], ln, ln?.byConn[conn.id]]) settleCost(x, i, o, u);
+    await saveFares();
+  };
 }
 
 // Background jobs (the Helper receipt): tokens per connection and how many of each job.
-export async function recordJob(conn, job, inTok, outTok) {
+export async function recordJob(conn, job, inTok, outTok, cost = null) {
   if (!conn) return;
-  const mo = (S.fares.months[monthKey()] ||= { conns: {}, lines: {} });
+  const k = monthKey();
+  const mo = (S.fares.months[k] ||= { conns: {}, lines: {} });
   const h = (mo.helper ||= { conns: {} });
   const c = (h.conns[conn.id] ||= { name: '', model: '', in: 0, out: 0, calls: 0, jobs: {} });
   c.name = conn.name || conn.provider;
   c.model = conn.provider === 'demo' ? 'Demo' : conn.model;
-  c.in += inTok;
-  c.out += outTok;
+  addCost(c, inTok, outTok, cost);
   c.calls++;
   c.jobs[job] = (c.jobs[job] || 0) + 1;
   await saveFares();
+  return async (i, o, u) => {
+    settleCost(S.fares.months[k]?.helper?.conns[conn.id], i, o, u);
+    await saveFares();
+  };
 }
 // Pictures (the Scenes receipt): count per connection and model; `cost` is what the provider
 // reported (OpenRouter), else null and Pictures › price per picture is used.
@@ -330,10 +386,21 @@ export async function recordPicture(conn, model, cost, lineId, price = null) {
 
 // Dollars for a token count on a connection, or null when that connection has no prices set.
 export function fareCost(connId, inTok, outTok) {
+  if (!inTok && !outTok) return 0;
   const c = connection(connId);
   if (c?.provider === 'demo') return 0;
   if (!c || c.priceIn == null || c.priceOut == null || c.priceIn === '' || c.priceOut === '') return null;
   return (inTok * +c.priceIn + outTok * +c.priceOut) / 1e6;
+}
+// What a record cost: reported dollars plus unreported tokens at typed prices.
+// { cost, est } where est is true when part of it is priced from typed prices; cost null when
+// some tokens have no price at all.
+export function costOf(o, connId) {
+  if (!o) return { cost: 0, est: false, unpriced: false };
+  const r = costShape({ ...o });
+  const rest = fareCost(connId, r.uin, r.uout);
+  const unpriced = rest == null;
+  return { cost: unpriced ? (r.costN ? r.cost : null) : r.cost + rest, est: !!(r.uin || r.uout) && !unpriced, unpriced: unpriced && !!(r.uin || r.uout), reported: r.costN };
 }
 
 export const character = (id) => S.characters.find((c) => c.id === id);

@@ -119,7 +119,10 @@ async function* sse(res) {
  * Run one completion.
  * onDelta(textChunk) is called as text arrives. Resolves with the full text.
  */
-export async function complete(conn, { system, messages, signal, onDelta = () => {}, stream = true, maxTokens, temperature, character }) {
+// `onUsage({ inTok, outTok, cost, id })`: what the provider says the request used. OpenRouter
+// reports `cost`, the dollars it bills; a stopped OpenRouter reply has its cost looked up a few
+// seconds later and reported with `late: true`.
+export async function complete(conn, { system, messages, signal, onDelta = () => {}, stream = true, maxTokens, temperature, character, onUsage }) {
   if (!conn) throw new ProviderError('No connection set up yet.', 0, 'Add a connection in Settings.');
   const p = PROVIDERS[conn.provider];
   if (p.format === 'demo') return demoReply({ messages, signal, onDelta, character });
@@ -147,33 +150,76 @@ export async function complete(conn, { system, messages, signal, onDelta = () =>
   if (!res.ok) throw await readError(res);
 
   let text = '';
+  const use = { id: '', inTok: null, outTok: null, cost: null };
+  const take = (j) => {
+    if (j?.id && !use.id) use.id = j.id;
+    const u = j?.usage || j?.message?.usage;
+    if (!u) return;
+    if (u.prompt_tokens != null) use.inTok = u.prompt_tokens;
+    if (u.input_tokens != null) use.inTok = u.input_tokens + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
+    if (u.completion_tokens != null) use.outTok = u.completion_tokens;
+    if (u.output_tokens != null) use.outTok = u.output_tokens;
+    if (u.cost != null && Number.isFinite(+u.cost)) use.cost = +u.cost;
+  };
+  const report = () => {
+    if (onUsage && (use.inTok != null || use.outTok != null || use.cost != null)) onUsage({ ...use });
+  };
   if (!stream) {
     const j = await res.json();
+    take(j);
     text = p.format === 'anthropic' ? (j.content || []).map((b) => b.text || '').join('') : j.choices?.[0]?.message?.content || '';
+    report();
     onDelta(text);
     return text;
   }
-  for await (const data of sse(res)) {
-    if (data === '[DONE]') break;
-    let j;
+  try {
+    for await (const data of sse(res)) {
+      if (data === '[DONE]') break;
+      let j;
+      try {
+        j = JSON.parse(data);
+      } catch {
+        continue;
+      }
+      if (j.error) throw new ProviderError(j.error.message || 'The provider returned an error.', 0);
+      take(j);
+      let d = '';
+      if (p.format === 'anthropic') {
+        if (j.type === 'content_block_delta') d = j.delta?.text || '';
+      } else {
+        d = j.choices?.[0]?.delta?.content || '';
+      }
+      if (d) {
+        text += d;
+        onDelta(d);
+      }
+    }
+  } catch (e) {
+    // Stopped part-way: OpenRouter still bills what was generated. Ask it what that came to.
+    if (e.name === 'AbortError' && onUsage && conn.provider === 'openrouter' && use.id && use.cost == null) lookupCost(conn, use.id).then((u) => u && onUsage({ ...u, id: use.id, late: true }));
+    throw e;
+  }
+  report();
+  return text;
+}
+
+// What OpenRouter billed for one request (GET /generation). The record can take a few seconds
+// to appear, so this tries a few times. Returns { cost, inTok, outTok } or null.
+export async function lookupCost(conn, id, waits = [1500, 3000, 6000, 12000]) {
+  for (const w of waits) {
+    await new Promise((r) => setTimeout(r, w));
     try {
-      j = JSON.parse(data);
+      const res = await send(conn, `${baseOf(conn)}/generation?id=${encodeURIComponent(id)}`, { headers: headers(conn) });
+      if (res.status === 404) continue;
+      if (!res.ok) return null;
+      const d = (await res.json())?.data;
+      if (d?.total_cost == null) continue;
+      return { cost: +d.total_cost, inTok: d.tokens_prompt ?? d.native_tokens_prompt ?? null, outTok: d.tokens_completion ?? d.native_tokens_completion ?? null };
     } catch {
-      continue;
-    }
-    if (j.error) throw new ProviderError(j.error.message || 'The provider returned an error.', 0);
-    let d = '';
-    if (p.format === 'anthropic') {
-      if (j.type === 'content_block_delta') d = j.delta?.text || '';
-    } else {
-      d = j.choices?.[0]?.delta?.content || '';
-    }
-    if (d) {
-      text += d;
-      onDelta(d);
+      return null;
     }
   }
-  return text;
+  return null;
 }
 
 // ---------- Pictures ----------
@@ -199,7 +245,7 @@ export async function generateImage(conn, { model, prompt, signal }) {
   };
   if (conn.provider === 'openrouter') {
     // Some image models answer with text and pictures, some only pictures: try both shapes.
-    const ask = (modalities) => reach(baseOf(conn) + '/chat/completions', { method: 'POST', headers: headers(conn), body: JSON.stringify({ model: m, messages: [{ role: 'user', content: prompt }], modalities, usage: { include: true } }), signal });
+    const ask = (modalities) => reach(baseOf(conn) + '/chat/completions', { method: 'POST', headers: headers(conn), body: JSON.stringify({ model: m, messages: [{ role: 'user', content: prompt }], modalities }), signal });
     let res = await ask(['image', 'text']);
     if (!res.ok && (res.status === 400 || res.status === 404)) res = await ask(['image']);
     if (!res.ok) throw await readError(res);
