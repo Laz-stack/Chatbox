@@ -5,6 +5,7 @@ import { estimateTokens } from './util.js';
 import { bondsLayer } from './chronicle.js';
 import { clockLayer } from './clock.js';
 import { tiesLayer } from './ties.js';
+import { advLayer, rollNote, rollShort } from './adventure.js';
 import { textOf, matchLore } from './store.js';
 import { PROVIDERS } from './providers.js';
 import { compileSheet } from './blueprint.js';
@@ -89,6 +90,8 @@ export function buildPrompt({ char, chat, conn, settings, persona, upto = null, 
   if (bonds) memory.push(bonds);
   const ties = tiesLayer(chat, group?.people, isScene ? null : char.id);
   if (ties) memory.push(ties);
+  const adv = advLayer(chat, youName);
+  if (adv) memory.push(adv);
   const time = clockLayer(chat);
   if (time) memory.push(time);
   if (memory.length) layers.push({ key: 'notes', name: 'Notes and summary', text: memory.join('\n\n') });
@@ -103,12 +106,15 @@ export function buildPrompt({ char, chat, conn, settings, persona, upto = null, 
   const you = persona?.name?.trim() || 'User';
   const nameOf = (id) => group?.people.find((p) => p.id === id)?.name || 'Someone';
   // In a group, only this speaker's own lines are "assistant"; everyone else's arrive as named user lines.
+  // Only the newest dice check carries the full instruction.
+  const lastRoll = [...chat.messages.slice(start, end)].reverse().find((x) => x.roll);
   let hist = chat.messages
     .slice(start, end)
     .filter((x) => !x.error)
     .map((x) => {
       const own = group?.people.find((p) => p.id === x.speaker) || char;
-      const t = macro(textOf(x), own, persona).replace(/!\[[^\]]*\]\([^)]*\)\s*/g, '').trim();
+      // A dice check rides along with your line as a bracketed note.
+      const t = (macro(textOf(x), own, persona).replace(/!\[[^\]]*\]\([^)]*\)\s*/g, '').trim() + (x.roll ? '\n' + (x === lastRoll ? rollNote(x.roll) : rollShort(x.roll)) : '')).trim();
       if (isScene) {
         // Replies from Take turns (one speaker each) are rewritten as "Name: …" so the scene keeps its format.
         if (x.role === 'assistant') return { role: 'assistant', content: x.speaker && !hasCastLines(t, group.people) ? turnAsScene(t, nameOf(x.speaker)) : t };

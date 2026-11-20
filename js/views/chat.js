@@ -8,6 +8,7 @@ import { buildPrompt } from '../prompt.js';
 import { shouldSummarize, summarize } from '../memory.js';
 import { chronicle, chronicleDue, trackingOn, changeText, markStation, undoReply } from '../chronicle.js';
 import { clockOn, chipText, longText, partOfDay, clockSheet } from '../clock.js';
+import { advOn, roll, RESULT, suggestMoves, advRowText } from '../adventure.js';
 import { esc, uid, formatMessage, markProse, fmtNum, estimateTokens, inkOn, ago, plain, detectMood, copyText, download, slug, reducedMotion, motion, lineAccent, EASE_OUT } from '../util.js';
 import { avatarTile } from '../avatar.js';
 import { sceneSVG } from '../scenes.js';
@@ -116,6 +117,7 @@ export async function chatView(id, focusId = null) {
     <form class="composer" id="composer">
       ${scene ? `<button type="button" class="ibtn as-btn press" id="asBtn" aria-label="Speaking as you. Tap to speak as someone else." aria-haspopup="menu">${avatarBullet(youWho(), 32)}</button>` : ''}
       ${ibtn('asterisk', 'Add an *action*', { id: 'actBtn', attrs: 'title="Add an *action*: wraps the selection in asterisks"' })}
+      <button type="button" class="dice-btn press" id="diceBtn" aria-pressed="false" aria-label="Roll a d20 with your next line" ${advOn(chat) ? '' : 'hidden'}>d20</button>
       <textarea id="input" rows="1" placeholder="${scene ? 'What you do or say…' : `Message ${esc(callName)}…`}" aria-label="Message ${esc(ch.name)}" enterkeyhint="send"></textarea>
       <button type="submit" class="send press" id="sendBtn" aria-label="Send" disabled>${arrow(22, 'currentColor')}</button>
     </form>
@@ -218,7 +220,7 @@ export async function chatView(id, focusId = null) {
         else if (m.as) inner = blockHTML({ kind: 'line', who: speakerOf({ speaker: m.as }) }, textOf(m), { by: true });
         else inner = blockHTML({ kind: 'you' }, textOf(m));
       } else inner = sceneParts(textOf(m), m).join('');
-      return `<div class="msg scene ${m.role === 'user' ? 'mine' : 'ai'}${m.dir ? ' dir' : ''}${enter ? ' enter' : ''}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="msg-col"><div class="bubble scn">${inner}${star}</div>${m.role === 'assistant' ? chronHTML(m) + toolsHTML(m, i) : ''}</div></div>`;
+      return `<div class="msg scene ${m.role === 'user' ? 'mine' : 'ai'}${m.dir ? ' dir' : ''}${enter ? ' enter' : ''}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="msg-col"><div class="bubble scn">${inner}${star}</div>${m.role === 'assistant' ? chronHTML(m) + toolsHTML(m, i) : ''}</div></div>${m.role === 'user' ? rollHTML(m, enter) : movesHTML(m, i)}`;
     }
     function renderAboard() {
       const bar = document.querySelector('#aboard');
@@ -239,10 +241,10 @@ export async function chatView(id, focusId = null) {
       if (m.dir) return `<div class="msg dirline${enter ? ' enter' : ''}" data-i="${i}" data-id="${m.id}">${dirSign(m)}</div>`;
       const cls = `msg ${m.role === 'user' ? 'user' : 'ai'}${enter ? ' enter' : ''}`;
       const star = m.star || m.quotes?.length ? `<span class="star-b" title="In your Logbook">${icon('star', 13)}</span>` : '';
-      if (m.role === 'user') return `<div class="${cls}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="bubble">${formatMessage(named(textOf(m), ch, 'you', me()))}${star}</div></div>`;
+      if (m.role === 'user') return `<div class="${cls}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="bubble">${formatMessage(named(textOf(m), ch, 'you', me()))}${star}</div></div>${rollHTML(m, enter)}`;
       const sp = speakerOf(m);
       const tag = ix ? `<span class="spk-tag" style="--c:${sp.line?.color || '#2EAA67'};--ink:${inkOn(sp.line?.color || '#2EAA67')}">${esc(sp.name)}</span>` : '';
-      return `<div class="${cls}${m.star || m.quotes?.length ? ' starred' : ''}" data-i="${i}" data-id="${m.id}">${avatarTile(sp, 30, { expr: m.mood || 'happy', radius: 10, cls: 'msg-av' })}<div class="msg-col"><div class="bubble">${tag}${formatMessage(showAi(named(textOf(m), sp, 'you', me())))}${star}</div>${chronHTML(m)}${toolsHTML(m, i)}</div></div>`;
+      return `<div class="${cls}${m.star || m.quotes?.length ? ' starred' : ''}" data-i="${i}" data-id="${m.id}">${avatarTile(sp, 30, { expr: m.mood || 'happy', radius: 10, cls: 'msg-av' })}<div class="msg-col"><div class="bubble">${tag}${formatMessage(showAi(named(textOf(m), sp, 'you', me())))}${star}</div>${chronHTML(m)}${toolsHTML(m, i)}</div></div>${movesHTML(m, i)}`;
     }
     function renderAll() {
       const cut = chat.summary?.upto || 0;
@@ -263,7 +265,10 @@ export async function chatView(id, focusId = null) {
     }
     function rerenderMsg(i) {
       const el = log.querySelector(`.msg[data-i="${i}"]`);
-      if (el) el.outerHTML = msgHTML(chat.messages[i], i);
+      if (!el) return;
+      // Rows that sit beside a message (its dice roll, its suggested moves) are redrawn with it.
+      log.querySelectorAll(`[data-for="${CSS.escape(chat.messages[i].id)}"]`).forEach((x) => x.remove());
+      el.outerHTML = msgHTML(chat.messages[i], i);
     }
     const writeChip = () => `<button type="button" class="press" data-chip="write">${icon('edit', 16)}Write for me</button>`;
     function renderChips() {
@@ -360,6 +365,8 @@ export async function chatView(id, focusId = null) {
         idx = lastAiIndex();
         if (idx < 0) return;
         target = chat.messages[idx];
+        // Suggested moves belong to the text they followed: a new version or more text gets new ones.
+        if (target.moves) delete target.moves, log.querySelectorAll(`.mv[data-for="${CSS.escape(target.id)}"]`).forEach((x) => x.remove());
         if (mode === 'regen') {
           target.alts.push('');
           target.alt = target.alts.length - 1;
@@ -496,14 +503,15 @@ export async function chatView(id, focusId = null) {
       }
       if (!destroyed) updateTokens();
       // Route map and Bonds: a short background read every couple of replies.
-      if (!error && text.trim() && trackingOn(S.settings) && chronicleDue(chat)) runChronicle(conn);
+      if (!error && text.trim() && (trackingOn(S.settings) || advOn(chat)) && chronicleDue(chat)) runChronicle(conn);
+      if (!error && text.trim() && advOn(chat)) runMoves(conn, target);
     }
 
     async function runChronicle(conn) {
       const target = chat.messages[chat.messages.length - 1];
       try {
         const res = await chronicle({ chat, cast: ix ? ix.people : [ch], persona: me(), conn, settings: S.settings });
-        if (res.changes.length || res.stations.length || res.time || res.ties) target.chron = { bonds: res.changes, stations: res.stations.map((s) => s.title), ...(res.time ? { time: res.time } : {}), ...(res.ties ? { ties: res.ties } : {}) };
+        if (res.changes.length || res.stations.length || res.time || res.ties || res.adv) target.chron = { bonds: res.changes, stations: res.stations.map((s) => s.title), ...(res.time ? { time: res.time } : {}), ...(res.ties ? { ties: res.ties } : {}), ...(res.adv ? { adv: res.adv } : {}) };
         await saveChat(chat, false);
         const i = chat.messages.indexOf(target);
         if (!destroyed && target.chron && i >= 0) rerenderMsg(i);
@@ -523,6 +531,7 @@ export async function chatView(id, focusId = null) {
         const p = cast.find((q) => q.id === x.who);
         return p ? `<a class="chr-row press" href="#/bonds/${encodeURIComponent(chat.id)}"><span class="chr-dot" style="background:${p.line?.color || '#2EAA67'}" aria-hidden="true"></span><span>${esc(p.name)} · ${esc(changeText(x.d))}${x.why ? ` · ${esc(x.why)}` : ''}</span></a>` : '';
       });
+      if (c.adv?.length) rows.push(`<a class="chr-row press" href="#/adventure/${encodeURIComponent(chat.id)}">${icon('dice', 13)}<span>${esc(advRowText(c.adv))}</span></a>`);
       for (const s of c.stations || []) rows.push(`<a class="chr-row press" href="#/route/${encodeURIComponent(chat.id)}">${icon('route', 13)}<span>New station · ${esc(s)}</span></a>`);
       return rows.filter(Boolean).length ? `<div class="chr">${rows.join('')}</div>` : '';
     }
@@ -562,21 +571,26 @@ export async function chatView(id, focusId = null) {
       await saveChat(chat);
     }
 
-    async function send() {
-      const t = input.value.trim();
+    // `text`: send this instead of the composer (a picked move), leaving any draft in place.
+    async function send(risky = false, text = null) {
+      const t = (text ?? input.value).trim();
       if (!t || busy) return;
       stopSpeaking();
       const m = { id: uid(), role: 'user', alts: [t], alt: 0, at: Date.now() };
+      // Adventure mode: a d20 check rides along (the d20 toggle, or a risky suggested move).
+      const dice = root.querySelector('#diceBtn');
+      if (advOn(chat) && (risky || dice?.getAttribute('aria-pressed') === 'true')) m.roll = roll();
+      dice?.setAttribute('aria-pressed', 'false');
       if (speakAs) (m.as = speakAs), setSpeakAs(null);
       chat.messages.push(m);
       const idx = chat.messages.length - 1;
       log.querySelector('.empty')?.remove();
       log.querySelector('.err')?.remove();
-      // Drop tools from the previous last message.
-      log.querySelectorAll('.msg-tools').forEach((x) => x.remove());
+      // Drop tools (and suggested moves) from the previous last message.
+      log.querySelectorAll('.msg-tools, .mv').forEach((x) => x.remove());
       log.insertAdjacentHTML('beforeend', msgHTML(m, idx, true));
-      input.value = '';
-      fit();
+      if (m.roll) flipRoll(log.querySelector(`.roll-row[data-roll="${m.id}"]`));
+      if (text == null) (input.value = ''), fit();
       toBottom(true);
       await save();
       generate('reply');
@@ -595,6 +609,71 @@ export async function chatView(id, focusId = null) {
       await save();
       generate('reply');
     }
+    // ---------- adventure mode ----------
+    function rollHTML(m, enter = false) {
+      if (!m.roll) return '';
+      const big = m.roll.result === 'crit' || m.roll.result === 'fumble';
+      return `<div class="roll-row${big ? ' big' : ''}${enter ? ' enter' : ''}" data-roll="${m.id}" data-for="${m.id}"><span class="roll-n num" aria-hidden="true">${m.roll.n}</span><span class="roll-w"><span class="vh">d20 rolled ${m.roll.n}: </span>${RESULT[m.roll.result]}</span></div>`;
+    }
+    // The number flips like a split-flap board while the reply is on its way, then settles.
+    function flipRoll(el) {
+      if (!el) return;
+      const n = el.querySelector('.roll-n');
+      const w = el.querySelector('.roll-w');
+      const final = n.textContent;
+      if (reducedMotion()) return el.classList.add('fade');
+      // Hidden by opacity only, so the log still announces the result right away.
+      w.style.opacity = '0';
+      let k = 0;
+      const t = setInterval(() => {
+        n.textContent = 1 + Math.floor(Math.random() * 20);
+        n.classList.toggle('flip');
+        if (++k >= 12) {
+          clearInterval(t);
+          n.textContent = final;
+          n.classList.remove('flip');
+          n.classList.add('settle');
+          w.style.opacity = '';
+          w.classList.add('in');
+        }
+      }, 58);
+    }
+    function movesHTML(m, i) {
+      if (!advOn(chat) || !m.moves?.length || m.movesAlt !== m.alt || i !== chat.messages.length - 1) return '';
+      return `<div class="mv" role="group" aria-label="Suggested moves" data-for="${m.id}">${m.moves
+        .map((x, k) => `<button type="button" class="mv-b press" data-move="${k}"><span class="mv-n" aria-hidden="true">${k + 1}</span><span class="mv-t">${esc(x.text)}</span>${x.risky ? '<span class="mv-d">d20</span>' : ''}${x.risky ? '<span class="vh">, risky: rolls a d20</span>' : ''}</button>`)
+        .join('')}</div>`;
+    }
+    async function runMoves(conn, target) {
+      try {
+        const moves = await suggestMoves({ chat, cast: ix ? ix.people : [ch], persona: me(), conn });
+        if (!moves.length || destroyed) return;
+        target.moves = moves;
+        target.movesAlt = target.alt;
+        await saveChat(chat, false);
+        const i = chat.messages.indexOf(target);
+        if (i === chat.messages.length - 1 && !busy) {
+          const stay = nearBottom();
+          rerenderMsg(i);
+          if (stay) toBottom(true);
+        }
+      } catch (e) {
+        console.warn('moves failed', e);
+      }
+    }
+    log.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-move]');
+      if (!b || busy) return;
+      const last = chat.messages[chat.messages.length - 1];
+      const mv = last?.moves?.[+b.dataset.move];
+      if (!mv) return;
+      send(mv.risky, `*${mv.text}*`);
+    });
+    root.querySelector('#diceBtn').addEventListener('click', (e) => {
+      const b = e.currentTarget;
+      b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') !== 'true');
+    });
+
     // ---------- story time ----------
     function updateClock() {
       const b = root.querySelector('#clockBtn');
@@ -768,6 +847,7 @@ export async function chatView(id, focusId = null) {
             const v = s.querySelector('#editTa').value.trim();
             if (!v) return toast('A message cannot be empty. Delete it instead.');
             m.alts[m.alt] = v;
+            delete m.moves; // they followed the old text
             if (m.role === 'assistant') m.mood = detectMood(v);
             rerenderMsg(i);
             await save();
@@ -884,6 +964,7 @@ export async function chatView(id, focusId = null) {
               { icon: 'download', label: 'Export card (PNG)', on: async () => download(await exportCardPng(ch), slug(ch.name) + '.card.png') },
             ]),
         { icon: 'clock', label: clockOn(chat) ? `Story time: ${longText(chat.clock)}` : 'Story time', on: openClock },
+        { icon: 'dice', label: advOn(chat) ? 'Quests and items' : 'Adventure mode', on: () => (location.hash = `#/adventure/${encodeURIComponent(chat.id)}`) },
         { icon: 'route', label: 'Route map', on: () => (location.hash = `#/route/${encodeURIComponent(chat.id)}`) },
         { icon: 'heart', label: 'Bonds', on: () => (location.hash = `#/bonds/${encodeURIComponent(chat.id)}`) },
         { icon: 'book', label: 'Diary', on: () => (location.hash = `#/diary/${encodeURIComponent(chat.id)}`) },

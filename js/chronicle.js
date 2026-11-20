@@ -8,6 +8,7 @@ import { PROVIDERS } from './providers.js';
 import { helperComplete } from './helper.js';
 import { clockOn, advance, hhmm, WEATHER } from './clock.js';
 import { tiesBrief, tiesAsk, applyTies, undoTies } from './ties.js';
+import { advOn, advBrief, advAsk, applyAdv, undoAdv } from './adventure.js';
 import { extractJson, compileSheet } from './blueprint.js';
 import { textOf, named } from './store.js';
 import { uid } from './util.js';
@@ -70,7 +71,7 @@ async function read({ chat, cast, persona, conn, settings, whole = false, signal
   if (!whole) from = Math.max(from, len - CHUNK);
   const out = { stations: [], changes: [] };
   // If any part fails, put everything back as it was.
-  const before = structuredClone({ route: chat.route, bonds: chat.bonds, clock: chat.clock, ties: chat.ties });
+  const before = structuredClone({ route: chat.route, bonds: chat.bonds, clock: chat.clock, ties: chat.ties, quests: chat.quests, items: chat.items });
   try {
     if (whole) chat.route = chat.route.filter((s) => !s.auto);
     for (let a = from; a < len; a += CHUNK) {
@@ -84,6 +85,8 @@ async function read({ chat, cast, persona, conn, settings, whole = false, signal
     chat.bonds = before.bonds;
     if (before.clock) chat.clock = before.clock;
     chat.ties = before.ties;
+    chat.quests = before.quests;
+    chat.items = before.items;
     chat.chron = { ...(chat.chron || {}), failAt: chat.messages.length };
     throw e;
   }
@@ -100,6 +103,7 @@ async function readPart({ chat, cast, persona, conn, signal, a, b }) {
     bonds_now: bonds,
     stations_so_far: chat.route.slice(-8).map((s) => s.title),
     ...(cast.length > 1 ? { cast_ties_now: tiesBrief(chat, cast) } : {}),
+    ...(advOn(chat) ? advBrief(chat) : {}),
     ...(clockOn(chat) ? { story_time_at_start: `Day ${chat.clock.day}, ${hhmm(chat.clock.min)}, ${chat.clock.weather}` } : {}),
     story_part: transcript(chat, a, b, cast, persona),
   };
@@ -113,8 +117,9 @@ async function readPart({ chat, cast, persona, conn, signal, a, b }) {
     (clockOn(chat)
       ? `\nAlso return "time":{"minutes":0,"weather":"..."}: how many minutes of story time passed during this part (0 if it is one continuous conversation of a few minutes; count skips like "an hour later" or "the next morning"), and the weather at the end (one of ${Object.keys(WEATHER).join(', ')}, or "" if unchanged).`
       : '') +
-    (cast.length > 1 ? tiesAsk(cast.map((p) => p.name)) : '');
-  const text = await helperComplete(conn, 'track', { system, messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: cast.length > 1 ? 1100 : 600, temperature: 0.4, signal });
+    (cast.length > 1 ? tiesAsk(cast.map((p) => p.name)) : '') +
+    (advOn(chat) ? advAsk(you) : '');
+  const text = await helperComplete(conn, 'track', { system, messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: (cast.length > 1 ? 1100 : 600) + (advOn(chat) ? 300 : 0), temperature: 0.4, signal });
   return extractJson(text);
 }
 
@@ -140,6 +145,11 @@ function apply(chat, res, cast, a, b, out, whole = false) {
   }
   sortRoute(chat);
   const lastId = chat.messages[b - 1]?.id;
+  // Adventure mode: quests and items.
+  if (advOn(chat) && !whole && (res?.quests || res?.items)) {
+    const a = applyAdv(chat, res, lastId);
+    if (a.length) (out.adv ||= []).push(...a);
+  }
   // Group chats: how the characters see each other.
   if (cast.length > 1 && res?.ties) {
     const t = applyTies(chat, res.ties, cast, lastId);
@@ -194,6 +204,7 @@ export function bondsLayer(chat, people, youName) {
 // Undo what a read attached to one reply (when that reply is regenerated or deleted).
 export function undoReply(chat, m) {
   undoTies(chat, m.chron?.ties);
+  undoAdv(chat, m.chron?.adv);
   if (m.chron?.time && chat.clock) advance(chat.clock, -m.chron.time);
   for (const x of m.chron?.bonds || []) {
     const b = chat.bonds?.[x.who];
@@ -274,6 +285,7 @@ function demoRead(chat, a, b, cast) {
   return {
     stations: lastAi && words && (!chat.route.length || b - a >= 6) ? [{ msg: a + lastAi[0] + 1, title: words, kind: chat.route.length ? 'turn' : 'meet', line: 'A moment from the demo story.', who: p.name }] : [],
     time: { minutes: 20, weather: '' },
+    ...(advOn(chat) && !(chat.quests || []).length ? { quests: [{ title: 'Find out what’s wrong', state: 'open', note: 'Something is bothering them.' }], items: [{ name: 'Old key', change: 1, note: 'found under the counter' }] } : {}),
     ...(cast.length > 1 ? { ties: [{ from: cast[0].name, to: cast[1].name, warmth: (chat.ties?.[cast[0].id + '>' + cast[1].id]?.warmth ?? 20) + 5, word: 'friend', why: 'shared a laugh' }, { from: cast[1].name, to: cast[0].name, warmth: (chat.ties?.[cast[1].id + '>' + cast[0].id]?.warmth ?? -10) - 3, word: 'wary', why: 'not sure about her yet' }] } : {}),
     bonds: [{ who: p.name, trust: (prev?.trust ?? 30) + 4, affection: (prev?.affection ?? 20) + 2, tension: Math.max(0, (prev?.tension ?? 15) - 1), view: `${p.name} is getting used to having you around.`, why: 'you kept the conversation going' }],
   };
