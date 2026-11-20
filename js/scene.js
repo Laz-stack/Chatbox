@@ -24,7 +24,7 @@ export function sceneSystem({ people, scene, passengers = true, you, fill }) {
     `\n\nHow to write each reply:` +
     `\n- Separate blocks with a blank line.` +
     `\n- Narration has no name in front.` +
-    `\n- Speech starts with the speaker's name and a colon, for example: ${ex}: *looks up* "Oh, it's you." Put actions in *asterisks*.` +
+    `\n- Speech starts with the speaker's name and a colon, for example: ${ex}: *looks up* "Oh, it's you." Put actions in *asterisks*. Start every paragraph that has speech with the speaker's name again, even when the same character keeps talking.` +
     `\n- Let the characters talk to and react to each other, not only to ${you}. Usually 2 to 6 blocks; not everyone has to speak every time.` +
     `\n- Never write ${you}'s dialogue, actions, thoughts or feelings. Stop when it is ${you}'s turn.` +
     `\n- Lines in [square brackets] from the user are stage directions: follow them, never quote them.` +
@@ -41,7 +41,7 @@ const NOT_NAMES = /^(note|scene|setting|time|location|ooc|narration|narrator)$/i
 
 // Parse a reply into blocks: { kind: 'narr', text } or { kind: 'say', name, text }.
 // Consecutive speech from one speaker is merged so the name tab isn't repeated.
-export function parseScene(text) {
+export function parseScene(text, cast = []) {
   const blocks = [];
   let cur = null;
   for (const raw of (text || '').split('\n')) {
@@ -65,7 +65,34 @@ export function parseScene(text) {
     if (cur) cur.text += '\n' + line;
     else blocks.push((cur = { kind: 'narr', text: line }));
   }
-  return blocks.filter((b) => b.text.trim() || b.kind === 'say');
+  return attribute(blocks.filter((b) => b.text.trim() || b.kind === 'say'), cast);
+}
+
+// A paragraph with speech but no "Name:" still belongs to someone: the character it opens with
+// ("Alden steps in. "No."") or, failing that, whoever was talking just before it.
+// Paragraphs without speech stay narration.
+const reEsc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function attribute(blocks, cast) {
+  const first = (n) => n.trim().split(/\s+/)[0];
+  const same = (a, b) => a.toLowerCase() === b.toLowerCase() || first(a).toLowerCase() === first(b).toLowerCase();
+  const out = [];
+  for (const b of blocks) {
+    const prev = out[out.length - 1];
+    if (b.kind === 'narr' && /["“]/.test(b.text)) {
+      const lead = b.text.replace(/^[\s*_]+/, '');
+      const opener = cast.find((n) => new RegExp(`^(${reEsc(n.trim())}|${reEsc(first(n))})\\b`, 'i').test(lead));
+      // "...," someone mutters / a student asks: a background voice, so it stays narration.
+      const other = /(^|[,.!?”"]\s+)(someone|somebody|another \w+|an? \w+|the \w+|one of them|a voice)\s+(says|said|mutters|muttered|asks|asked|shouts|shouted|calls|called|snaps|snapped|whispers|whispered|adds|added|replies|replied|yells|yelled|hisses|hissed)\b/i.test(b.text);
+      const name = opener || (prev?.kind === 'say' && !other ? prev.name : null);
+      if (name) {
+        if (prev?.kind === 'say' && same(prev.name, name)) prev.text += '\n\n' + b.text;
+        else out.push({ kind: 'say', name, text: b.text });
+        continue;
+      }
+    }
+    out.push(b);
+  }
+  return out;
 }
 
 // A reply written for one known speaker (Take turns, or older messages): paragraphs of plain prose
