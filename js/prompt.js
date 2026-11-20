@@ -57,6 +57,8 @@ export function buildPrompt({ char, chat, conn, settings, persona, upto = null, 
   const rs = settings.replyStyle || {};
   const style = [];
   const remind = [];
+  if ((rs.format || 'asterisks') === 'asterisks')
+    style.push('Formatting: wrap every action, thought and line of narration in *asterisks*, and put spoken words in "double quotes". Never leave narration or actions unmarked.'), remind.push('narration, actions and thoughts in *asterisks*, speech in "quotes"');
   if (rs.length === 'short') style.push('Keep each reply short: two to four sentences, under 60 words. This overrides any other length guidance above.'), remind.push('short, under 60 words');
   if (rs.length === 'long') style.push('Write long, rich replies: three to five paragraphs with sensory detail, body language and inner thoughts, about 250 to 400 words. This overrides any shorter length limit above.'), remind.push('long, 250 to 400 words');
   if (rs.person === 'first' && !isScene) style.push(`Write ${char.name}'s actions and narration in first person ("I smile"), even if earlier messages use third person. This overrides other guidance above.`), remind.push('first person');

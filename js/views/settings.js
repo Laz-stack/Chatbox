@@ -33,11 +33,11 @@ export async function importCardFiles(input) {
 const LENGTHS = { short: 'Short', normal: 'Normal', long: 'Long' };
 const styleSummary = () => {
   const rs = S.settings.replyStyle || {};
-  return `${LENGTHS[rs.length] || 'Normal'} length · ${rs.person === 'first' ? 'first person' : rs.person === 'third' ? 'third person' : 'point of view as written'}`;
+  return `${LENGTHS[rs.length] || 'Normal'} length · ${rs.person === 'first' ? 'first person' : rs.person === 'third' ? 'third person' : 'point of view as written'}${rs.format === 'written' ? ' · formatting as written' : ''}`;
 };
 // How characters write: length and point of view. "Normal" leaves it to your prompts.
 function replyStyleSheet(onDone) {
-  const rs = { length: 'normal', person: 'written', ...(S.settings.replyStyle || {}) };
+  const rs = { length: 'normal', person: 'written', format: 'asterisks', ...(S.settings.replyStyle || {}) };
   const seg = (name, opts) =>
     `<div class="seg ${opts.length === 3 ? 'three' : 'two'}" role="group" aria-label="${name}">${opts
       .map(([k, b, sub]) => `<button type="button" class="press" data-${name}="${k}" aria-pressed="${rs[name] === k}"><b>${b}</b><span>${sub}</span></button>`)
@@ -47,12 +47,13 @@ function replyStyleSheet(onDone) {
     html: `<h2 class="sheet-title">Reply style</h2><p class="sheet-p">Applies to every chat. Normal and As written leave it to your prompts and characters.</p>
       <div class="field"><div class="flabel"><span>Length</span></div>${seg('length', [['short', 'Short', 'A few sentences'], ['normal', 'Normal', 'As prompted'], ['long', 'Long', 'Rich, detailed']])}</div>
       <div class="field" style="margin-top:16px"><div class="flabel"><span>Point of view</span></div>${seg('person', [['written', 'As written', 'Follow the character'], ['third', 'Third', '“She smiles.”'], ['first', 'First', '“I smile.”']])}</div>
+      <div class="field" style="margin-top:16px"><div class="flabel"><span>Formatting</span></div>${seg('format', [['asterisks', 'Asterisks', '*Actions*, “speech”'], ['written', 'As written', 'The model’s own style']])}</div>
       <p class="fhint" style="margin-top:10px">Carriage scenes always use a narrator, so point of view applies to one-on-one chats and turns.</p>`,
     onMount(sh) {
       sh.addEventListener('click', (e) => {
-        const b = e.target.closest('[data-length],[data-person]');
+        const b = e.target.closest('[data-length],[data-person],[data-format]');
         if (!b) return;
-        const key = b.dataset.length ? 'length' : 'person';
+        const key = b.dataset.length ? 'length' : b.dataset.person ? 'person' : 'format';
         rs[key] = b.dataset[key];
         sh.querySelectorAll(`[data-${key}]`).forEach((x) => x.setAttribute('aria-pressed', x === b));
         S.settings.replyStyle = { ...rs };

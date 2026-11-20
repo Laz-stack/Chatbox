@@ -23,7 +23,7 @@ export function sceneSystem({ people, scene, passengers = true, you, fill }) {
     (scene?.trim() ? `\nThe scene: ${fill(scene, people[0])}` : '') +
     `\n\nHow to write each reply:` +
     `\n- Separate blocks with a blank line.` +
-    `\n- Narration is plain prose with no name in front.` +
+    `\n- Narration has no name in front.` +
     `\n- Speech starts with the speaker's name and a colon, for example: ${ex}: *looks up* "Oh, it's you." Put actions in *asterisks*.` +
     `\n- Let the characters talk to and react to each other, not only to ${you}. Usually 2 to 6 blocks; not everyone has to speak every time.` +
     `\n- Never write ${you}'s dialogue, actions, thoughts or feelings. Stop when it is ${you}'s turn.` +
@@ -75,7 +75,7 @@ export function splitTurn(text, name) {
   for (const para of (text || '').split(/\n\s*\n/)) {
     const t = para.trim();
     if (!t) continue;
-    const said = /["“”]/.test(t) || (/^\*/.test(t) && !/^\*\(/.test(t));
+    const said = /["“”]/.test(t);
     const prev = blocks[blocks.length - 1];
     if (said && prev?.kind === 'say') prev.text += '\n\n' + t;
     else blocks.push(said ? { kind: 'say', name, text: t } : { kind: 'narr', text: t });

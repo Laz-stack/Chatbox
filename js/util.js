@@ -83,6 +83,38 @@ export function formatMessage(text) {
     .replace(/\n/g, '<br>');
 }
 
+// Display only: prose the model left unmarked is shown as an *action*, so narration, actions and
+// thoughts look the same whether or not the model used asterisks. Speech in quotes stays as it is.
+export function markProse(text) {
+  return (text || '')
+    .split('\n')
+    .map((line) => {
+      let out = '';
+      let buf = '';
+      const flush = () => {
+        if (/[\p{L}\p{N}]/u.test(buf)) {
+          const m = buf.match(/^(\s*)([\s\S]*?)(\s*)$/);
+          out += `${m[1]}*${m[2]}*${m[3]}`;
+        } else out += buf;
+        buf = '';
+      };
+      for (let i = 0; i < line.length; ) {
+        const c = line[i];
+        if (c === '*' || c === '"' || c === '“') {
+          flush();
+          const close = c === '“' ? '”' : c;
+          const j = line.indexOf(close, i + 1);
+          const end = j < 0 ? line.length : j + 1;
+          out += line.slice(i, end) + (j < 0 && c === '*' ? '*' : '');
+          i = end;
+        } else buf += line[i++];
+      }
+      flush();
+      return out;
+    })
+    .join('\n');
+}
+
 export const plain = (text) => (text || '').replace(/\*/g, '').replace(/\s+/g, ' ').trim();
 
 export function slug(s) {
