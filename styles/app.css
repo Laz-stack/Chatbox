@@ -851,3 +851,17 @@ textarea.bp-ta.tall { min-height: 96px; }
 .chips { overflow-x: auto; scrollbar-width: none; }
 .chips::-webkit-scrollbar { display: none; }
 .chips button { flex: none; white-space: nowrap; }
+
+/* ================= Lorebook: Enhance and group-chat targets ================= */
+.bp-btns.one { grid-template-columns: 1fr; }
+.lore-enh { margin-top: 10px; }
+#loResult { margin-top: 10px; }
+.lore-sub { margin: 16px 2px 8px; font: 800 13px/1 var(--font); color: var(--cream); }
+.lore-ixlist { display: flex; flex-direction: column; gap: 8px; }
+.lore-ixrow { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 60px; padding: 8px 14px 8px 10px; border-radius: 20px; background: var(--plate); color: var(--white); text-align: left; }
+.lore-ixrow .meet .bullet { box-shadow: 0 0 0 2px var(--plate); }
+.lore-ixrow.on { background: var(--yellow); color: var(--bg); }
+.lore-ixrow.on .meet .bullet { box-shadow: 0 0 0 2px var(--yellow); }
+.lix-tx { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.lix-tx b { font: 800 15px/1.2 var(--font); }
+.lix-tx small { font: 500 12.5px/1.3 var(--font); opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

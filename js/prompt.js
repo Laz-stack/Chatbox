@@ -49,7 +49,8 @@ export function buildPrompt({ char, chat, conn, settings, persona, upto = null, 
   // Lorebook: entries whose keywords appear in the recent chat (or that are always on).
   const end0 = upto == null ? chat.messages.length : upto;
   const recent = chat.messages.slice(Math.max(0, end0 - 8), end0).map((x) => textOf(x)).join('\n');
-  const lineIds = group ? group.people.map((p) => p.id) : [char.id];
+  // Entries can target characters, or an Interchange/Carriage itself (its chat's owner id).
+  const lineIds = group ? [...group.people.map((p) => p.id), chat.characterId] : [char.id];
   const lore = matchLore(recent, lineIds).slice(0, 12);
   if (lore.length) layers.push({ key: 'lore', name: 'Lorebook', text: lore.map((e) => (e.title?.trim() ? `${e.title.trim()}: ` : '') + m(e.text)).join('\n\n') });
 

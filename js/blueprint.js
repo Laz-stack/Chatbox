@@ -89,7 +89,7 @@ export function compileSheet(ch) {
 // ---------- generation ----------
 const ADULT = 'Every character is an adult. Age must be a whole number of 18 or more. Never write about minors.';
 
-function extractJson(text) {
+export function extractJson(text) {
   const t = String(text || '').replace(/```(?:json)?/gi, '');
   const a = t.indexOf('{');
   const b = t.lastIndexOf('}');
