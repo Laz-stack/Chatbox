@@ -20,6 +20,9 @@ const DEFAULT_SETTINGS = {
   includeKeysInBackup: false,
   budget: null,
   seenChatTips: false,
+  // 18+ content: off until the user confirms they are an adult (Depot › Content).
+  mature: false,
+  ageConfirmedAt: null,
   migrated: 0,
 };
 

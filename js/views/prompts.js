@@ -5,9 +5,9 @@ import { esc, debounce, uid, fmtNum, copyText, reducedMotion } from '../util.js'
 import { topbar, title2, ibtn, bullet, avatarBullet, area, toggleRow, bindSwitch, icon, primary, reel, toast, openSheet } from '../ui.js';
 
 // Every layer keeps one number and one colour everywhere (Prompts and Final prompt), even when some are empty.
-const LAYER_ORDER = ['global', 'connection', 'persona', 'user', 'lore', 'style', 'notes', 'chat'];
+const LAYER_ORDER = ['global', 'connection', 'persona', 'user', 'lore', 'style', 'content', 'notes', 'chat'];
 const layerNo = (k) => String(LAYER_ORDER.indexOf(k) + 1);
-const LAYER_COLORS = { global: ['#FDCD15', '#0A0A0A'], connection: ['#E70404', '#FFFFFF'], persona: ['#ECECEC', '#0A0A0A'], user: ['#065BFE', '#FFFFFF'], lore: ['#FE6500', '#0A0A0A'], style: ['#FB4DAA', '#0A0A0A'], notes: ['#B8ACFE', '#0A0A0A'], chat: ['#333333', '#ECECEC'] };
+const LAYER_COLORS = { global: ['#FDCD15', '#0A0A0A'], connection: ['#E70404', '#FFFFFF'], persona: ['#ECECEC', '#0A0A0A'], user: ['#065BFE', '#FFFFFF'], lore: ['#FE6500', '#0A0A0A'], style: ['#FB4DAA', '#0A0A0A'], content: ['#2EAA67', '#0A0A0A'], notes: ['#B8ACFE', '#0A0A0A'], chat: ['#333333', '#ECECEC'] };
 
 function recentCharacter() {
   const started = S.characters.filter((c) => hasStarted(latestChat(c.id))).sort((a, b) => latestChat(b.id).updatedAt - latestChat(a.id).updatedAt);
@@ -24,6 +24,7 @@ export function promptsView() {
     ['Your persona', 'Who the character is talking to.', 'user'],
     ['Lorebook', 'World info whose keywords came up in the chat.', 'lore'],
     ['Reply style', 'Length and point of view, from Depot.', 'style'],
+    ['Content rules', 'What is allowed, from 18+ content in Depot.', 'content'],
     ['Notes and summary', 'Pinned notes and the running summary.', 'notes'],
     ['The chat', 'Recent messages, newest last.', 'chat'],
   ];

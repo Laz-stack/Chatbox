@@ -2,7 +2,7 @@
 // fields you type into directly (each with a lock), per-section reroll, Mature details (off by default),
 // Extra notes, and a preview of the persona the model receives.
 import { S, connection, activeConnection } from '../store.js';
-import { SECTIONS, FIELDS, fieldsOf, filled, hasSheet, compileSheet, generate } from '../blueprint.js';
+import { SECTIONS, FIELDS, fieldsOf, filled, hasSheet, compileSheet, generate, matureOn } from '../blueprint.js';
 import { esc, motion, EASE_OUT, reducedMotion } from '../util.js';
 import { icon, toggleRow, bindSwitch, openSheet, toast, confirmSheet, autosize } from '../ui.js';
 
@@ -29,7 +29,7 @@ function sectionHTML(d, s, ui) {
   return `<section class="acc${ui.open.has(s.key) ? ' open' : ''}" data-s="${s.key}">${sectionInner(d, s, ui)}</section>`;
 }
 function sectionInner(d, s, ui) {
-  const fields = fieldsOf(s.key, d.mature);
+  const fields = fieldsOf(s.key, matureOn(d));
   const n = fields.filter((f) => filled(d.sheet, f.k)).length;
   const open = ui.open.has(s.key);
   const firstVal = fields.map((f) => d.sheet?.[f.k]).find((v) => String(v ?? '').trim());
@@ -48,6 +48,9 @@ function sectionInner(d, s, ui) {
 // Mature details sit inside Appearance, right above the one field they unlock.
 function matureHTML(d, ui) {
   const g = FIELDS.find((f) => f.k === 'genitals');
+  // With 18+ content off (Depot), the switch is locked and nothing mature is shown or generated.
+  if (!S.settings.mature)
+    return `<div class="bp-mature bp-mature-off">${icon('lock', 18)}<span><b>Mature details are locked.</b> Turn on 18+ content in Depot › Content to use them.${d.mature ? ' This character has them on, so they come back when you do.' : ''}</span></div>`;
   return `<div class="bp-mature">${toggleRow('tMature', 'Mature details', 'Shows the field below and lets Random and Enhance include sexual details. Off by default.', !!d.mature)}</div>${d.mature ? fieldHTML(d, g, ui) : ''}`;
 }
 
@@ -117,7 +120,7 @@ export function bindBlueprint(root, d, { onName }) {
     e.target.closest('.bpf')?.querySelector('.new-dot')?.remove();
     const sec = e.target.closest('.acc');
     const s = SECTIONS.find((x) => x.key === sec?.dataset.s);
-    if (s) sec.querySelector('.acc-n').textContent = `${fieldsOf(s.key, d.mature).filter((f) => filled(d.sheet, f.k)).length}/${fieldsOf(s.key, d.mature).length}`;
+    if (s) sec.querySelector('.acc-n').textContent = `${fieldsOf(s.key, matureOn(d)).filter((f) => filled(d.sheet, f.k)).length}/${fieldsOf(s.key, matureOn(d)).length}`;
     updateEnhance();
   });
   list.addEventListener('change', (e) => {
@@ -213,7 +216,7 @@ export function bindBlueprint(root, d, { onName }) {
 
   async function run(mode, sectionKey = null) {
     const conn = connection(d.connectionId) || activeConnection();
-    const inScope = sectionKey ? fieldsOf(sectionKey, d.mature) : FIELDS.filter((f) => d.mature || !f.mature);
+    const inScope = sectionKey ? fieldsOf(sectionKey, matureOn(d)) : FIELDS.filter((f) => matureOn(d) || !f.mature);
     const keys = inScope.map((f) => f.k).filter((k) => !isLocked(d, k));
     if (!keys.length) return toast(sectionKey ? 'Every field here is locked.' : 'Every field is locked.');
     if (mode === 'random') {
@@ -280,7 +283,7 @@ export function bindBlueprint(root, d, { onName }) {
     const text = compileSheet(d);
     let rows = '';
     for (const s of SECTIONS) {
-      const items = s.fields.filter((f) => (d.mature || !f.mature) && filled(d.sheet, f.k)).map((f) => [f.label.toUpperCase().replace('{{USER}}', '{{user}}'), d.sheet[f.k]]);
+      const items = s.fields.filter((f) => (matureOn(d) || !f.mature) && filled(d.sheet, f.k)).map((f) => [f.label.toUpperCase().replace('{{USER}}', '{{user}}'), d.sheet[f.k]]);
       if (s.key === 'basic' && d.name?.trim()) items.unshift(['NAME', d.name.trim()]);
       if (items.length) rows += `<h3 class="pv-h">${esc(s.head)}</h3>` + items.map(([l, v]) => `<div class="pv-r"><span>${esc(l)}</span><span>${esc(String(v).trim())}</span></div>`).join('');
     }
