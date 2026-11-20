@@ -1,6 +1,6 @@
 import { S, connection, newConnection, saveConnection, deleteConnection, saveSettings, activeConnection } from '../store.js';
 import { PROVIDERS, testConnection, proxyAvailable } from '../providers.js';
-import { esc, motion } from '../util.js';
+import { esc, motion, uid } from '../util.js';
 import { topbar, title2, ibtn, bullet, field, area, toggleRow, bindSwitch, icon, arrow, dial, bindDial, toast, confirmSheet } from '../ui.js';
 
 const LETTER_BG = { anthropic: '#FDCD15', openai: '#ECECEC', openrouter: '#B8ACFE', custom: '#2EAA67', demo: '#333333' };
@@ -42,8 +42,13 @@ export function connectionsView() {
 }
 
 export function connectionEditView(id) {
-  const isNew = id === 'new';
-  const src = isNew ? newConnection('anthropic') : connection(id);
+  // "new~<id>": a new connection that starts as a copy of another one (same key, address and settings).
+  const [base, fromId] = String(id).split('~');
+  const isNew = base === 'new';
+  const from = isNew && fromId ? connection(fromId) : null;
+  const label = (c) => c.name || PROVIDERS[c.provider]?.label || 'Connection';
+  const src = isNew ? (from ? { ...structuredClone(from), id: uid(), name: `${label(from)} copy`.slice(0, 40) } : newConnection('anthropic')) : connection(id);
+  const sources = S.connections.filter((c) => c.provider !== 'demo');
   if (!src) return null;
   const d = structuredClone(src);
   const p = () => PROVIDERS[d.provider];
@@ -57,6 +62,8 @@ export function connectionEditView(id) {
     ${topbar({ back: '#/connections', title: isNew ? 'New connection' : esc(d.name || p().label), right: !isNew && S.connections.length > 1 ? ibtn('trash', 'Delete connection', { id: 'delBtn' }) : '' })}
     <div class="stack" style="gap:16px">
       ${d.provider === 'demo' ? `<div class="note">${icon('spark', 18)}<span>The demo connection sends canned replies so you can try the app. Pick a provider below to switch this connection to a real AI.</span></div>` : ''}
+      ${isNew && sources.length ? `<div><p class="cp-lbl">Copy settings from</p><div class="cp-from" role="group" aria-label="Copy settings from">${sources.map((c) => `<a class="press" href="#/connection/new~${c.id}" aria-pressed="${from?.id === c.id}">${icon('copy', 15)}${esc(label(c))}</a>`).join('')}${from ? `<a class="press" href="#/connection/new" aria-pressed="false">${icon('x', 15)}Start blank</a>` : ''}</div>
+        <p class="fhint">${from ? `Same key, address and settings as ${esc(label(from))}. Change the model or anything else, then save. It’s added alongside; your chats keep their current connection. The key is stored in both, so delete each one separately.` : 'Reuse the key, proxy or address of a connection you already have.'}</p></div>` : ''}
       <div class="seg two" role="group" aria-label="Provider">${providers.map((k) => `<button type="button" class="press" data-prov="${k}" aria-pressed="${d.provider === k}"><b>${PROVIDERS[k].label}</b><span>${PROVIDERS[k].sub}</span></button>`).join('')}</div>
       <div id="urlSlot">${showUrl() ? urlField() : ''}</div>
       <div>
@@ -66,6 +73,7 @@ export function connectionEditView(id) {
       ${field('cModel', 'Model', d.model, { ph: p().modelHint, attrs: 'autocomplete="off" spellcheck="false"' })}
       <button type="button" class="btn-primary press" id="saveBtn"><span>Save and test</span>${arrow(30)}</button>
       <div class="status-line" id="status" role="status"></div>
+      ${!isNew && d.provider !== 'demo' ? `<a class="btn-text press cp-dup" href="#/connection/new~${d.id}">${icon('copy', 16)}Duplicate this connection</a>` : ''}
       <details class="adv"${d.prompt?.trim() || d.replaceGlobal || d.useProxy ? ' open' : ''}><summary>More options ${icon('chev', 18)}</summary><div class="inner">
         ${field('cName', 'Name', d.name, { ph: p().label, attrs: 'autocomplete="off" maxlength="40"' })}
         <div id="dialSlot">${dial('cTemp', +d.temperature || 0.9, { min: 0, max: 2, step: 0.1, hint: 'How adventurous replies get' })}</div>
@@ -144,6 +152,16 @@ export function connectionEditView(id) {
       if (!ok && !d.useProxy) $('#proxyRow .trow-s').textContent = 'The local server is not running here. Start it with "npm start" to use this.';
     });
 
+    // Switching the copy source rebuilds the form: ask first if something was typed.
+    let edited = false;
+    root.addEventListener('input', () => (edited = true));
+    $('.cp-from')?.addEventListener('click', async (e) => {
+      const a = e.target.closest('a');
+      if (!a || !edited) return;
+      e.preventDefault();
+      if (await confirmSheet({ title: 'Discard your changes?', body: 'Switching starts the form again from that connection.', ok: 'Switch' })) location.hash = a.getAttribute('href');
+    });
+
     $('#delBtn')?.addEventListener('click', async () => {
       if (!(await confirmSheet({ title: 'Delete this connection?', body: 'Characters using it will switch to the active connection.', ok: 'Delete', danger: true }))) return;
       await deleteConnection(d.id);
@@ -166,7 +184,8 @@ export function connectionEditView(id) {
       const prev = activeConnection();
       const wasActive = prev?.id === d.id;
       // Only a connection that works takes over chats; a failing one stays saved but off.
-      const shouldActivate = !prev || prev.provider === 'demo' || isNew;
+      // A copy is an extra option, so it doesn't take over your chats; a first real connection does.
+      const shouldActivate = !prev || prev.provider === 'demo' || (isNew && !from);
       btn.classList.add('busy');
       btn.disabled = true;
       st.className = 'status-line';
