@@ -30,21 +30,43 @@ export const picModel = (c = picConn()) => picPrefs().model?.trim() || (c?.provi
 export const providerName = (c = picConn()) => (c ? c.name || PROVIDERS[c.provider]?.label || 'your provider' : 'your provider');
 
 // What the moment looks like, as a short prompt for the image model.
+// The plain version: the place, the time and the first sentence of the moment (demo, and the
+// fallback when the model's reply can't be read).
+function plainScene(text, place, when) {
+  return `${place ? place.name + ', ' : ''}${when ? when + '. ' : ''}${text.replace(/[*"“”]/g, '').split(/(?<=[.!?])\s/)[0].slice(0, 200)}`;
+}
+// Read the model's reply: JSON, a JSON object cut off part-way, or plain prose. '' when there's nothing usable.
+export function sceneFromReply(out) {
+  const t = String(out || '').trim();
+  try {
+    const j = extractJson(t);
+    if (String(j.prompt || '').trim()) return String(j.prompt).trim() + (j.caption ? `\n§${String(j.caption).trim().slice(0, 40)}` : '');
+  } catch {}
+  // Cut off (ran out of tokens): keep what was written of "prompt".
+  const m = t.match(/"prompt"\s*:\s*"((?:[^"\\]|\\.)*)/);
+  if (m && m[1].trim().length > 40) return m[1].replace(/\\n/g, ' ').replace(/\\"/g, '"').trim();
+  // Prose instead of JSON.
+  if (!t.includes('{') && t.length > 40) return t.replace(/^prompt\s*:\s*/i, '').replace(/\s+/g, ' ').slice(0, 700);
+  return '';
+}
+
+// What the moment looks like, as a short prompt for the image model.
 export async function describe({ chat, cast, m, persona, conn, signal }) {
   const you = persona?.name?.trim() || 'the user';
   const place = hereOf(chat);
   const when = clockOn(chat) ? `${partOfDay(chat.clock.min)} (${hhmm(chat.clock.min)}), ${chat.clock.weather}` : '';
   const text = named(textOf(m), cast[0], you, persona).replace(/!\[[^\]]*\]\([^)]*\)/g, '').slice(0, 1600);
-  if (!conn || PROVIDERS[conn.provider]?.format === 'demo') return `${place ? place.name + ', ' : ''}${when ? when + '. ' : ''}${text.replace(/[*"“”]/g, '').split(/(?<=[.!?])\s/)[0].slice(0, 200)}`;
+  if (!conn || PROVIDERS[conn.provider]?.format === 'demo') return plainScene(text, place, when);
   const looks = cast.map((p) => ({ name: p.name, looks: compileSheet(p).slice(0, 700) }));
   const brief = { characters: looks, user: { name: you, looks: String(persona?.about || '').slice(0, 300) }, place: place ? `${place.name}: ${place.note}` : '', time: when, moment: text };
   const ask =
     'Write a prompt for an illustration of this exact moment. Return {"prompt":"...","caption":"..."}. ' +
     'prompt: 50 to 90 words, present tense, concrete and visual: who is in frame and what they look like (hair, clothes, build, from their sheets), what they are doing, the setting, light and mood. Landscape framing. ' +
     'No names of real artists, no text or lettering in the image. Everyone is an adult. caption: 1 to 4 words naming the place or moment.';
-  const out = await helperComplete(conn, 'scene', { system: 'You write prompts for an illustrator. Reply with ONE JSON object and nothing else.', messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: 300, temperature: 0.6, signal });
-  const j = extractJson(out);
-  return String(j.prompt || '').trim() + (j.caption ? `\n§${String(j.caption).trim().slice(0, 40)}` : '');
+  // Room to spare: models that think first spend tokens before the answer (only what's used is billed).
+  const out = await helperComplete(conn, 'scene', { system: 'You write prompts for an illustrator. Reply with ONE JSON object and nothing else.', messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: 1200, temperature: 0.6, signal });
+  // A reply that can't be read still paints: from the moment itself.
+  return sceneFromReply(out) || plainScene(text, place, when);
 }
 
 // Shrink a picture for storage (JPEG, longest side `max`).

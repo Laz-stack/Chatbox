@@ -52,7 +52,7 @@ export async function suggestMoves({ chat, cast, persona, conn, signal }) {
     `Suggest three different things ${you} could do next. Return {"moves":[{"text":"...","risky":false}]}. ` +
     `Each text is 2 to 8 words, an action in plain words without a name in front (for example "Force the lock", "Ask Mirelle to stall them"). ` +
     `Make them meaningfully different: one cautious, one bold, one about the people. Mark risky true for at most one move whose outcome is uncertain.`;
-  const text = await helperComplete(conn, 'moves', { system: 'You suggest moves for the player of an interactive story. Reply with ONE JSON object and nothing else.', messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: 250, temperature: 0.8, signal });
+  const text = await helperComplete(conn, 'moves', { system: 'You suggest moves for the player of an interactive story. Reply with ONE JSON object and nothing else.', messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: 700, temperature: 0.8, signal });
   const out = extractJson(text);
   return (Array.isArray(out.moves) ? out.moves : [])
     .map((m) => ({ text: str(m.text).replace(/^["“*]+|["”*.]+$/g, '').slice(0, 70), risky: !!m.risky }))
