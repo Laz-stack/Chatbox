@@ -34,11 +34,11 @@ function departureRow({ c, chat, ix }) {
   return `<a class="ix press" href="#/chat/${chat.id}" style="${colorVars(c)}" aria-label="Chat with ${esc(c.name)}">${avatarBullet(c, 44, '', `line:${c.id}`)}<span class="row-tx"><span class="row-t">${esc(c.name)}</span><span class="row-s">${esc(plain(named(textOf(lastMessage(chat)), c)))}</span></span><span class="ix-t num">${ago(chat.updatedAt)}</span></a>`;
 }
 
-function starRow({ chat, m }) {
-  const c = character(m.speaker) || character(chat.characterId) || interchange(chat.characterId)?.people[0];
+function starRow({ chat, m, q, at }) {
+  const c = (q && character(q.who)) || character(m.speaker) || character(chat.characterId) || interchange(chat.characterId)?.people[0];
   if (!c) return '';
-  const t = named(textOf(m), c);
-  return `<a class="stub press" href="#/chat/${chat.id}/m/${m.id}" style="${colorVars(c)}"><span class="stub-l">${avatarBullet(c, 32)}</span><span class="stub-r"><span class="stub-m"><b>${esc(c.name)}</b><span>${agoLong(m.star)}</span></span><span class="stub-p">${formatMessage(t.length > 240 ? t.slice(0, 237) + '…' : t)}</span></span></a>`;
+  const t = q ? `“${q.text}”` : named(textOf(m), c);
+  return `<a class="stub press" href="#/chat/${chat.id}/m/${m.id}" style="${colorVars(c)}"><span class="stub-l">${avatarBullet(c, 32)}</span><span class="stub-r"><span class="stub-m"><b>${esc(q?.name || c.name)}</b><span>${agoLong(at)}</span></span><span class="stub-p">${formatMessage(t.length > 240 ? t.slice(0, 237) + '…' : t)}</span></span></a>`;
 }
 
 // Highlight the query inside an escaped snippet around the first match.
