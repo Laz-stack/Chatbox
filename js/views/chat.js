@@ -591,6 +591,13 @@ export async function chatView(id, focusId = null) {
       await save();
       generate('reply');
     }
+    // Sync brought newer messages into this chat (updated in place): redraw when it's safe.
+    const onSynced = (e) => {
+      if (destroyed) return removeEventListener('chatbox-synced', onSynced);
+      if (!busy && e.detail?.chatIds?.includes(chat.id) && !input.value.trim()) renderAll(), toBottom();
+    };
+    addEventListener('chatbox-synced', onSynced);
+
     // While you were away: after a long gap, the character sometimes leaves you a message first.
     // Checked once per absence; about three times in five it happens.
     async function maybeAway() {

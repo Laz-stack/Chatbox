@@ -1,4 +1,5 @@
 import { S, activeConnection, saveSettings, savePersona, personaById, newPersona, savePersonaEntry, setDefaultPersona, deletePersona, snapshot, restore, saveCharacter, newChat, saveChat, isPersistent } from '../store.js';
+import { syncSummary } from './sync.js';
 import { readCardFile, exportAllCardsJson } from '../cards.js';
 import { startImport } from './import.js';
 import { textSummary } from '../textstyle.js';
@@ -97,8 +98,8 @@ export function settingsView() {
       `<div class="row"><span class="row-ic" style="background:var(--plate2);color:var(--cream)">${icon('shield', 19)}</span><span class="row-tx"><span class="row-t">18+ content</span><span class="row-s" id="matureSub">${matureSub()}</span></span>${sw('tAdult', S.settings.mature, '18+ content')}</div>`
     )}
     <h2 class="sec">Data</h2>
-    ${group(row({ href: '#/backup', ic: 'box', bc: 'var(--blue)', fc: '#fff', title: 'Backup and cards', sub: S.settings.lastBackup ? `Last backup ${new Date(S.settings.lastBackup).toLocaleDateString()}` : 'No backup yet' }))}
-    <div class="note" style="margin-top:18px">${icon('shield', 18)}<span>${isPersistent() ? 'Everything is saved in this browser only. Nothing goes to a server of ours.' : 'This browser is blocking storage (private mode?), so changes will be lost when you close the tab.'}</span></div>
+    ${group(row({ href: '#/sync', ic: 'refresh', bc: 'var(--cream)', fc: '#0A0A0A', title: 'Sync', sub: esc(syncSummary()) }), row({ href: '#/backup', ic: 'box', bc: 'var(--blue)', fc: '#fff', title: 'Backup and cards', sub: S.settings.lastBackup ? `Last backup ${new Date(S.settings.lastBackup).toLocaleDateString()}` : 'No backup yet' }))}
+    <div class="note" style="margin-top:18px">${icon('shield', 18)}<span>${isPersistent() ? (S.settings.sync?.connected ? 'Saved in this browser and synced to your own Google Drive. Nothing goes to a server of ours.' : 'Everything is saved in this browser only. Nothing goes to a server of ours.') : 'This browser is blocking storage (private mode?), so changes will be lost when you close the tab.'}</span></div>
   </div>${tabbar('settings')}`;
   return {
     html,

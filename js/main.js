@@ -13,6 +13,8 @@ import { loreListView, loreEditView, loreBookView } from './views/lore.js';
 import { importView, startImport } from './views/import.js';
 import { textView } from './views/text.js';
 import { routeView, bondsView, diaryView } from './views/chronicle.js';
+import { syncView } from './views/sync.js';
+import { startAutoSync, syncOn, signedIn, localChanges } from './sync.js';
 import { applyText } from './textstyle.js';
 import { openBuildSheet } from './build.js';
 import { reducedMotion } from './util.js';
@@ -39,6 +41,7 @@ const routes = [
   [/^#\/prompts$/, () => promptsView()],
   [/^#\/final\/([^/]+)$/, (id) => finalView(decodeURIComponent(id))],
   [/^#\/memory\/([^/]+)$/, (id) => memoryView(decodeURIComponent(id))],
+  [/^#\/sync$/, () => syncView()],
   [/^#\/route\/([^/]+)$/, (id) => routeView(decodeURIComponent(id))],
   [/^#\/bonds\/([^/]+)$/, (id) => bondsView(decodeURIComponent(id))],
   [/^#\/diary\/([^/]+)(?:\/([^/]+))?$/, (id, e) => diaryView(decodeURIComponent(id), e && decodeURIComponent(e))],
@@ -235,4 +238,16 @@ window.addEventListener('unhandledrejection', (e) => {
   }
   await render();
   document.documentElement.classList.add('ready');
+  // Sync: run in the background while signed in. When changes from another device arrive, redraw
+  // list screens (never a chat you might be typing in). With sign-in expired and changes waiting,
+  // offer to sign in again once per session.
+  startAutoSync();
+  addEventListener('chatbox-synced', () => /^#\/(lines|settings|sync)?(\/|$)|^#?\/?$/.test(location.hash) && render());
+  if (syncOn()) {
+    setTimeout(async () => {
+      if (signedIn() || sessionStorage.getItem('chatbox-sync-asked') || !(await localChanges())) return;
+      sessionStorage.setItem('chatbox-sync-asked', '1');
+      toast('Sync is paused until you sign in again.', { action: 'Sign in', ms: 8000, onAction: () => (location.hash = '#/sync') });
+    }, 4000);
+  }
 })();

@@ -50,14 +50,19 @@ export async function get(k) {
   return req('readonly', (s) => s.get(k));
 }
 
+// Tell Sync that something changed (it waits a little, then syncs if anything really did).
+const dirty = (k) => k !== 'syncmeta' && typeof dispatchEvent === 'function' && dispatchEvent(new Event('chatbox-dirty'));
+
 export async function set(k, v) {
   await open();
+  dirty(k);
   if (memory) return void memory.set(k, structuredClone(v));
   return req('readwrite', (s) => s.put(v, k));
 }
 
 export async function del(k) {
   await open();
+  dirty(k);
   if (memory) return void memory.delete(k);
   return req('readwrite', (s) => s.delete(k));
 }
