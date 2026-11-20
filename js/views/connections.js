@@ -1,5 +1,5 @@
 import { S, connection, newConnection, saveConnection, deleteConnection, saveSettings, activeConnection } from '../store.js';
-import { PROVIDERS, testConnection, proxyAvailable } from '../providers.js';
+import { PROVIDERS, SAMPLING, testConnection, proxyAvailable } from '../providers.js';
 import { esc, motion, uid } from '../util.js';
 import { topbar, title2, ibtn, bullet, field, area, toggleRow, bindSwitch, icon, arrow, dial, bindDial, toast, confirmSheet, openSheet, row } from '../ui.js';
 import { helper } from '../helper.js';
@@ -234,6 +234,14 @@ export function connectionEditView(id) {
         <p class="fhint" style="margin:-4px 2px 0">Prices from your provider's pricing page. Fares uses them to turn tokens into dollars.</p></div>
         <p class="fhint" id="orCost" style="margin:-4px 2px 0"${d.provider === 'openrouter' ? '' : ' hidden'}>No prices needed: Fares uses what OpenRouter bills for each request.</p>
         <p class="fhint" style="margin:-4px 2px 0">Context size is how many tokens this model can read. Long chats get summarized when they pass about half of it.</p>
+        <div class="ft"><p class="tx-lbl" style="margin:6px 2px 8px">Fine-tuning <span>how the model picks its words</span></p>
+          <div class="ft-chips" role="radiogroup" aria-label="Fine-tuning preset">${Object.entries(SAMPLING).map(([k, x]) => `<button type="button" class="press" role="radio" aria-checked="${(d.samp?.preset || 'balanced') === k}" data-samp="${k}"><b>${x.label}</b><small>${x.note}</small></button>`).join('')}</div>
+          <div id="ftCustom" ${(d.samp?.preset || 'balanced') === 'custom' ? '' : 'hidden'}><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px">
+            ${field('sTopP', 'Top P (0–1)', d.samp?.topP ?? '', { type: 'number', ph: 'e.g. 0.95', attrs: 'min="0" max="1" step="0.01" inputmode="decimal"' })}
+            ${field('sMinP', 'Min P (0–0.5)', d.samp?.minP ?? '', { type: 'number', ph: 'e.g. 0.05', attrs: 'min="0" max="0.5" step="0.01" inputmode="decimal"' })}
+            ${field('sTopK', 'Top K', d.samp?.topK ?? '', { type: 'number', ph: 'e.g. 40', attrs: 'min="0" max="500" step="1" inputmode="numeric"' })}
+            ${field('sRep', 'Repetition penalty', d.samp?.rep ?? '', { type: 'number', ph: 'e.g. 1.05', attrs: 'min="1" max="2" step="0.01" inputmode="decimal"' })}
+          </div><p class="fhint" style="margin:-4px 2px 0">Leave a box empty to use the model’s default. Not every provider uses every value: OpenAI ignores Min P and Top K.</p></div></div>
         <div id="proxyRow">${toggleRow('tProxy', 'Route through local server', 'Use if your provider blocks requests from the browser. Needs server.js running.', d.useProxy)}</div>
       </div></details>
     </div>
@@ -279,6 +287,16 @@ export function connectionEditView(id) {
     $('#cPrompt').addEventListener('input', (e) => (d.prompt = e.target.value));
     $('#cMax').addEventListener('input', (e) => (d.maxTokens = Math.max(16, +e.target.value || 600)));
     $('#cCtx').addEventListener('input', (e) => (d.context = Math.max(1000, +e.target.value || 16000)));
+    // Fine-tuning: a preset, or your own values.
+    $('.ft-chips').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-samp]');
+      if (!b) return;
+      d.samp = { ...(d.samp || {}), preset: b.dataset.samp };
+      root.querySelectorAll('[data-samp]').forEach((x) => x.setAttribute('aria-checked', x === b));
+      $('#ftCustom').hidden = b.dataset.samp !== 'custom';
+    });
+    for (const [id, k] of [['sTopP', 'topP'], ['sMinP', 'minP'], ['sTopK', 'topK'], ['sRep', 'rep']])
+      $('#' + id).addEventListener('input', (e) => (d.samp = { ...(d.samp || {}), preset: 'custom', [k]: e.target.value === '' ? null : +e.target.value }));
     $('#cPin').addEventListener('input', (e) => (d.priceIn = e.target.value === '' ? null : Math.max(0, +e.target.value)));
     $('#cPout').addEventListener('input', (e) => (d.priceOut = e.target.value === '' ? null : Math.max(0, +e.target.value)));
     $('#eyeBtn').addEventListener('click', (e) => {

@@ -48,17 +48,42 @@ function headers(conn) {
   return h;
 }
 
+// Fine-tuning presets (Connections › More options › Fine-tuning): how the model picks words.
+export const SAMPLING = {
+  balanced: { label: 'Balanced', note: 'The model’s own defaults' },
+  creative: { label: 'Creative', note: 'Varied words, fewer repeats', topP: 0.95, minP: 0.04, rep: 1.08 },
+  precise: { label: 'Precise', note: 'Steady and on point', topP: 0.85, minP: 0.1, topK: 40, rep: 1.03 },
+  custom: { label: 'Custom', note: 'Set each value' },
+};
+export function samplingOf(conn) {
+  const k = conn?.samp?.preset || 'balanced';
+  if (k === 'custom') return conn.samp || {};
+  return SAMPLING[k] || {};
+}
+const num = (v) => (v === '' || v == null || !Number.isFinite(+v) ? null : +v);
+
 function body(conn, { system, messages, stream, maxTokens, temperature }) {
   const p = PROVIDERS[conn.provider];
   const temp = Math.min(p.maxTemp, Math.max(0, temperature ?? conn.temperature ?? 0.9));
   const max = maxTokens || conn.maxTokens || 600;
+  const sp = samplingOf(conn);
   if (p.format === 'anthropic') {
     const b = { model: conn.model, max_tokens: max, messages, stream, temperature: temp };
     if (system) b.system = system;
+    // Anthropic takes top_k; top_p can't be sent together with temperature on newer models.
+    if (num(sp.topK)) b.top_k = Math.round(num(sp.topK));
     return b;
   }
   const msgs = system ? [{ role: 'system', content: system }, ...messages] : messages;
-  return { model: conn.model, messages: msgs, stream, temperature: temp, max_tokens: max };
+  const b = { model: conn.model, messages: msgs, stream, temperature: temp, max_tokens: max };
+  if (num(sp.topP) != null) b.top_p = num(sp.topP);
+  // OpenAI rejects parameters it doesn't know; OpenRouter and most custom servers take these.
+  if (conn.provider !== 'openai') {
+    if (num(sp.minP) != null) b.min_p = num(sp.minP);
+    if (num(sp.topK)) b.top_k = Math.round(num(sp.topK));
+    if (num(sp.rep) != null) b.repetition_penalty = num(sp.rep);
+  } else if (num(sp.rep) != null && num(sp.rep) > 1) b.frequency_penalty = Math.round(Math.min(2, (num(sp.rep) - 1) * 4) * 100) / 100;
+  return b;
 }
 
 async function send(conn, url, init) {
@@ -122,7 +147,7 @@ async function* sse(res) {
 // `onUsage({ inTok, outTok, cost, id })`: what the provider says the request used. OpenRouter
 // reports `cost`, the dollars it bills; a stopped OpenRouter reply has its cost looked up a few
 // seconds later and reported with `late: true`.
-export async function complete(conn, { system, messages, signal, onDelta = () => {}, stream = true, maxTokens, temperature, character, onUsage }) {
+export async function complete(conn, { system, messages, signal, onDelta = () => {}, stream = true, maxTokens, temperature, character, onUsage, onReasoning }) {
   if (!conn) throw new ProviderError('No connection set up yet.', 0, 'Add a connection in Settings.');
   const p = PROVIDERS[conn.provider];
   if (p.format === 'demo') return demoReply({ messages, signal, onDelta, character });
@@ -168,6 +193,9 @@ export async function complete(conn, { system, messages, signal, onDelta = () =>
     const j = await res.json();
     take(j);
     text = p.format === 'anthropic' ? (j.content || []).map((b) => b.text || '').join('') : j.choices?.[0]?.message?.content || '';
+    // What the model thought before answering (reasoning models), when the provider sends it.
+    const think = p.format === 'anthropic' ? (j.content || []).map((b) => b.thinking || '').join('') : j.choices?.[0]?.message?.reasoning || j.choices?.[0]?.message?.reasoning_content || '';
+    if (think) onReasoning?.(think);
     report();
     onDelta(text);
     return text;
@@ -184,11 +212,14 @@ export async function complete(conn, { system, messages, signal, onDelta = () =>
       if (j.error) throw new ProviderError(j.error.message || 'The provider returned an error.', 0);
       take(j);
       let d = '';
+      let r = '';
       if (p.format === 'anthropic') {
-        if (j.type === 'content_block_delta') d = j.delta?.text || '';
+        if (j.type === 'content_block_delta') (d = j.delta?.text || ''), (r = j.delta?.thinking || '');
       } else {
         d = j.choices?.[0]?.delta?.content || '';
+        r = j.choices?.[0]?.delta?.reasoning || j.choices?.[0]?.delta?.reasoning_content || '';
       }
+      if (r) onReasoning?.(r);
       if (d) {
         text += d;
         onDelta(d);
