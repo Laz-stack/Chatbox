@@ -83,9 +83,16 @@ export function buildPrompt({ char, chat, conn, settings, persona, upto = null, 
       : 'Keep the story free of explicit sexual content: if a scene heads that way, fade to black or cut away. Every character is an adult (18 or older); never sexualise minors or anyone who seems underage.',
   });
 
+  // Pinned notes (Memory › Pinned notes): this chat's own instructions and additions to who you
+  // are, kept as written (paragraphs and all). The summary below is only the story's memory.
+  if (chat.notes?.length)
+    layers.push({
+      key: 'pinned',
+      name: 'This chat’s notes',
+      text: `Notes for this chat only, from ${youName}. Follow any instructions in them, and treat what they say (including anything added about ${youName}) as true for this story:\n\n` + chat.notes.map((n) => m(n.text)).join('\n\n'),
+    });
   const memory = [];
   if (chat.summary?.text) memory.push('Story so far:\n' + chat.summary.text.trim());
-  if (chat.notes?.length) memory.push('Remember:\n' + chat.notes.map((n) => '- ' + m(n.text)).join('\n'));
   // Bonds: how the cast feels about you right now (Route map › Bonds).
   const bonds = bondsLayer(chat, group?.people || [char], persona?.name?.trim() || 'the user');
   if (bonds) memory.push(bonds);

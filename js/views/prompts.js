@@ -2,12 +2,14 @@ import { S, character, getChat, saveChat, saveSettings, connectionFor, hasStarte
 import { buildPrompt, promptAsText } from '../prompt.js';
 import { summarize, historyTokens } from '../memory.js';
 import { esc, debounce, uid, fmtNum, copyText, reducedMotion } from '../util.js';
-import { topbar, title2, ibtn, bullet, avatarBullet, area, toggleRow, bindSwitch, icon, primary, reel, toast, openSheet } from '../ui.js';
+import { topbar, title2, ibtn, bullet, avatarBullet, area, toggleRow, bindSwitch, icon, primary, reel, toast, openSheet, autosize } from '../ui.js';
+
+const NOTE_MAX = 4000; // characters per pinned note
 
 // Every layer keeps one number and one colour everywhere (Prompts and Final prompt), even when some are empty.
-const LAYER_ORDER = ['global', 'connection', 'world', 'persona', 'user', 'lore', 'style', 'content', 'notes', 'chat'];
+const LAYER_ORDER = ['global', 'connection', 'world', 'persona', 'user', 'lore', 'style', 'content', 'pinned', 'notes', 'chat'];
 const layerNo = (k) => String(LAYER_ORDER.indexOf(k) + 1);
-const LAYER_COLORS = { global: ['#FDCD15', '#0A0A0A'], connection: ['#E70404', '#FFFFFF'], persona: ['#ECECEC', '#0A0A0A'], user: ['#065BFE', '#FFFFFF'], lore: ['#FE6500', '#0A0A0A'], world: ['#FE6500', '#0A0A0A'], style: ['#FB4DAA', '#0A0A0A'], content: ['#2EAA67', '#0A0A0A'], notes: ['#B8ACFE', '#0A0A0A'], chat: ['#333333', '#ECECEC'] };
+const LAYER_COLORS = { global: ['#FDCD15', '#0A0A0A'], connection: ['#E70404', '#FFFFFF'], persona: ['#ECECEC', '#0A0A0A'], user: ['#065BFE', '#FFFFFF'], lore: ['#FE6500', '#0A0A0A'], world: ['#FE6500', '#0A0A0A'], style: ['#FB4DAA', '#0A0A0A'], content: ['#2EAA67', '#0A0A0A'], pinned: ['#065BFE', '#FFFFFF'], notes: ['#B8ACFE', '#0A0A0A'], chat: ['#333333', '#ECECEC'] };
 
 function recentCharacter() {
   const started = S.characters.filter((c) => hasStarted(latestChat(c.id))).sort((a, b) => latestChat(b.id).updatedAt - latestChat(a.id).updatedAt);
@@ -26,7 +28,8 @@ export function promptsView() {
     ['Lorebook', 'World info whose keywords came up in the chat.', 'lore'],
     ['Reply style', 'Length and point of view, from Depot.', 'style'],
     ['Content rules', 'What is allowed, from 18+ content in Depot.', 'content'],
-    ['Notes and summary', 'Pinned notes and the running summary.', 'notes'],
+    ['This chat’s notes', 'Pinned notes: instructions and facts for one chat (Memory).', 'pinned'],
+    ['Notes and summary', 'The story so far, Bonds, places, quests and story time.', 'notes'],
     ['The chat', 'Recent messages, newest last.', 'chat'],
   ];
   const html = `<div class="screen no-tab">
@@ -134,12 +137,12 @@ export async function memoryView(id) {
     chat.notes
       .map(
         (n) =>
-          `<div class="note-row" data-id="${n.id}">${bullet(icon('pin', 15), '#FDCD15', '#0A0A0A', 30)}<span class="tx">${esc(n.text)}</span><button type="button" class="ibtn ghost press" data-del="${n.id}" aria-label="Delete note">${icon('trash', 18)}</button></div>`
+          `<div class="note-row" data-id="${n.id}">${bullet(icon('pin', 15), '#FDCD15', '#0A0A0A', 30)}<button type="button" class="tx press" data-edit="${n.id}" aria-label="Edit note">${esc(n.text)}</button><button type="button" class="ibtn ghost press" data-del="${n.id}" aria-label="Delete note">${icon('trash', 18)}</button></div>`
       )
       .join('');
   const summaryHTML = () =>
     chat.summary?.text
-      ? `<p style="margin:10px 0 12px;font:400 14px/1.55 var(--font)">${esc(chat.summary.text)}</p>`
+      ? `<p class="sum-tx">${esc(chat.summary.text)}</p>`
       : `<p style="margin:10px 0 12px;font:400 14px/1.55 var(--font);color:var(--muted)">No summary yet. One appears automatically once this chat grows long, or make one now.</p>`;
 
   const html = `<div class="screen no-tab">
@@ -157,8 +160,8 @@ export async function memoryView(id) {
         </div>
       </div>
       <div><div class="hrow"><h2 class="h">Pinned notes</h2><span class="small" id="pinCount">${chat.notes.length} pinned</span></div>
-        <div class="group notes" id="notes">${notesHTML()}<form class="add-row" id="addNote"><input id="noteIn" placeholder="Add a note, e.g. Prefers tea over coffee" aria-label="Add a note" maxlength="300" autocomplete="off">${ibtn('plus', 'Add note', { cls: 'yellow', attrs: 'type="submit"' }).replace('type="button"', '')}</form></div>
-        <p class="fhint">Notes are sent with every reply in this chat. Long-press a message in the chat to pin it.</p>
+        <div class="group notes" id="notes">${notesHTML()}<form class="add-row" id="addNote"><textarea id="noteIn" rows="1" placeholder="Add a note: an instruction, a fact, or something about you for this chat" aria-label="Add a note" maxlength="${NOTE_MAX}"></textarea>${ibtn('plus', 'Add note', { cls: 'yellow', attrs: 'type="submit"' }).replace('type="button"', '')}</form></div>
+        <p class="fhint">For this chat only, sent with every reply: instructions the AI should follow, facts, and additions to your persona. Tap a note to edit it. Long-press a message in the chat to pin it.</p>
       </div>
       ${toggleRow('tCounter', 'Show token counter in chat', '', S.settings.showCounter)}
     </div>
@@ -175,17 +178,21 @@ export async function memoryView(id) {
       };
       bindSwitch($('#tAuto'), (v) => ((S.settings.autoSummary = v), saveSettings()));
       bindSwitch($('#tCounter'), (v) => ((S.settings.showCounter = v), saveSettings()));
+      const fitNote = autosize($('#noteIn'), 320);
       $('#addNote').addEventListener('submit', async (e) => {
         e.preventDefault();
-        const v = $('#noteIn').value.trim();
-        if (!v) return;
+        const v = $('#noteIn').value.replace(/\s+$/, '').replace(/^\s*\n/, '');
+        if (!v.trim()) return;
         chat.notes.push({ id: uid(), text: v, at: Date.now() });
         $('#noteIn').value = '';
-        $('#addNote').insertAdjacentHTML('beforebegin', `<div class="note-row" data-id="${chat.notes.at(-1).id}">${bullet(icon('pin', 15), '#FDCD15', '#0A0A0A', 30)}<span class="tx">${esc(v)}</span><button type="button" class="ibtn ghost press" data-del="${chat.notes.at(-1).id}" aria-label="Delete note">${icon('trash', 18)}</button></div>`);
+        fitNote();
+        $('#addNote').insertAdjacentHTML('beforebegin', `<div class="note-row" data-id="${chat.notes.at(-1).id}">${bullet(icon('pin', 15), '#FDCD15', '#0A0A0A', 30)}<button type="button" class="tx press" data-edit="${chat.notes.at(-1).id}" aria-label="Edit note">${esc(v)}</button><button type="button" class="ibtn ghost press" data-del="${chat.notes.at(-1).id}" aria-label="Delete note">${icon('trash', 18)}</button></div>`);
         await saveChat(chat, false);
         refresh();
       });
       $('#notes').addEventListener('click', async (e) => {
+        const ed = e.target.closest('[data-edit]');
+        if (ed) return editNote(ed.dataset.edit);
         const b = e.target.closest('[data-del]');
         if (!b) return;
         const row = b.closest('.note-row');
@@ -206,14 +213,44 @@ export async function memoryView(id) {
           },
         });
       });
+      // Tap a note: edit it in a box that grows with the text, line breaks kept.
+      function editNote(id) {
+        const n = chat.notes.find((x) => x.id === id);
+        if (!n) return;
+        openSheet({
+          label: 'Edit note',
+          html: `<h2 class="sheet-title">Edit note</h2><textarea class="input area note-ta" id="noteTa" rows="4" maxlength="${NOTE_MAX}" data-autofocus aria-label="Note">${esc(n.text)}</textarea><p class="fhint" id="noteLeft"></p><div class="sheet-actions"><button type="button" class="btn-primary plate press" data-x><span>Cancel</span></button><button type="button" class="btn-primary press" data-ok><span>Save</span></button></div>`,
+          onMount(s, close) {
+            const ta = s.querySelector('#noteTa');
+            autosize(ta, Math.round(innerHeight * 0.55));
+            const left = () => (s.querySelector('#noteLeft').textContent = `${ta.value.length} of ${NOTE_MAX} characters`);
+            ta.addEventListener('input', left);
+            left();
+            s.querySelector('[data-x]').onclick = () => close();
+            s.querySelector('[data-ok]').onclick = async () => {
+              const v = ta.value.replace(/\s+$/, '').replace(/^\s*\n/, '');
+              if (!v.trim()) return ta.focus();
+              n.text = v;
+              n.at = Date.now();
+              await saveChat(chat, false);
+              const row = $(`#notes [data-edit="${CSS.escape(id)}"]`);
+              if (row) row.textContent = v;
+              refresh();
+              close();
+              toast('Note saved');
+            };
+          },
+        });
+      }
       $('#editSum').addEventListener('click', () =>
         openSheet({
           label: 'Edit summary',
           html: `<h2 class="sheet-title">Edit summary</h2><textarea class="input area" id="sumTa" rows="8" data-autofocus placeholder="What has happened so far">${esc(chat.summary?.text || '')}</textarea><div style="height:14px"></div><div class="sheet-actions"><button type="button" class="btn-primary plate press" data-x><span>Cancel</span></button><button type="button" class="btn-primary press" data-ok><span>Save</span></button></div>`,
           onMount(s, close) {
+            autosize(s.querySelector('#sumTa'), Math.round(innerHeight * 0.55));
             s.querySelector('[data-x]').onclick = () => close();
             s.querySelector('[data-ok]').onclick = async () => {
-              const v = s.querySelector('#sumTa').value.trim();
+              const v = s.querySelector('#sumTa').value.replace(/\s+$/, '').replace(/^\s*\n/, '');
               if (v) chat.summary = { ...(chat.summary || { upto: 0, covers: 0 }), text: v, at: Date.now() };
               else chat.summary = null;
               await saveChat(chat, false);

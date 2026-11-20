@@ -1477,8 +1477,9 @@ export async function chatView(id, focusId = null) {
       toast(m.star ? 'Starred. It’s in your Logbook.' : 'Removed from your Logbook', m.star ? { action: 'View', onAction: () => (location.hash = '#/lines/starred') } : {});
     }
     async function pin(m) {
-      const t = textOf(m).replace(/\s+/g, ' ').trim();
-      chat.notes.push({ id: uid(), text: t.length > 220 ? t.slice(0, 217) + '…' : t, at: Date.now() });
+      // Kept as written (paragraphs too); a very long message is cut at 1,500 characters.
+      const t = textOf(m).replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+      chat.notes.push({ id: uid(), text: t.length > 1500 ? t.slice(0, 1497) + '…' : t, at: Date.now() });
       await save();
       setNotes();
       updateTokens();

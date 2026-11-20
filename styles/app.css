@@ -1665,3 +1665,15 @@ button.chr-row { width: 100%; }
 .tx-bub .line i { background: conic-gradient(from 200deg, color-mix(in srgb, #2EAA67 24%, #F4F4F4), color-mix(in srgb, #FB4DAA 24%, #F4F4F4), color-mix(in srgb, #065BFE 24%, #F4F4F4), color-mix(in srgb, #2EAA67 24%, #F4F4F4)); }
 .tx-bub [aria-checked='true'] i { box-shadow: 0 0 0 3px var(--bg), 0 0 0 6px var(--yellow); }
 .tx-bub [aria-checked='true'] span { color: var(--yellow); }
+
+/* ---------- Memory: notes and summary keep their paragraphs; tap a note to edit ---------- */
+.notes .note-row { align-items: flex-start; padding-top: 10px; padding-bottom: 10px; }
+.notes .note-row > .bullet { margin-top: 2px; }
+.notes .note-row .tx { flex: 1; min-width: 0; padding: 4px 0; text-align: left; color: var(--white); font: 500 15px/1.45 var(--font); white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 10; -webkit-box-orient: vertical; overflow: hidden; border-radius: 8px; }
+.notes .note-row .tx:focus-visible { outline: 3px solid var(--yellow); outline-offset: 4px; }
+.notes .add-row { align-items: flex-end; padding-top: 6px; padding-bottom: 6px; }
+.notes .add-row textarea { flex: 1; min-width: 0; min-height: 44px; padding: 11px 0; border: 0; resize: none; background: transparent; font: 500 15px/1.45 var(--font); color: var(--cream); }
+.notes .add-row textarea:focus { outline: none; }
+.notes .add-row textarea::placeholder { color: var(--muted); }
+.note-ta { min-height: 140px; white-space: pre-wrap; line-height: 1.5; }
+.sum-tx { margin: 10px 0 12px; font: 400 14px/1.55 var(--font); white-space: pre-wrap; overflow-wrap: anywhere; }
