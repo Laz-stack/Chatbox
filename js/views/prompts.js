@@ -4,7 +4,7 @@ import { summarize, historyTokens } from '../memory.js';
 import { esc, debounce, uid, fmtNum, copyText, reducedMotion } from '../util.js';
 import { topbar, title2, ibtn, bullet, avatarBullet, area, toggleRow, bindSwitch, icon, primary, reel, toast, openSheet, autosize } from '../ui.js';
 
-const NOTE_MAX = 4000; // characters per pinned note
+const NOTE_MAX = 10000; // characters per pinned note (about 2,500 tokens, sent with every reply)
 
 // Every layer keeps one number and one colour everywhere (Prompts and Final prompt), even when some are empty.
 const LAYER_ORDER = ['global', 'connection', 'world', 'persona', 'user', 'lore', 'style', 'content', 'pinned', 'notes', 'chat'];
@@ -223,7 +223,8 @@ export async function memoryView(id) {
           onMount(s, close) {
             const ta = s.querySelector('#noteTa');
             autosize(ta, Math.round(innerHeight * 0.55));
-            const left = () => (s.querySelector('#noteLeft').textContent = `${ta.value.length} of ${NOTE_MAX} characters`);
+            // How long it is, and roughly what it adds to every reply.
+            const left = () => (s.querySelector('#noteLeft').textContent = `${ta.value.length.toLocaleString()} of ${NOTE_MAX.toLocaleString()} characters · about ${Math.ceil(ta.value.length / 4).toLocaleString()} tokens with each reply`);
             ta.addEventListener('input', left);
             left();
             s.querySelector('[data-x]').onclick = () => close();
