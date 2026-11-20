@@ -6,7 +6,7 @@ import { STEER, parseScene, splitTurn, hasCastLines, resolveSpeaker, passengersI
 import { complete, PROVIDERS } from '../providers.js';
 import { buildPrompt } from '../prompt.js';
 import { shouldSummarize, summarize } from '../memory.js';
-import { chronicle, chronicleDue, trackingOn, changeText, markStation } from '../chronicle.js';
+import { chronicle, chronicleDue, trackingOn, changeText, markStation, undoReply } from '../chronicle.js';
 import { esc, uid, formatMessage, markProse, fmtNum, estimateTokens, inkOn, ago, plain, detectMood, copyText, download, slug, reducedMotion, motion, lineAccent, EASE_OUT } from '../util.js';
 import { avatarTile } from '../avatar.js';
 import { sceneSVG } from '../scenes.js';
@@ -345,6 +345,9 @@ export async function chatView(id, focusId = null) {
         if (mode === 'regen') {
           target.alts.push('');
           target.alt = target.alts.length - 1;
+          // A new version: take back what the old one changed in Bonds, and read it again later.
+          if (target.chron) undoReply(chat, target);
+          if (chat.chron) chat.chron.upto = Math.min(chat.chron.upto, chat.messages.indexOf(target));
         }
       }
       const upto = mode === 'continue' ? idx + 1 : idx;
@@ -488,6 +491,7 @@ export async function chatView(id, focusId = null) {
         if (!destroyed && target.chron && i >= 0) rerenderMsg(i);
       } catch (e) {
         console.warn('chronicle failed', e);
+        await saveChat(chat, false);
       }
     }
 
@@ -762,6 +766,7 @@ export async function chatView(id, focusId = null) {
     async function remove(i) {
       const [m] = chat.messages.splice(i, 1);
       if (chat.summary && i < chat.summary.upto) chat.summary.upto--;
+      if (chat.chron && i < chat.chron.upto) chat.chron.upto--;
       const el = log.querySelector(`.msg[data-i="${i}"]`);
       if (el) await motion(el, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.94)' }], { duration: 180, easing: 'ease-in' }).finished.catch(() => {});
       renderAll();
@@ -772,6 +777,7 @@ export async function chatView(id, focusId = null) {
         onAction: async () => {
           chat.messages.splice(i, 0, m);
           if (chat.summary && i < chat.summary.upto) chat.summary.upto++;
+          if (chat.chron && i < chat.chron.upto) chat.chron.upto++;
           renderAll();
           await save();
           updateTokens();

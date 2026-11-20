@@ -42,12 +42,23 @@ function transcript(chat, from, to, cast, persona) {
 }
 
 // True when enough has happened since the last read for an automatic one.
-export const chronicleDue = (chat) => chat.messages.slice(chat.chron?.upto || 0).filter((m) => m.role === 'assistant').length >= 2;
+// After a failed read, wait a few more messages before trying again.
+export const chronicleDue = (chat) =>
+  chat.messages.slice(chat.chron?.upto || 0).filter((m) => m.role === 'assistant').length >= 2 && chat.messages.length - (chat.chron?.failAt || 0) >= 4;
 export const unread = (chat) => chat.messages.length - (chat.chron?.upto || 0);
 
 // Read new messages and update stations and bonds. whole: start from the beginning (in chunks).
 // Returns { stations: [...new], changes: [{ who, d: {trust: 8}, why }] }.
-export async function chronicle({ chat, cast, persona, conn, settings, whole = false, signal, onStep }) {
+// One read at a time per chat: a second call while one runs gets the same result.
+const running = new Map();
+export function chronicle(opts) {
+  const id = opts.chat.id;
+  if (running.has(id)) return running.get(id);
+  const p = read(opts).finally(() => running.delete(id));
+  running.set(id, p);
+  return p;
+}
+async function read({ chat, cast, persona, conn, settings, whole = false, signal, onStep }) {
   chat.route ||= [];
   chat.bonds ||= {};
   const len = chat.messages.length;
@@ -55,12 +66,21 @@ export async function chronicle({ chat, cast, persona, conn, settings, whole = f
   // An automatic read of a long unread stretch only looks at the latest part.
   if (!whole) from = Math.max(from, len - CHUNK);
   const out = { stations: [], changes: [] };
-  if (whole) chat.route = chat.route.filter((s) => !s.auto);
-  for (let a = from; a < len; a += CHUNK) {
-    const b = Math.min(len, a + CHUNK);
-    onStep?.(a, len);
-    const res = isDemo(conn) ? demoRead(chat, a, b, cast) : await readPart({ chat, cast, persona, conn, settings, a, b, signal });
-    apply(chat, res, cast, a, b, out);
+  // If any part fails, put everything back as it was.
+  const before = structuredClone({ route: chat.route, bonds: chat.bonds });
+  try {
+    if (whole) chat.route = chat.route.filter((s) => !s.auto);
+    for (let a = from; a < len; a += CHUNK) {
+      const b = Math.min(len, a + CHUNK);
+      onStep?.(a, len);
+      const res = isDemo(conn) ? demoRead(chat, a, b, cast) : await readPart({ chat, cast, persona, conn, settings, a, b, signal });
+      apply(chat, res, cast, a, b, out);
+    }
+  } catch (e) {
+    chat.route = before.route;
+    chat.bonds = before.bonds;
+    chat.chron = { ...(chat.chron || {}), failAt: chat.messages.length };
+    throw e;
   }
   chat.chron = { upto: len, at: Date.now(), whole: whole || chat.chron?.whole || from === 0 };
   return out;
@@ -92,8 +112,8 @@ const pick = (b) => ({ trust: b.trust, affection: b.affection, tension: b.tensio
 function apply(chat, res, cast, a, b, out) {
   for (const s of Array.isArray(res?.stations) ? res.stations.slice(0, 2) : []) {
     const n = Math.round(Number(s.msg)) - 1;
-    const idx = n >= a && n < b ? n : b - 1;
-    const m = chat.messages[idx];
+    if (!(n >= a && n < b)) continue;
+    const m = chat.messages[n];
     const title = str(s.title).replace(/^["“]|["”]$/g, '').slice(0, 60);
     if (!m || !title || chat.route.some((x) => x.msgId === m.id || x.title.toLowerCase() === title.toLowerCase())) continue;
     const st = { id: uid(), msgId: m.id, title, kind: KINDS[s.kind] ? s.kind : 'turn', line: str(s.line).slice(0, 160), who: castByName(cast, s.who)?.id || null, auto: true, at: Date.now() };
@@ -148,6 +168,32 @@ export function bondsLayer(chat, people, youName) {
   return rows.length ? `How the characters feel about ${youName} right now (0 to 100). Let this shape how they act toward ${youName}; it changes only gradually:\n${rows.join('\n')}` : '';
 }
 
+// Undo what a read attached to one reply (when that reply is regenerated or deleted).
+export function undoReply(chat, m) {
+  for (const x of m.chron?.bonds || []) {
+    const b = chat.bonds?.[x.who];
+    if (!b || b.locked) continue;
+    for (const [k] of BOND_KEYS) if (x.d?.[k]) b[k] = clamp(b[k] - x.d[k]);
+    const at = b.log.findIndex((l) => l.d && l.msgId === m.id);
+    if (at >= 0) b.log.splice(at, 1);
+  }
+  delete m.chron;
+}
+// Bonds as they stood at a point in the chat: changes logged after it are taken back.
+export function bondsAt(bonds, ids) {
+  const out = {};
+  for (const [id, b0] of Object.entries(bonds || {})) {
+    const b = structuredClone(b0);
+    b.log = b.log.filter((l) => {
+      if (ids.has(l.msgId)) return true;
+      for (const [k] of BOND_KEYS) if (l.d?.[k]) b[k] = clamp(b[k] - l.d[k]);
+      return false;
+    });
+    if (b.log.some((l) => l.first)) out[id] = b;
+  }
+  return out;
+}
+
 // Mark a message as a station by hand.
 export function markStation(chat, m, title) {
   chat.route ||= [];
@@ -199,7 +245,7 @@ function demoRead(chat, a, b, cast) {
   const lastAi = [...chat.messages.slice(a, b).entries()].reverse().find(([, m]) => m.role === 'assistant');
   const p = cast[0];
   const prev = chat.bonds[p.id];
-  const words = (lastAi ? textOf(lastAi[1]) : '').replace(/^[^:\n]{1,30}:\s*/gm, '').replace(/[*"“”`_]/g, '').split(/\s+/).filter(Boolean).slice(0, 5).join(' ');
+  const words = (lastAi ? textOf(lastAi[1]) : '').replace(/^[^:\n]{1,30}:\s*/gm, '').replace(/[*"“”`_]/g, '').split(/[.!?]/)[0].split(/\s+/).filter(Boolean).slice(0, 5).join(' ');
   return {
     stations: lastAi && words && (!chat.route.length || b - a >= 6) ? [{ msg: a + lastAi[0] + 1, title: words, kind: chat.route.length ? 'turn' : 'meet', line: 'A moment from the demo story.', who: p.name }] : [],
     bonds: [{ who: p.name, trust: (prev?.trust ?? 30) + 4, affection: (prev?.affection ?? 20) + 2, tension: Math.max(0, (prev?.tension ?? 15) - 1), view: `${p.name} is getting used to having you around.`, why: 'you kept the conversation going' }],

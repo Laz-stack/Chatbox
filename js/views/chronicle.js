@@ -38,12 +38,12 @@ export async function routeView(id) {
     const m = chat.messages[n - 1];
     const isOpen = open === s.id;
     const card = isOpen
-      ? `<div class="rt-card"><span class="k">${esc(KINDS[s.kind] || 'Station')} · message ${n}</span><b>${esc(s.title)}</b>${s.line ? `<p>${esc(s.line)}</p>` : ''}
+      ? `<div class="rt-card"><b>${esc(s.title)}</b>${s.line ? `<p>${esc(s.line)}</p>` : ''}<span class="k">${esc(KINDS[s.kind] || 'Station')} · message ${n}</span>
         <div class="rt-acts"><a class="rt-pill press" href="#/chat/${encodeURIComponent(chat.id)}/m/${encodeURIComponent(s.msgId)}">${icon('chev', 15)}Jump there</a>${!ix ? `<button type="button" class="rt-pill press" data-branch="${esc(s.id)}">${icon('track', 15)}Branch from here</button>` : ''}</div>
         <button type="button" class="rt-rm press" data-rm="${esc(s.id)}">Remove from map</button></div>`
       : '';
     return `<li class="rt-st${isOpen ? ' open' : ''}" style="--m:${ix && who ? colorOf(who) : CREAM}">
-      <button type="button" class="rt-hit press" data-st="${esc(s.id)}" aria-expanded="${isOpen}"><span class="rt-dot" aria-hidden="true"></span>
+      <button type="button" class="rt-hit press" data-st="${esc(s.id)}" aria-expanded="${isOpen}" aria-label="${esc(s.title)}"><span class="rt-dot" aria-hidden="true"></span>
         <b>${esc(s.title)}</b>${s.line && !isOpen ? `<span class="rt-line">${esc(s.line)}</span>` : ''}<small>${esc(KINDS[s.kind] || 'Station')} · message ${n}${m && n === chat.messages.length ? ' · latest' : ''}</small></button>${card}</li>`;
   };
   const listHTML = () =>
@@ -243,7 +243,7 @@ export async function diaryView(id, entryId = null) {
     return list.length ? list.map(plate).join('') : `<div class="dy empty"><b>Nothing written yet</b><span class="dy-t">${esc(who.name)} writes about what happened from their side: what they noticed, felt and kept to themselves.</span></div>`;
   };
   const whoRow = () =>
-    ix ? `<div class="dy-who" role="radiogroup" aria-label="Whose diary">${cast.map((p) => `<button type="button" class="press" role="radio" aria-checked="${p.id === who.id}" data-who="${esc(p.id)}">${avatarBullet(p, 26)}${esc(p.name)}</button>`).join('')}</div>` : '';
+    ix ? `<div class="dy-who" role="group" aria-label="Whose diary">${cast.map((p) => `<button type="button" class="press" aria-pressed="${p.id === who.id}" data-who="${esc(p.id)}">${avatarBullet(p, 26)}${esc(p.name)}</button>`).join('')}</div>` : '';
   const hint = () => (since() >= 4 ? '' : entries().length ? 'A new entry unlocks after a few more messages.' : 'The first entry unlocks after a few messages.');
 
   const html = `<div class="screen no-tab cr-screen">
@@ -270,7 +270,7 @@ export async function diaryView(id, entryId = null) {
         const b = e.target.closest('[data-who]');
         if (!b) return;
         who = cast.find((p) => p.id === b.dataset.who) || who;
-        root.querySelectorAll('.dy-who [role=radio]').forEach((x) => x.setAttribute('aria-checked', x === b));
+        root.querySelectorAll('.dy-who [data-who]').forEach((x) => x.setAttribute('aria-pressed', x === b));
         S.settings.diaryWho = { ...(S.settings.diaryWho || {}), [chat.id]: who.id };
         saveSettings();
         redraw();
