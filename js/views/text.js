@@ -43,8 +43,9 @@ export function textView() {
   const html = `<div class="screen no-tab">
     ${topbar({ back: '#/settings', title: 'Reading text' })}
     <div class="tx-prev" aria-label="Preview">
-      <div class="tx-prev-scene scn"><p class="scn-narr">${formatMessage(SAMPLE_SCENE)}</p></div>
-      <div class="msg ai tx-prev-bubble"><div class="bubble">${formatMessage(SAMPLE_BUBBLE)}</div></div>
+      <div class="tx-prev-scene scn"><p class="scn-narr">${formatMessage(SAMPLE_SCENE)}</p>
+        <div class="scn-b" style="--c:#B8ACFE;--ink:#0A0A0A"><span class="scn-tag">Lumi</span><div class="scn-t">${formatMessage('“They’ll search me first. Hide this.”')}</div></div></div>
+      <div class="msg ai tx-prev-bubble" style="--accent:#2EAA67"><div class="bubble">${formatMessage(SAMPLE_BUBBLE)}</div></div>
     </div>
     <p class="tx-lbl">Size</p>${sizeRow(t)}
     <p class="tx-lbl">Font</p>${fontGrid(t)}

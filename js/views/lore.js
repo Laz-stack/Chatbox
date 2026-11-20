@@ -26,9 +26,16 @@ const coverOf = (list) => {
     }
   return null;
 };
+// Which chats a book is for. A story named like its book is shown by its cast instead.
 const where = (list, book = '') => {
-  const names = [...new Set(list.flatMap((e) => (e.scope === 'lines' ? e.lines : [])).map((id) => interchange(id)?.title || character(id)?.name).filter(Boolean))].filter((n) => n !== book);
-  return names.length ? names.slice(0, 2).join(', ') : list.some((e) => e.scope === 'lines') ? 'its story' : 'every chat';
+  const label = (id) => {
+    const ix = interchange(id);
+    if (ix) return ix.title !== book ? ix.title : ix.people.map((p) => p.name.split(' ')[0]).slice(0, 3).join(', ') + (ix.people.length > 3 ? ` +${ix.people.length - 3}` : '');
+    const c = character(id);
+    return c && (c.name !== book ? c.name : 'narrator');
+  };
+  const names = [...new Set(list.flatMap((e) => (e.scope === 'lines' ? e.lines : [])).map(label).filter(Boolean))];
+  return names.length ? names.slice(0, 2).join(' · ') : 'every chat';
 };
 
 async function setBook(book, on) {

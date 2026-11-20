@@ -740,7 +740,7 @@ export async function chatView(id, focusId = null) {
             ]),
         { icon: 'user', label: `You: ${me().name?.trim() || 'You'}`, on: personaSheet },
         { icon: 'download', label: 'Export as story', on: exportStory },
-        { icon: 'edit', label: 'Text size', on: textSheet },
+        { icon: 'sliders', label: 'Reading text', on: textSheet },
         '-',
         ...(ix
           ? []
@@ -1050,7 +1050,7 @@ export async function chatView(id, focusId = null) {
     }
     root.querySelector('#whoBtn').addEventListener('click', infoSheet);
     const setNotes = () => {
-      setNotes();
+      root.querySelector('#noteN').textContent = chat.notes.length;
       root.querySelector('#noteWrap').hidden = !!ix || !chat.notes.length;
     };
     root.querySelector('#asBtn')?.addEventListener('click', (e) =>

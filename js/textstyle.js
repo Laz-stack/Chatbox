@@ -14,14 +14,15 @@ export const FONTS = {
 // No red (action) and no yellow (selected) in the list, by the app's colour rules.
 export const DIALOGUE = {
   white: { label: 'White', dark: '#FFFFFF', cream: '#0A0A0A' },
-  cream: { label: 'Cream', dark: '#ECECEC', cream: '#0A0A0A' },
   parchment: { label: 'Parchment', dark: '#F2E6C9', cream: '#5A4410' },
+  sand: { label: 'Sand', dark: '#E3C99A', cream: '#6B4E1A' },
+  // On black: the speaker's colour lightened; in cream bubbles: the character's colour darkened (set in CSS).
   line: { label: 'Speaker’s line colour', dark: '#FFFFFF', cream: '#0A0A0A' },
 };
 export const NARRATION = {
   grey: { label: 'Grey', dark: '#9B9B9B' },
   soft: { label: 'Soft grey', dark: '#BDBDBD' },
-  cream: { label: 'Cream', dark: '#ECECEC' },
+  warm: { label: 'Warm grey', dark: '#D9D6CC' },
 };
 export const DEFAULT_TEXT = { size: 'm', font: 'archivo', dialogue: 'white', narration: 'soft' };
 export const textPrefs = () => ({ ...DEFAULT_TEXT, ...(S.settings.text || {}) });
