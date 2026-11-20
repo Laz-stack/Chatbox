@@ -7,6 +7,7 @@ import { complete, PROVIDERS } from '../providers.js';
 import { buildPrompt } from '../prompt.js';
 import { shouldSummarize, summarize } from '../memory.js';
 import { chronicle, chronicleDue, trackingOn, changeText, markStation, undoReply } from '../chronicle.js';
+import { sortChapters, chapterSpans, chapterAt, addChapter, renameChapter, removeChapter, chapterHeadings, recapDue, writeRecap, recapFacts, recapMeta, recapFresh } from '../chapters.js';
 import { clockOn, chipText, longText, partOfDay, clockSheet } from '../clock.js';
 import { advOn, roll, RESULT, suggestMoves, advRowText } from '../adventure.js';
 import { hereOf, untravel } from '../worldmap.js';
@@ -273,6 +274,7 @@ export async function chatView(id, focusId = null) {
           ? `<div class="empty">${ix.scene?.trim() ? `<b class="ix-scene">${esc(ix.scene.trim())}</b>` : ''}${esc(ix.people.map((p) => p.name).join(' and '))} are here. Say something, and pick who answers below.</div>`
           : `<div class="empty">Say hello to ${esc(ch.name)}. Wrap actions in *asterisks*.</div>`;
       log.innerHTML = h;
+      placeChapters();
       renderChips();
     }
     function rerenderMsg(i) {
@@ -282,6 +284,148 @@ export async function chatView(id, focusId = null) {
       log.querySelectorAll(`[data-for="${CSS.escape(chat.messages[i].id)}"]`).forEach((x) => x.remove());
       el.outerHTML = msgHTML(chat.messages[i], i);
     }
+    // ---------- Chapters: a break in the log before each chapter's first message ----------
+    function placeChapters() {
+      log.querySelectorAll('.chap').forEach((x) => x.remove());
+      sortChapters(chat).forEach((c, k) => {
+        const el = log.querySelector(`.msg[data-id="${CSS.escape(c.msgId)}"]`);
+        el?.insertAdjacentHTML('beforebegin', `<button type="button" class="chap press" data-chap="${esc(c.id)}" aria-label="Chapter ${k + 1}: ${esc(c.title)}. Chapter options"><span class="chap-n">Chapter ${k + 1}</span><b>${esc(c.title)}</b></button>`);
+      });
+    }
+    const chapterById = (id) => (chat.chapters || []).find((c) => c.id === id);
+    function goChapter(id) {
+      const el = log.querySelector(`.chap[data-chap="${CSS.escape(id)}"]`);
+      if (!el) return;
+      el.scrollIntoView({ block: 'start', behavior: reducedMotion() ? 'auto' : 'smooth' });
+      el.focus({ preventScroll: true });
+    }
+    function chapterMenu(btn) {
+      const c = chapterById(btn.dataset.chap);
+      if (!c) return;
+      openMenu(btn, [
+        { icon: 'edit', label: 'Rename chapter', on: () => chapterNameSheet({ c }) },
+        { icon: 'book', label: 'All chapters', on: chaptersSheet },
+        '-',
+        {
+          icon: 'trash',
+          label: 'Remove chapter',
+          danger: true,
+          on: async () => {
+            removeChapter(chat, c.id);
+            await saveChat(chat, false);
+            placeChapters();
+            toast('Chapter removed. Its messages join the chapter before.');
+          },
+        },
+      ]);
+    }
+    // Name a new chapter (starting at message m) or rename one.
+    function chapterNameSheet({ c = null, m = null }) {
+      const n = c ? chat.chapters.indexOf(c) + 1 : 0;
+      openSheet({
+        label: c ? 'Rename chapter' : 'Start a chapter',
+        html: `<h2 class="sheet-title">${c ? `Rename chapter ${n}` : 'Start a chapter here'}</h2><form id="chF"><input class="mk-in" id="chIn" maxlength="60" value="${esc(c?.title || '')}" placeholder="e.g. The Night Market" aria-label="Chapter title" autocomplete="off"><p class="fhint">${c ? 'A short title, like a book chapter.' : 'The chapter starts at this message. A short title, like a book chapter.'}</p><div class="sheet-actions"><button type="submit" class="btn-primary press"><span>${c ? 'Rename' : 'Start chapter'}</span></button></div></form>`,
+        onMount(s, close) {
+          const inp = s.querySelector('#chIn');
+          setTimeout(() => (inp.focus(), inp.select()), 80);
+          s.querySelector('#chF').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const t = inp.value.trim();
+            if (!t) return inp.focus();
+            let made = null;
+            if (c) renameChapter(chat, c.id, t);
+            else {
+              // Messages before it become chapter 1, so the numbering still starts at the start.
+              if (!(chat.chapters || []).length && chat.messages[0] && chat.messages[0].id !== m.id) addChapter(chat, chat.messages[0].id, 'The Beginning');
+              made = addChapter(chat, m.id, t);
+            }
+            close();
+            await saveChat(chat, false);
+            placeChapters();
+            if (made) toast(`Chapter ${chat.chapters.indexOf(made) + 1} starts here`);
+          });
+        },
+      });
+    }
+    function chaptersSheet() {
+      const spans = chapterSpans(chat);
+      const last = chat.messages[chat.messages.length - 1];
+      const cur = chapterAt(chat, chat.messages.length - 1);
+      const line = ix ? '#ECECEC' : ch.line?.color || '#2EAA67';
+      const canStart = last && !spans.some((x) => x.c.msgId === last.id);
+      const rows = spans
+        .map(({ c, n, from, to }) => `<li class="${c === cur ? 'on' : ''}"><button type="button" class="press" data-go="${esc(c.id)}"${c === cur ? ' aria-current="step"' : ''}><b>${esc(c.title)}</b><small>Chapter ${n} · messages ${from}–${to}${c === cur ? ' · you are here' : ''}</small></button></li>`)
+        .join('');
+      openSheet({
+        label: 'Chapters',
+        html: `<h2 class="sheet-title">Chapters</h2><p class="sheet-p">${spans.length ? `${esc(ix ? ix.title : ch.name)} · ${spans.length} chapter${spans.length === 1 ? '' : 's'}. Tap one to jump there.` : `No chapters yet. With Track the story on, they’re added as the story moves into a new arc, or start one yourself.`}</p>
+          ${spans.length ? `<ol class="chs" style="--c:${line}">${rows}</ol>` : ''}
+          ${canStart ? `<button type="button" class="ch-start press" id="chStart">${icon('plus', 16)}Start chapter ${spans.length + (spans.length || chat.messages.length === 1 ? 1 : 2)} at the latest message</button>` : ''}`,
+        onMount(s, close) {
+          s.addEventListener('click', (e) => {
+            const g = e.target.closest('[data-go]');
+            if (g) return close(), setTimeout(() => goChapter(g.dataset.go), 320);
+            if (e.target.closest('#chStart')) close(), setTimeout(() => chapterNameSheet({ m: last }), 320);
+          });
+        },
+      });
+    }
+
+    // ---------- Recap: "Previously", when you come back after a while ----------
+    const lastSaidAt = () => [...chat.messages].reverse().find((m) => m.at)?.at || chat.updatedAt || 0;
+    function recapBody() {
+      const cast = ix ? ix.people : [ch];
+      const gone = Date.now() - lastSaidAt();
+      const meta = [gone >= 3600e3 ? `${awaySpan(gone)} ago` : '', ...recapMeta(chat)].filter(Boolean).join(' · ');
+      const facts = recapFacts(chat, cast);
+      const line = ix ? '#ECECEC' : ch.line?.color || '#2EAA67';
+      return (
+        `<h3 class="pv-h">Previously</h3>${meta ? `<p class="pv-k">${esc(meta)}</p>` : ''}<p class="pv-p">${esc(chat.recap.text)}</p>` +
+        (facts.length ? `<ol class="pv-rail" style="--c:${line}">${facts.map((f) => `<li>${esc(f.text)}<small>${esc(f.k)}</small></li>`).join('')}</ol>` : '') +
+        `<div class="pv-acts"><button type="button" class="pv-ok press">Got it</button><a class="pv-route press" href="#/route/${encodeURIComponent(chat.id)}">${icon('route', 15)}Route map</a></div>`
+      );
+    }
+    // Shown after the message you left off at (so a "While you were away" note comes after it).
+    function putRecap(box, anchorId) {
+      const i = chat.messages.findIndex((m) => m.id === anchorId);
+      const next = [...log.querySelectorAll('.msg[data-i]')].find((el) => +el.dataset.i > i);
+      const before = next?.previousElementSibling?.classList.contains('chap') ? next.previousElementSibling : next;
+      before ? log.insertBefore(box, before) : log.appendChild(box);
+    }
+    async function showRecap(manual = false) {
+      if (destroyed) return;
+      log.querySelector('.pv')?.remove();
+      const anchorId = chat.messages[chat.messages.length - 1]?.id;
+      const box = document.createElement('section');
+      box.className = 'pv';
+      box.setAttribute('aria-label', 'Previously');
+      box.setAttribute('aria-live', 'polite');
+      box.addEventListener('click', (e) => {
+        if (e.target.closest('.pv-ok')) box.remove();
+        else if (e.target.closest('.pv-again')) showRecap(true);
+      });
+      const stick = nearBottom();
+      // From the menu, the card shows straight away while it's written; on opening, only once it's ready.
+      if (manual) {
+        box.innerHTML = recapFresh(chat) ? recapBody() : `<h3 class="pv-h">Previously</h3><p class="pv-p pv-wait">Writing the recap…</p>`;
+        putRecap(box, anchorId);
+        if (stick || manual) toBottom(true);
+      }
+      try {
+        await writeRecap({ chat, cast: ix ? ix.people : [ch], persona: me(), conn: connectionFor(ch) });
+      } catch (e) {
+        if (!manual || destroyed) return box.remove();
+        box.innerHTML = `<h3 class="pv-h">Previously</h3><p class="pv-p">${esc(e.message || 'The recap couldn’t be written.')}</p><div class="pv-acts"><button type="button" class="pv-again press">${icon('refresh', 15)}Try again</button><button type="button" class="pv-ok press">Close</button></div>`;
+        return;
+      }
+      if (destroyed) return;
+      chat.recap.seenAt = Date.now();
+      saveChat(chat, false);
+      box.innerHTML = recapBody();
+      if (!box.isConnected) putRecap(box, anchorId);
+      if (stick || manual) toBottom(true);
+    }
+
     const writeChip = () => `<button type="button" class="press" data-chip="write">${icon('edit', 16)}Write for me</button>`;
     function renderChips() {
       // While a reply is being written the chips stay in place, disabled, so nothing jumps.
@@ -527,12 +671,13 @@ export async function chatView(id, focusId = null) {
       const target = chat.messages[chat.messages.length - 1];
       try {
         const res = await chronicle({ chat, cast: ix ? ix.people : [ch], persona: me(), conn, settings: S.settings });
-        if (res.changes.length || res.stations.length || res.time || res.ties || res.adv || res.place) target.chron = { bonds: res.changes, stations: res.stations.map((s) => s.title), ...(res.time ? { time: res.time } : {}), ...(res.ties ? { ties: res.ties } : {}), ...(res.adv ? { adv: res.adv } : {}), ...(res.place ? { place: res.place } : {}) };
+        if (res.changes.length || res.stations.length || res.time || res.ties || res.adv || res.place || res.chapter) target.chron = { bonds: res.changes, stations: res.stations.map((s) => s.title), ...(res.chapter ? { chapter: res.chapter } : {}), ...(res.time ? { time: res.time } : {}), ...(res.ties ? { ties: res.ties } : {}), ...(res.adv ? { adv: res.adv } : {}), ...(res.place ? { place: res.place } : {}) };
         if (res.place) setScene();
         if (res.stations.length && chat.picAuto && picConn() && !destroyed) runPaint(target, chat.picStyle || picPrefs().style);
         await saveChat(chat, false);
         const i = chat.messages.indexOf(target);
         if (!destroyed && target.chron && i >= 0) rerenderMsg(i);
+        if (!destroyed && res.chapter) placeChapters();
         if (!destroyed) updateClock();
       } catch (e) {
         console.warn('chronicle failed', e);
@@ -551,6 +696,7 @@ export async function chatView(id, focusId = null) {
       });
       if (c.place) rows.push(`<a class="chr-row press" href="#/map/${encodeURIComponent(chat.id)}">${icon('route', 13)}<span>${c.place.created ? 'New place' : 'Now at'} · ${esc(c.place.name)}</span></a>`);
       if (c.adv?.length) rows.push(`<a class="chr-row press" href="#/adventure/${encodeURIComponent(chat.id)}">${icon('dice', 13)}<span>${esc(advRowText(c.adv))}</span></a>`);
+      if (c.chapter && chapterById(c.chapter.id)) rows.push(`<button type="button" class="chr-row press" data-chapgo="${esc(c.chapter.id)}">${icon('book', 13)}<span>New chapter · ${esc(chapterById(c.chapter.id).title)}</span></button>`);
       for (const s of c.stations || []) rows.push(`<a class="chr-row press" href="#/route/${encodeURIComponent(chat.id)}">${icon('route', 13)}<span>New station · ${esc(s)}</span></a>`);
       return rows.filter(Boolean).length ? `<div class="chr">${rows.join('')}</div>` : '';
     }
@@ -920,6 +1066,10 @@ export async function chatView(id, focusId = null) {
       ];
     };
     log.addEventListener('click', (e) => {
+      const chap = e.target.closest('.chap');
+      if (chap) return chapterMenu(chap);
+      const cg = e.target.closest('[data-chapgo]');
+      if (cg) return goChapter(cg.dataset.chapgo);
       const more = e.target.closest('[data-picmore]');
       if (more) return openMenu(more, picItems(more.dataset.picmore));
       const opener = e.target.closest('.pic-open');
@@ -1208,6 +1358,7 @@ export async function chatView(id, focusId = null) {
           { icon: 'pin', label: 'Pin to notes', on: () => pin(m) },
           ...(m.role === 'assistant' ? [{ icon: 'image', label: 'Picture this', on: () => pictureSheet(m) }] : []),
           { icon: 'route', label: (chat.route || []).some((s) => s.msgId === m.id) ? 'On the route map' : 'Mark on route map', on: () => ((chat.route || []).some((s) => s.msgId === m.id) ? (location.hash = `#/route/${encodeURIComponent(chat.id)}`) : markSheet(m)) },
+          ...((chat.chapters || []).some((c) => c.msgId === m.id) ? [] : [{ icon: 'book', label: 'Start a chapter here', on: () => chapterNameSheet({ m }) }]),
           ...(ix ? [] : [{ icon: 'track', label: 'Branch from here', on: () => branch(i) }]),
           '-',
           { icon: 'trash', label: 'Delete', danger: true, on: () => remove(i) },
@@ -1349,6 +1500,8 @@ export async function chatView(id, focusId = null) {
         { icon: 'route', label: hereOf(chat) ? `World map: ${hereOf(chat).name}` : 'World map', on: () => (location.hash = `#/map/${encodeURIComponent(chat.id)}`) },
         { icon: 'dice', label: advOn(chat) ? 'Quests and items' : 'Adventure mode', on: () => (location.hash = `#/adventure/${encodeURIComponent(chat.id)}`) },
         { icon: 'route', label: 'Route map', on: () => (location.hash = `#/route/${encodeURIComponent(chat.id)}`) },
+        { icon: 'book', label: 'Chapters', on: chaptersSheet },
+        ...(chat.messages.filter((m) => !m.dir).length >= 2 ? [{ icon: 'restart', label: 'Recap so far', on: () => showRecap(true) }] : []),
         { icon: 'heart', label: 'Bonds', on: () => (location.hash = `#/bonds/${encodeURIComponent(chat.id)}`) },
         { icon: 'book', label: 'Diary', on: () => (location.hash = `#/diary/${encodeURIComponent(chat.id)}`) },
         '-',
@@ -1466,7 +1619,9 @@ export async function chatView(id, focusId = null) {
       const cast = names.length > 2 ? names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1] : names.join(' and ');
       const out = [`# ${title}`, '', `*${scene ? 'A Carriage scene' : ix ? 'An Interchange' : 'A story'} with ${cast}. Exported from Chatbox on ${new Date().toLocaleDateString()}.*`, ''];
       if (ix?.scene?.trim()) out.push(`> ${ix.scene.trim()}`, '');
+      const heads = chapterHeadings(chat);
       for (const m of chat.messages) {
+        if (heads.has(m.id)) out.push(heads.get(m.id), '');
         if (m.error) continue;
         if (m.dir) {
           if (m.dir === 'skip' || m.dir === 'away') out.push('* * *', '');
@@ -1779,6 +1934,7 @@ export async function chatView(id, focusId = null) {
       setTimeout(() => focusEl.classList.remove('found'), 2200);
     } else {
       if (!matchMedia('(pointer: coarse)').matches) input.focus({ preventScroll: true });
+      if (recapDue(chat, S.settings) && connectionFor(ch)) showRecap(false);
       setTimeout(() => maybeAway(), 700);
     }
   }

@@ -4,6 +4,7 @@ import { KINDS, BOND_KEYS, chronicle, writeDiary, changeText, unread, trackingOn
 import { esc, inkOn, agoLong as ago } from '../util.js';
 import { topbar, icon, avatarBullet, primary, toggleRow, bindSwitch, toast, confirmSheet } from '../ui.js';
 import { tiesPanel } from './ties.js';
+import { chapterAt, sortChapters } from '../chapters.js';
 
 const CREAM = '#ECECEC';
 
@@ -47,12 +48,25 @@ export async function routeView(id) {
       <button type="button" class="rt-hit press" data-st="${esc(s.id)}" aria-expanded="${isOpen}" aria-label="${esc(s.title)}"><span class="rt-dot" aria-hidden="true"></span>
         <b>${esc(s.title)}</b>${s.line && !isOpen ? `<span class="rt-line">${esc(s.line)}</span>` : ''}<small>${s.day ? `Day ${s.day} · ` : ''}${esc(KINDS[s.kind] || 'Station')} · message ${n}${m && n === chat.messages.length ? ' · latest' : ''}</small></button>${card}</li>`;
   };
+  // Chapters head their stations as bigger interchange rings on the same line.
+  const withChapters = () => {
+    sortChapters(chat);
+    let cur;
+    return chat.route
+      .map((s) => {
+        const c = chapterAt(chat, chat.messages.findIndex((m) => m.id === s.msgId));
+        const head = c && c !== cur ? `<li class="rt-ch"><span class="rt-ring" aria-hidden="true"></span><b>${esc(c.title)}</b><small>Chapter ${chat.chapters.indexOf(c) + 1}</small></li>` : '';
+        cur = c;
+        return head + stHTML(s);
+      })
+      .join('');
+  };
   const listHTML = () =>
     chat.route.length
-      ? `<ol class="rt" style="--c:${rail}">${chat.route.map(stHTML).join('')}</ol>`
+      ? `<ol class="rt" style="--c:${rail}">${withChapters()}</ol>`
       : `<ol class="rt empty" style="--c:${rail}"><li class="rt-st start"><span class="rt-hit"><span class="rt-dot" aria-hidden="true"></span><b>Start</b><span class="rt-line">Stations appear as the story turns: a first meeting, a secret, a fight, a new place.</span></span></li></ol>`;
   const btnText = () => (!chat.route.some((s) => s.auto) && !chat.chron?.whole && chat.messages.length > 2 ? 'Read the story so far' : unread(chat) > 0 ? 'Update the map' : 'Map is up to date');
-  const sub = () => `${esc(c.title)} · ${chat.route.length} station${chat.route.length === 1 ? '' : 's'}`;
+  const sub = () => `${esc(c.title)}${chat.chapters?.length ? ` · ${chat.chapters.length} chapter${chat.chapters.length === 1 ? '' : 's'}` : ''} · ${chat.route.length} station${chat.route.length === 1 ? '' : 's'}`;
 
   const html = `<div class="screen no-tab cr-screen">
     ${topbar({ back: `#/chat/${encodeURIComponent(chat.id)}`, title: 'Route map' })}
