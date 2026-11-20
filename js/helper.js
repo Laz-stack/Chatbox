@@ -23,13 +23,21 @@ export function helperFor(conn, job) {
 export async function helperComplete(conn, job, opts) {
   const run = helperFor(conn, job);
   const mt = meter();
+  let mt2 = null;
   const sent = (opts.system || '') + (opts.messages || []).map((m) => (typeof m.content === 'string' ? m.content : (m.content || []).map((p) => p.text || '').join(' '))).join('\n');
   let text = '';
   try {
     text = await complete(run, { ...opts, onUsage: mt.onUsage });
+    // Models that think before answering can spend the whole allowance thinking and send back
+    // nothing. Ask once more with twice the room (only what is used is billed).
+    if (!String(text || '').trim() && !opts.signal?.aborted) {
+      mt.commit(estimateTokens(sent), 0, (i, o, c) => recordJob(run, job, i, o, c)).catch(() => {});
+      text = await complete(run, { ...opts, maxTokens: Math.min(8000, (opts.maxTokens || 600) * 2), onUsage: (mt2 = meter()).onUsage });
+    }
   } finally {
     // A stopped job is still billed for what it generated; OpenRouter says what that was.
-    if (text || mt.usage) mt.commit(estimateTokens(sent), estimateTokens(text || ''), (i, o, c) => recordJob(run, job, i, o, c)).catch(() => {});
+    const last = mt2 || mt;
+    if (mt2 || text || mt.usage) last.commit(estimateTokens(sent), estimateTokens(text || ''), (i, o, c) => recordJob(run, job, i, o, c)).catch(() => {});
   }
   return text;
 }

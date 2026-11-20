@@ -1,6 +1,6 @@
 // Route map, Bonds and Diary screens for one chat (see js/chronicle.js for how they are filled).
 import { S, getChat, saveChat, saveSettings, character, interchange, isInterchangeId, connectionFor, personaFor, branchChat } from '../store.js';
-import { KINDS, BOND_KEYS, chronicle, writeDiary, changeText, unread, trackingOn, sortRoute } from '../chronicle.js';
+import { KINDS, BOND_KEYS, chronicle, writeDiary, changeText, unread, trackingOn, sortRoute, readLine } from '../chronicle.js';
 import { esc, inkOn, agoLong as ago } from '../util.js';
 import { topbar, icon, avatarBullet, primary, toggleRow, bindSwitch, toast, confirmSheet } from '../ui.js';
 import { tiesPanel } from './ties.js';
@@ -71,6 +71,7 @@ export async function routeView(id) {
   const html = `<div class="screen no-tab cr-screen">
     ${topbar({ back: `#/chat/${encodeURIComponent(chat.id)}`, title: 'Route map' })}
     <p class="cr-sub" id="rtSub">${sub()}</p>
+    <p class="cr-read" id="rtRead">${esc(readLine(chat, S.settings, ago))}</p>
     <div id="rtList">${listHTML()}</div>
     <div class="cr-foot">${toggleRow('tChron', 'Track the story', 'Every couple of replies, a short extra AI call updates the map and Bonds.', trackingOn(S.settings))}
       <p class="fhint">Long-press a message in the chat to mark it on the map yourself.</p></div>
@@ -85,6 +86,7 @@ export async function routeView(id) {
       const redraw = () => {
         $('#rtList').innerHTML = listHTML();
         $('#rtSub').innerHTML = sub();
+        $('#rtRead').textContent = readLine(chat, S.settings, ago);
         const go = $('#rtGo');
         go.querySelector('span').textContent = btnText();
         go.disabled = busy || !(unread(chat) > 0 || btnText() === 'Read the story so far');
@@ -151,6 +153,13 @@ export async function bondsView(id, tab = 'you') {
   chat.bonds ||= {};
   const openSet = new Set();
 
+  // The latest change (or the first read) and when it happened.
+  const when = (b, last) => {
+    const l = last || b.log?.find((x) => x.first);
+    if (!l) return '';
+    const n = msgNo(chat, l.msgId);
+    return `<p class="bd-chg">${last ? `${esc(changeText(last.d))}${last.why ? ` · ${esc(last.why)}` : ''}` : 'First read'}<small class="bd-when">${b.locked ? 'Kept as set · ' : ''}${last ? 'Last changed' : 'Set'} ${esc(ago(l.at))}${n ? ` · message ${n}` : ''}</small></p>`;
+  };
   const bars = (v) => `<span class="bd-seg" aria-hidden="true">${Array.from({ length: 10 }, (_, k) => `<i${v >= (k + 1) * 10 - 5 ? ' class="on"' : ''}></i>`).join('')}</span>`;
   const card = (p, k) => {
     const b = chat.bonds[p.id];
@@ -168,7 +177,7 @@ export async function bondsView(id, tab = 'you') {
     return `<section class="bd-card${b ? '' : ' none'}${isOpen ? ' open' : ''}" style="--c:${colorOf(p)};animation-delay:${k * 60}ms">
       ${b ? `<button type="button" class="bd-hd press" data-open="${esc(p.id)}" aria-expanded="${isOpen}">${tag(p)}<span class="bd-more">${isOpen ? 'Less' : 'History'}${icon('chev', 14)}</span></button>` : `<div class="bd-hd">${tag(p)}</div>`}
       ${rows}
-      ${b ? `${b.view ? `<p class="bd-view">${esc(b.view)}</p>` : ''}${last ? `<p class="bd-chg">${esc(changeText(last.d))}${last.why ? ` · ${esc(last.why)}` : ''}</p>` : ''}` : `<p class="bd-chg">No reads yet. Bonds appear after a couple of replies.</p>`}
+      ${b ? `${b.view ? `<p class="bd-view">${esc(b.view)}</p>` : ''}${when(b, last)}` : `<p class="bd-chg">No reads yet. Bonds appear after a couple of replies.</p>`}
       ${isOpen ? `${hist}${b ? `<div class="bd-tools">${toggleRow(`lk-${esc(p.id)}`, 'Keep these values', 'The story won’t change them; you still can, with − and +.', !!b.locked)}<button type="button" class="btn-text press" data-reset="${esc(p.id)}">${icon('restart', 15)}Start over</button></div>` : ''}` : ''}
     </section>`;
   };
@@ -177,6 +186,7 @@ export async function bondsView(id, tab = 'you') {
   const html = `<div class="screen no-tab cr-screen">
     ${topbar({ back: `#/chat/${encodeURIComponent(chat.id)}`, title: 'Bonds' })}
     <p class="cr-sub" id="bdSub">${cast.length > 1 && tab === 'them' ? 'How they see each other' : `How they feel about ${esc(c.persona?.name?.trim() || 'you')}`}</p>
+    <p class="cr-read">${esc(readLine(chat, S.settings, ago))}</p>
     ${cast.length > 1 ? `<div class="bd-tabs" role="tablist" aria-label="Bonds"><button type="button" class="press" role="tab" id="tabYou" aria-selected="${tab !== 'them'}" aria-controls="bdList">With you</button><button type="button" class="press" role="tab" id="tabThem" aria-selected="${tab === 'them'}" aria-controls="twBox">Between them</button></div>` : ''}
     <div id="bdList" class="bd-list" role="tabpanel" ${cast.length > 1 && tab === 'them' ? 'hidden' : ''}>${listHTML()}</div>
     ${cast.length > 1 ? `<div id="twBox" class="tw-box" role="tabpanel" ${tab === 'them' ? '' : 'hidden'}></div>` : ''}

@@ -165,9 +165,10 @@ export async function writeRecap({ chat, cast, persona, conn, signal }) {
     const ask =
       `Write a "previously" recap for ${you}, who is coming back to this story after a break. Return {"recap":"..."}. ` +
       `2 or 3 sentences, under 60 words, speaking to the user as "you": where things stand right now, what just happened, and what is unresolved. Concrete names and details, no flourish, no headings.`;
-    const out = await helperComplete(conn, 'recap', { system: 'You write short recaps of an ongoing roleplay story. Reply with ONE JSON object and nothing else. Every character is an adult.', messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: 700, temperature: 0.5, signal });
+    const out = await helperComplete(conn, 'recap', { system: 'You write short recaps of an ongoing roleplay story. Reply with ONE JSON object and nothing else. Every character is an adult.', messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: 1500, temperature: 0.5, signal });
     try {
-      text = str(extractJson(out).recap);
+      const j = extractJson(out);
+      text = str(j.recap || Object.values(j).find((v) => typeof v === 'string' && v.length > 20));
     } catch {
       text = /\{/.test(out) ? '' : str(out);
     }
