@@ -1,5 +1,6 @@
 import { S, activeConnection, saveSettings, savePersona, personaById, newPersona, savePersonaEntry, setDefaultPersona, deletePersona, snapshot, restore, saveCharacter, newChat, saveChat, isPersistent } from '../store.js';
 import { syncSummary } from './sync.js';
+import { soundSheet } from './soundsheet.js';
 import { readCardFile, exportAllCardsJson } from '../cards.js';
 import { startImport } from './import.js';
 import { textSummary } from '../textstyle.js';
@@ -85,6 +86,7 @@ export function settingsView() {
     ${group(
       row({ href: '#/text', ic: 'edit', bc: 'var(--cream)', fc: '#0A0A0A', title: 'Reading text', sub: textSummary() }),
       row({ id: 'styleRow', ic: 'sliders', bc: 'var(--pink)', fc: '#0A0A0A', title: 'Reply style', sub: `<span id="styleSub">${styleSummary()}</span>` }),
+      row({ id: 'soundRow', ic: 'speaker', bc: 'var(--lilac)', fc: '#0A0A0A', title: 'Sound', sub: 'Ambience, music and signal sounds' }),
       `<div class="row">${'<span class="row-ic" style="background:var(--green2);color:#0A0A0A">' + icon('spark', 19) + '</span>'}<span class="row-tx"><span class="row-t">Auto-summary</span><span class="row-s">Condense long chats so they keep fitting</span></span>${sw('tAuto', S.settings.autoSummary, 'Auto-summary')}</div>`,
       `<div class="row"><span class="row-ic" style="background:var(--orange);color:#0A0A0A">${icon('bell', 19)}</span><span class="row-tx"><span class="row-t">While you were away</span><span class="row-s">After a long gap, characters sometimes leave you a message (uses one reply)</span></span>${sw('tAway', S.settings.awayNotes !== false, 'While you were away')}</div>`,
       `<div class="row"><span class="row-ic" style="background:var(--orange);color:#0A0A0A">${icon('restart', 19)}</span><span class="row-tx"><span class="row-t">Recap when you come back</span><span class="row-s">After six hours or more away, a short “Previously” at the end of the chat (uses one small Helper request)</span></span>${sw('tRecap', S.settings.recaps !== false, 'Recap when you come back')}</div>`,
@@ -106,6 +108,7 @@ export function settingsView() {
     html,
     depth: 0,
     mount(root) {
+      root.querySelector('#soundRow')?.addEventListener('click', () => soundSheet());
       root.querySelector('#styleRow')?.addEventListener('click', () => replyStyleSheet(() => (root.querySelector('#styleSub').textContent = styleSummary())));
       const tAdult = root.querySelector('#tAdult');
       bindSwitch(tAdult, async (on) => {

@@ -20,6 +20,8 @@ import { sceneSVG } from '../scenes.js';
 import { sceneSheet as openSceneSheet } from '../scenepicker.js';
 import { speak, stopSpeaking, ttsSupported } from '../tts.js';
 import { exportCardPng } from '../cards.js';
+import { chatSound, silence, signal, ambienceNow, musicPlaying } from '../sound.js';
+import { soundSheet } from './soundsheet.js';
 import { ibtn, avatarBullet, icon, arrow, openMenu, openSheet, toast, confirmSheet, autosize, reel, groupAvatar, toggleRow, bindSwitch } from '../ui.js';
 
 // Streams text into a bubble word by word, keeping *actions* italic as they arrive.
@@ -119,6 +121,7 @@ export async function chatView(id, focusId = null) {
       ${ibtn('back', 'Back to home', { href: '#/' })}
       <button type="button" class="chat-who press" id="whoBtn" aria-haspopup="dialog" aria-label="${esc(ch.name)}: chat details">${ix ? groupAvatar(ix, 36) : avatarBullet(ch, 36, '', `head:${ch.id}`)}<span class="who-tx"><span class="who-n">${esc(ch.name)}</span><span class="who-s"><span class="who-meta" id="meta"><span class="dot${conn0?.provider === 'demo' ? ' demo' : ''}" id="connDot"></span><span class="ell" id="connName">${esc(connText(conn0))}</span><span id="tokPill" ${S.settings.showCounter ? '' : 'hidden'}>· <span class="num" id="tokN">…</span></span><span id="noteWrap" ${!ix && chat.notes.length ? '' : 'hidden'}>· ${icon('pin', 12)}<span id="noteN">${chat.notes.length}</span></span></span><span id="status" hidden></span></span></span></button>
       <button type="button" class="ck-chip press num" id="clockBtn" ${clockOn(chat) ? '' : 'hidden'} aria-haspopup="dialog" aria-label="Story time">${clockOn(chat) ? chipText(chat.clock) : ''}</button>
+      <button type="button" class="snd-btn press" id="sndBtn" hidden aria-haspopup="dialog" aria-label="Sound"><span class="snd-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span></button>
       ${ibtn('more', 'Chat options', { id: 'moreBtn' })}
     </header>
     <div class="log${story ? ' story' : ''}" id="log" role="log" aria-live="polite" aria-relevant="additions" aria-label="Chat with ${esc(ch.name)}"></div>
@@ -426,6 +429,22 @@ export async function chatView(id, focusId = null) {
       if (stick || manual) toBottom(true);
     }
 
+    // ---------- Sound: ambience and music follow the chat; the header button shows while it plays ----------
+    function updSnd() {
+      const b = root.querySelector('#sndBtn');
+      if (!b) return;
+      const amb = ambienceNow();
+      const on = !!amb || musicPlaying();
+      b.hidden = !on;
+      b.setAttribute('aria-label', on ? `Sound: ${amb || 'music'}. Sound settings` : 'Sound');
+    }
+    function soundNow() {
+      if (destroyed) return;
+      chatSound(chat, ch);
+      updSnd();
+      setTimeout(updSnd, 700); // music starts once its file is read
+    }
+
     const writeChip = () => `<button type="button" class="press" data-chip="write">${icon('edit', 16)}Write for me</button>`;
     function renderChips() {
       // While a reply is being written the chips stay in place, disabled, so nothing jumps.
@@ -635,6 +654,7 @@ export async function chatView(id, focusId = null) {
         // Fares: what this journey cost. OpenRouter says what it billed; otherwise tokens (the
         // provider's count, else about four characters per token) at the connection's prices.
         mt.commit(built.total, estimateTokens(text.slice(prev.length)), (i, o, c) => recordFare(conn, sp.id, i, o, c)).catch(() => {});
+        signal('reply');
       }
       setBusy(false);
       setStatus('idle');
@@ -678,6 +698,8 @@ export async function chatView(id, focusId = null) {
         const i = chat.messages.indexOf(target);
         if (!destroyed && target.chron && i >= 0) rerenderMsg(i);
         if (!destroyed && res.chapter) placeChapters();
+        if (!destroyed) res.chapter ? signal('chapter') : res.stations.length ? signal('station') : null;
+        if (!destroyed && (res.time || res.place)) soundNow();
         if (!destroyed) updateClock();
       } catch (e) {
         console.warn('chronicle failed', e);
@@ -1110,6 +1132,7 @@ export async function chatView(id, focusId = null) {
       const el = root.querySelector('#scene');
       const k = sceneId();
       if (el && el.dataset.k !== k) (el.dataset.k = k), (el.innerHTML = sceneInner());
+      soundNow();
     }
     // Arriving from the World map: the scene starts at the new place.
     {
@@ -1507,6 +1530,7 @@ export async function chatView(id, focusId = null) {
         '-',
         { icon: 'user', label: `You: ${me().name?.trim() || 'You'}`, on: personaSheet },
         { icon: 'download', label: 'Export as story', on: exportStory },
+        { icon: 'speaker', label: 'Sound', on: () => soundSheet({ chat, ch, ix, onChange: updSnd }) },
         { icon: 'sliders', label: 'Reading text', on: textSheet },
         { icon: 'talk', label: 'Reply style', on: () => replyStyleSheet(() => updateTokens()) },
         '-',
@@ -1937,6 +1961,8 @@ export async function chatView(id, focusId = null) {
       if (recapDue(chat, S.settings) && connectionFor(ch)) showRecap(false);
       setTimeout(() => maybeAway(), 700);
     }
+    soundNow();
+    root.querySelector('#sndBtn').addEventListener('click', () => soundSheet({ chat, ch, ix, onChange: updSnd }));
   }
 
   return {
@@ -1945,6 +1971,7 @@ export async function chatView(id, focusId = null) {
     mount,
     unmount() {
       destroyed = true;
+      silence();
       ctl?.abort();
       vmStopAll?.();
       stopParts();
