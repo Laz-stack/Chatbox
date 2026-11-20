@@ -1,13 +1,13 @@
 // Lines: every character (and later every Interchange), all departures, the full Logbook,
 // and a search across names, taglines and every message in every chat.
 import { S, textOf, named, departures, logbook, character, lastMessage, interchange, latestChat, chatsFor } from '../store.js';
-import { esc, ago, agoLong, plain, inkOn, debounce, formatMessage } from '../util.js';
+import { esc, ago, agoLong, plain, inkOn, debounce, formatMessage, cleanTagline } from '../util.js';
 import { title2, avatarBullet, tabbar, icon, groupAvatar } from '../ui.js';
 import { startImport } from './import.js';
 
 const FILTERS = [
-  ['all', 'All'],
   ['recent', 'Recent'],
+  ['all', 'All'],
   ['starred', 'Starred'],
   ['narrators', 'One narrator'],
   ['interchanges', 'Interchanges'],
@@ -22,11 +22,15 @@ const colorVars = (c) => {
   return `--c:${col};--ink:${inkOn(col)}`;
 };
 
+// The avatar on a plate. A letter avatar on its own line colour would vanish into the plate,
+// so it shows as a dark station badge instead.
+const badge = (c) => (!c.avatarImage && (c.preset === 'initial' || !c.preset) ? avatarBullet({ ...c, line: { ...c.line, color: '#0A0A0A' } }, 44, '', `line:${c.id}`) : avatarBullet(c, 44, '', `line:${c.id}`));
+
 function lineRow(c) {
   const chat = latestChat(c.id);
   const n = chatsFor(c.id).filter((x) => x.messages.some((m) => m.role === 'user')).length;
   const when = chat && chat.messages.some((m) => m.role === 'user') ? ago(chat.updatedAt) : 'new';
-  return `<a class="ix press" href="#/chat/${c.id}" style="${colorVars(c)}" aria-label="Chat with ${esc(c.name)}">${avatarBullet(c, 44, '', `line:${c.id}`)}<span class="row-tx"><span class="row-t">${esc(c.name)}</span><span class="row-s">${esc(c.tagline || 'No tagline')}${n > 1 ? ` · ${n} chats` : ''}</span></span><span class="ix-t num">${when}</span></a>`;
+  return `<a class="ix press" href="#/chat/${c.id}" style="${colorVars(c)}" aria-label="Chat with ${esc(c.name)}">${badge(c)}<span class="row-tx"><span class="row-t">${esc(c.name)}</span><span class="row-s">${esc(cleanTagline(c.tagline, c.name) || 'No tagline')}${n > 1 ? ` · ${n} chats` : ''}</span></span><span class="ix-t num">${when}</span></a>`;
 }
 
 function ixRow(ix) {
@@ -37,7 +41,7 @@ function ixRow(ix) {
 
 function departureRow({ c, chat, ix }) {
   if (ix) return ixRow(ix);
-  return `<a class="ix press" href="#/chat/${chat.id}" style="${colorVars(c)}" aria-label="Chat with ${esc(c.name)}">${avatarBullet(c, 44, '', `line:${c.id}`)}<span class="row-tx"><span class="row-t">${esc(c.name)}</span><span class="row-s">${esc(plain(named(textOf(lastMessage(chat)), c)))}</span></span><span class="ix-t num">${ago(chat.updatedAt)}</span></a>`;
+  return `<a class="ix press" href="#/chat/${chat.id}" style="${colorVars(c)}" aria-label="Chat with ${esc(c.name)}">${badge(c)}<span class="row-tx"><span class="row-t">${esc(c.name)}</span><span class="row-s">${esc(plain(named(textOf(lastMessage(chat)), c)))}</span></span><span class="ix-t num">${ago(chat.updatedAt)}</span></a>`;
 }
 
 function starRow({ chat, m, q, at }) {
@@ -89,13 +93,16 @@ function searchResults(q) {
   );
 }
 
-export function linesView(filter = 'all') {
-  if (!FILTERS.some(([k]) => k === filter)) filter = 'all';
+export function linesView(filter) {
+  // Lines opens on Recent; with nothing started yet, on All.
+  if (!FILTERS.some(([k]) => k === filter)) filter = departures().length ? 'recent' : 'all';
   const sorted = S.characters.slice().sort((a, b) => a.name.localeCompare(b.name));
   const body = () => {
     if (filter === 'recent') {
       const deps = departures();
-      return deps.length ? `<div class="index">${deps.map(departureRow).join('')}</div>` : `<p class="search-none">No departures yet. Pick a line under All and say hello.</p>`;
+      return deps.length
+        ? section('Recent', deps.length, deps.map(departureRow).join('')) + (deps.length < 4 ? `<a class="ln-all press" href="#/lines/all">All lines${icon('chev', 16)}</a>` : '')
+        : `<p class="search-none">No departures yet. Pick a line under All and say hello.</p>`;
     }
     if (filter === 'interchanges') {
       const all = S.interchanges.map((x) => interchange(x.id)).filter(Boolean);
@@ -121,7 +128,7 @@ export function linesView(filter = 'all') {
       <label class="ibtn press" title="Import a character card" style="cursor:pointer">${icon('upload')}<span class="vh">Import a character card</span><input type="file" accept=".zip,.png,.json,application/zip,image/png,application/json" id="linesCardIn" class="vh" multiple></label>
     </div>
     <label class="search">${icon('search', 20)}<input id="q" type="search" placeholder="Name, line or something they said" aria-label="Search lines and messages" autocomplete="off" enterkeyhint="search"></label>
-    <div class="chips-f" role="tablist" aria-label="Show">${FILTERS.map(([k, l]) => `<a class="press${k === filter ? ' on' : ''}" role="tab" aria-selected="${k === filter}" href="#/lines${k === 'all' ? '' : '/' + k}">${l}</a>`).join('')}</div>
+    <div class="chips-f" role="tablist" aria-label="Show">${FILTERS.map(([k, l]) => `<a class="press${k === filter ? ' on' : ''}" role="tab" aria-selected="${k === filter}" href="#/lines/${k}">${l}</a>`).join('')}</div>
     <div id="results"><div class="blk-tight">${body()}</div></div>
   </div>${tabbar('lines')}`;
 
@@ -139,6 +146,11 @@ export function linesView(filter = 'all') {
         results.innerHTML = q.length ? searchResults(q) : base;
       }, 120);
       input.addEventListener('input', run);
+      // Fade the chip row's right edge while there are more chips to scroll to.
+      const edge = () => chips.classList.toggle('more', chips.scrollLeft + chips.clientWidth < chips.scrollWidth - 4);
+      chips.addEventListener('scroll', edge, { passive: true });
+      edge();
+      chips.querySelector('.on')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
       root.querySelector('#linesCardIn').addEventListener('change', async (e) => {
         startImport([...e.target.files]);
         e.target.value = '';

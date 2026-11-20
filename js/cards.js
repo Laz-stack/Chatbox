@@ -3,7 +3,7 @@ import { compileSheet } from './blueprint.js';
 // Reads Tavern-style cards (V1/V2/V3 JSON, or PNG with a "chara"/"ccv3" text chunk)
 // and writes V2 cards as JSON or as a PNG with the card embedded.
 import { blankCharacter, LINE_COLORS, S } from './store.js';
-import { resizeImage } from './util.js';
+import { resizeImage, cleanTagline } from './util.js';
 import { avatarSVG, faceSVG } from './avatar.js';
 
 const CRC = (() => {
@@ -93,7 +93,7 @@ export function cardToCharacter(json, avatarImage = null) {
   return {
     ...ch,
     name: String(d.name).slice(0, 60),
-    tagline: String(ext.tagline || d.creator_notes || '').split('\n')[0].slice(0, 80),
+    tagline: cleanTagline(String(ext.tagline || d.creator_notes || '').split('\n').find((l) => l.trim().split(/\s+/).length > 3) || '', d.name).split(/(?<=[.!?])\s/)[0].slice(0, 80),
     persona,
     firstMessage: d.first_mes || '',
     line: ext.line || { letter: String(d.name).trim()[0]?.toUpperCase() || 'C', color: ch.line.color },

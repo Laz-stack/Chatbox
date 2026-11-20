@@ -233,7 +233,7 @@ async function saveMessageImages(texts) {
 // ---------- save ----------
 export const nextColors = (n) => {
   const used = new Set(S.characters.map((c) => c.line?.color));
-  const free = LINE_COLORS.filter((c) => !used.has(c) && c !== '#ECECEC' && c !== '#FDCD15');
+  const free = LINE_COLORS.filter((c) => !used.has(c) && c !== '#ECECEC');
   return Array.from({ length: n }, (_, i) => free[i] || LINE_COLORS[(S.characters.length + i) % LINE_COLORS.length]);
 };
 

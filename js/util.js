@@ -156,6 +156,30 @@ export function markProse(text) {
     .join('\n');
 }
 
+// A tagline without the character's name repeated in front. Only two clear cases are cleaned:
+// the full name then punctuation ("Mirelle Sorn, Cinder faculty student"), or the first name and a few
+// name words then a new sentence starting with a pronoun ("Cressida val Ardeny Her magic…").
+// Anything else ("Max Power Ranger", "Vespera is a witch") is left as written.
+const PARTICLES = /^(val|van|von|de|del|della|der|di|da|du|le|la|bin)$/i;
+const PRONOUNS = /^(Her|His|She|He|They|Their|It|Its|I|My|You|Your)$/;
+export function cleanTagline(text, name) {
+  let t = (text || '').replace(/\s+/g, ' ').trim();
+  const full = (name || '').replace(/\s+/g, ' ').trim();
+  const first = full.split(' ')[0];
+  if (full && t.toLowerCase().startsWith(full.toLowerCase()) && /^\s*[,:;–—-]\s*\S/.test(t.slice(full.length))) {
+    t = t.slice(full.length).replace(/^\s*[,:;–—-]\s*/, '');
+  } else if (first && t.toLowerCase().startsWith(first.toLowerCase() + ' ')) {
+    const w = t.split(' ');
+    for (let k = 1; k < Math.min(w.length, 6); k++) {
+      if (PRONOUNS.test(w[k])) {
+        t = w.slice(k).join(' ');
+        break;
+      }
+      if (!(PARTICLES.test(w[k]) || /^\p{Lu}/u.test(w[k]))) break;
+    }
+  }
+  return t ? t[0].toUpperCase() + t.slice(1) : '';
+}
 export const plain = (text) => (text || '').replace(/\*/g, '').replace(/\s+/g, ' ').trim();
 
 export function slug(s) {
