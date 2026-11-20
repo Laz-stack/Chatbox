@@ -25,7 +25,13 @@ export const NARRATION = {
   warm: { label: 'Warm grey', dark: '#D9D6CC' },
 };
 export const LAYOUTS = { bubbles: { label: 'Bubbles', note: 'Messages in bubbles' }, story: { label: 'Story', note: 'Narration as text, speech on a line' } };
-export const DEFAULT_TEXT = { size: 'm', font: 'archivo', dialogue: 'white', narration: 'soft', layout: 'bubbles' };
+// The character's and narrator's text only (your own lines keep the standard look).
+export const WIDTHS = { tight: { label: 'Tight' }, wide: { label: 'Wide' }, fill: { label: 'Fill' } };
+export const ALIGNS = { left: { label: 'Left' }, right: { label: 'Right' }, justify: { label: 'Justify' } };
+export const TRACKS = { tight: { label: 'Tight', v: '-0.015em' }, normal: { label: 'Normal', v: '0em' }, wide: { label: 'Wide', v: '0.035em' } };
+// em: the gap between paragraphs inside one message; gap: between story blocks.
+export const PARAS = { tight: { label: 'Tight', em: '.5lh', gap: '12px' }, normal: { label: 'Normal', em: '1lh', gap: '20px' }, wide: { label: 'Wide', em: '1.7lh', gap: '30px' } };
+export const DEFAULT_TEXT = { size: 'm', font: 'archivo', dialogue: 'white', narration: 'soft', layout: 'bubbles', width: 'wide', align: 'left', track: 'normal', para: 'normal' };
 export const textPrefs = () => ({ ...DEFAULT_TEXT, ...(S.settings.text || {}) });
 
 const loaded = new Set();
@@ -49,6 +55,11 @@ export function applyText(t = textPrefs()) {
   r.setProperty('--dlg-cream', (DIALOGUE[t.dialogue] || DIALOGUE.white).cream);
   r.setProperty('--narr-dark', (NARRATION[t.narration] || NARRATION.soft).dark);
   document.documentElement.classList.toggle('dlg-line', t.dialogue === 'line');
+  r.setProperty('--read-track', (TRACKS[t.track] || TRACKS.normal).v);
+  r.setProperty('--read-pgap', (PARAS[t.para] || PARAS.normal).em);
+  r.setProperty('--read-bgap', (PARAS[t.para] || PARAS.normal).gap);
+  document.documentElement.dataset.rw = WIDTHS[t.width] ? t.width : 'wide';
+  document.documentElement.dataset.ra = ALIGNS[t.align] ? t.align : 'left';
   loadFont(t.font);
 }
 

@@ -91,6 +91,7 @@ export function formatMessage(text) {
     .replace(/`([^`\n]+)`/g, '<b class="shout">$1</b>')
     .replace(/\*\*([^*\n]+)\*\*/g, '<b class="dlg">$1</b>')
     .replace(/\*([^*\n]+)\*/g, '<span class="act">$1</span>')
+    .replace(/\n[ \t]*\n\s*/g, '<span class="pg" aria-hidden="true"></span>')
     .replace(/\n/g, '<br>')
     .replace(/<br>(<hr class="msg-brk"[^>]*>)<br>/g, '$1')
     .replace(/(<img class="msg-img"[^>]*>)<br>/g, '$1');
