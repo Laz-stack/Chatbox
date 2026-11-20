@@ -4,12 +4,20 @@
 import { S } from './store.js';
 
 export const SIZES = { s: { label: 'Small', d: -2 }, m: { label: 'Medium', d: 0 }, l: { label: 'Large', d: 2 }, xl: { label: 'Extra large', d: 4 } };
+// Archivo is the app's signage face; the rest are made for reading on screens (big lowercase,
+// open shapes, letters that can't be mixed up, no hairline strokes to shimmer on black).
 export const FONTS = {
   archivo: { name: 'Archivo', note: 'Signboard (default)', css: "'Archivo', system-ui, sans-serif" },
-  literata: { name: 'Literata', note: 'Book', css: "'Literata', Georgia, serif", url: 'Literata:ital,wght@0,400..700;1,400..700' },
-  atkinson: { name: 'Atkinson Hyperlegible', short: 'Atkinson', note: 'Easy to read', css: "'Atkinson Hyperlegible', system-ui, sans-serif", url: 'Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400;1,700' },
-  nunito: { name: 'Nunito', note: 'Soft', css: "'Nunito', system-ui, sans-serif", url: 'Nunito:ital,wght@0,400..800;1,400..800' },
+  atkinson: { name: 'Atkinson Hyperlegible Next', short: 'Atkinson', note: 'Every letter distinct', css: "'Atkinson Hyperlegible Next', 'Atkinson Hyperlegible', system-ui, sans-serif", url: 'Atkinson+Hyperlegible+Next:ital,wght@0,200..800;1,200..800' },
+  lexend: { name: 'Lexend', note: 'Made for less strain', css: "'Lexend', system-ui, sans-serif", url: 'Lexend:wght@300..700' },
+  inter: { name: 'Inter', note: 'Crisp on screens', css: "'Inter', system-ui, sans-serif", url: 'Inter:ital,wght@0,400..700;1,400..700' },
+  merriweather: { name: 'Merriweather', note: 'Screen serif', css: "'Merriweather', Georgia, serif", url: 'Merriweather:ital,wght@0,300..900;1,300..900' },
+  literata: { name: 'Literata', note: 'E-book serif', css: "'Literata', Georgia, serif", url: 'Literata:ital,wght@0,400..700;1,400..700' },
+  nunito: { name: 'Nunito', note: 'Soft and round', css: "'Nunito', system-ui, sans-serif", url: 'Nunito:ital,wght@0,400..800;1,400..800' },
 };
+// Text weight for the character's and narrator's text. Thin strokes glow and blur on black, so a
+// little heavier can be easier on the eyes. b: bubbles, s: the story layout.
+export const WEIGHTS = { light: { label: 'Lighter', b: 400, s: 380 }, normal: { label: 'Normal', b: 500, s: 400 }, heavy: { label: 'Heavier', b: 600, s: 500 } };
 // Each dialogue colour has a value for black (story layout) and one for the cream bubbles (≥4.5:1 on both).
 // No red (action) and no yellow (selected) in the list, by the app's colour rules.
 export const DIALOGUE = {
@@ -64,7 +72,7 @@ export const ALIGNS = { left: { label: 'Left' }, right: { label: 'Right' }, just
 export const TRACKS = { tight: { label: 'Tight', v: '-0.015em' }, normal: { label: 'Normal', v: '0em' }, wide: { label: 'Wide', v: '0.035em' } };
 // em: the gap between paragraphs inside one message; gap: between story blocks.
 export const PARAS = { tight: { label: 'Tight', em: '.5lh', gap: '12px' }, normal: { label: 'Normal', em: '1lh', gap: '20px' }, wide: { label: 'Wide', em: '1.7lh', gap: '30px' } };
-export const DEFAULT_TEXT = { size: 'm', font: 'archivo', dialogue: 'white', narration: 'soft', bubble: 'cream', me: 'yellow', layout: 'bubbles', width: 'wide', align: 'left', track: 'normal', para: 'normal' };
+export const DEFAULT_TEXT = { size: 'm', font: 'archivo', dialogue: 'white', narration: 'soft', bubble: 'cream', me: 'yellow', weight: 'normal', layout: 'bubbles', width: 'wide', align: 'left', track: 'normal', para: 'normal' };
 export const textPrefs = () => ({ ...DEFAULT_TEXT, ...(S.settings.text || {}) });
 
 const loaded = new Set();
@@ -84,6 +92,9 @@ export function applyText(t = textPrefs()) {
   r.setProperty('--read-scene', `${16 + d}px`);
   r.setProperty('--read-bubble', `${15 + d}px`);
   r.setProperty('--read-font', (FONTS[t.font] || FONTS.archivo).css);
+  const w = WEIGHTS[t.weight] || WEIGHTS.normal;
+  r.setProperty('--read-wb', w.b);
+  r.setProperty('--read-ws', w.s);
   r.setProperty('--dlg-dark', (DIALOGUE[t.dialogue] || DIALOGUE.white).dark);
   const bub = BUBBLES[t.bubble] || BUBBLES.cream;
   const me = MY_BUBBLES[t.me] || MY_BUBBLES.yellow;
