@@ -185,6 +185,7 @@ export function newPersona() {
   return { id: 'p-' + uid(), name: '', about: '', avatarImage: null, preset: ['haru', 'sora', 'yui', 'ren', 'mika', 'kai'][n % 6], color: ['#065BFE', '#FB4DAA', '#2EAA67', '#B8ACFE', '#FE6500', '#E70404'][n % 6], useEverywhere: true };
 }
 export async function savePersonaEntry(p) {
+  p.updatedAt = Date.now(); // lets Sync tell which edit is newer
   const i = S.personas.findIndex((x) => x.id === p.id);
   if (i >= 0) Object.assign(S.personas[i], p);
   else S.personas.push(p);
@@ -216,6 +217,7 @@ export const saveImages = () => db.set('images', S.images);
 export const newLore = () => ({ id: 'lore-' + uid(), title: '', keys: [], text: '', scope: 'all', lines: [], always: false, on: true, createdAt: Date.now() });
 export const loreEntry = (id) => S.lore.find((e) => e.id === id) || null;
 export async function saveLoreEntry(e) {
+  e.updatedAt = Date.now(); // lets Sync tell which edit is newer
   const i = S.lore.findIndex((x) => x.id === e.id);
   if (i >= 0) S.lore[i] = e;
   else S.lore.unshift(e);
@@ -248,6 +250,7 @@ export function interchange(id) {
   return members.length ? { ...ix, people: members, title: ix.name?.trim() || members.map((c) => c.name).join(' × ') } : null;
 }
 export async function saveInterchange(ix) {
+  ix.updatedAt = Date.now(); // lets Sync tell which edit is newer
   const i = S.interchanges.findIndex((x) => x.id === ix.id);
   if (i >= 0) S.interchanges[i] = ix;
   else S.interchanges.push(ix);
@@ -296,6 +299,7 @@ export const activeConnection = () => connection(S.settings.activeConnectionId) 
 export const connectionFor = (ch) => (ch?.connectionId && connection(ch.connectionId)) || activeConnection();
 
 export async function saveCharacter(ch) {
+  ch.updatedAt = Date.now(); // lets Sync tell which edit is newer
   const i = S.characters.findIndex((c) => c.id === ch.id);
   if (i >= 0) S.characters[i] = ch;
   else S.characters.push(ch);
@@ -312,6 +316,7 @@ export async function deleteCharacter(id) {
 }
 
 export async function saveConnection(c) {
+  c.updatedAt = Date.now(); // lets Sync tell which edit is newer
   const i = S.connections.findIndex((x) => x.id === c.id);
   if (i >= 0) S.connections[i] = c;
   else S.connections.push(c);
