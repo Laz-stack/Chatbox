@@ -2,6 +2,7 @@
 import { esc, inkOn, clamp, reducedMotion, EASE_OUT } from './util.js';
 import { icon, arrow } from './icons.js';
 import { avatarSVG, faceSVG } from './avatar.js';
+import { sceneSVG } from './scenes.js';
 
 export { icon, arrow };
 
@@ -18,6 +19,15 @@ export const avatarBullet = (ch, s = 40, style = '', av = '') => {
     ? `<img src="${esc(ch.avatarImage)}" alt="" width="${s}" height="${s}">`
     : faceSVG(ch, s, 'happy', bg);
   return `<span class="bullet bullet-av"${av ? ` data-av="${esc(av)}"` : ''} style="width:${s}px;height:${s}px;background:${bg};${style}">${inner}</span>`;
+};
+
+// A group chat's one picture: your uploaded image, else the imported cover, else its scene art.
+export const groupScene = (ix) => ix.sceneArt || (ix.people || []).map((p) => p.scene).find((k) => k && k !== 'none') || 'night';
+export const groupAvatar = (ix, s = 40) => {
+  // Scene art chosen on purpose wins over an imported cover.
+  const img = ix.picture || (ix.useScene ? null : ix.cover);
+  const inner = img ? `<img src="${esc(img)}" alt="" width="${s}" height="${s}">` : sceneSVG(groupScene(ix));
+  return `<span class="gav" style="width:${s}px;height:${s}px">${inner}</span>`;
 };
 
 export const title2 = (a, b, { tag = 'h1', size = 30 } = {}) =>

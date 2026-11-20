@@ -3,7 +3,7 @@
 import { S, newLore, loreEntry, saveLoreEntry, deleteLoreEntry, character, interchange, activeConnection, saveSettings } from '../store.js';
 import { enhanceLore } from '../loregen.js';
 import { esc, inkOn } from '../util.js';
-import { topbar, title2, ibtn, field, toggleRow, bindSwitch, avatarBullet, icon, arrow, toast, confirmSheet, sw } from '../ui.js';
+import { topbar, title2, ibtn, field, toggleRow, bindSwitch, avatarBullet, icon, arrow, toast, confirmSheet, sw, groupAvatar } from '../ui.js';
 
 const scopeText = (e) => {
   if (e.scope !== 'lines' || !e.lines.length) return 'All lines';
@@ -144,7 +144,7 @@ export function loreEditView(id, inBook = null) {
   const groups = () => S.interchanges.map((x) => interchange(x.id)).filter(Boolean);
   const pickIx = (ix) => {
     const on = d.lines.includes(ix.id);
-    return `<button type="button" class="lore-ixrow press${on ? ' on' : ''}" data-id="${ix.id}" aria-pressed="${on}"><span class="meet">${ix.people.map((p, i) => avatarBullet(p, 34, i ? 'margin-left:-10px' : '')).join('')}</span><span class="lix-tx"><b>${esc(ix.title)}</b><small>${ix.mode === 'scene' ? 'Carriage' : 'Interchange'} · ${esc(ix.people.map((p) => p.name).join(', '))}</small></span>${on ? icon('check', 18) : ''}</button>`;
+    return `<button type="button" class="lore-ixrow press${on ? ' on' : ''}" data-id="${ix.id}" aria-pressed="${on}">${groupAvatar(ix, 34)}<span class="lix-tx"><b>${esc(ix.title)}</b><small>${ix.mode === 'scene' ? 'Carriage' : 'Interchange'} · ${esc(ix.people.map((p) => p.name).join(', '))}</small></span>${on ? icon('check', 18) : ''}</button>`;
   };
   const linesHTML = () =>
     `<div class="ixgrid">${S.characters.map(pick).join('')}</div>` +

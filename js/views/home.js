@@ -1,7 +1,7 @@
 import { S, activeConnection, lastMessage, textOf, named, departures, logbook, character, interchange, latestChat, personaFor } from '../store.js';
 import { esc, ago, agoLong, plain, inkOn, luminance, boardTime, formatMessage } from '../util.js';
 import { avatarTile } from '../avatar.js';
-import { title2, bullet, avatarBullet, tabbar, icon, arrow } from '../ui.js';
+import { title2, bullet, avatarBullet, tabbar, icon, arrow, groupAvatar } from '../ui.js';
 import { startImport } from './import.js';
 
 export function homeView() {
@@ -47,7 +47,7 @@ export function homeView() {
         .map(
           ({ c, chat, ix }) =>
             ix
-              ? `<a class="bd-row press" href="#/chat/${ix.id}" aria-label="Open ${esc(ix.title)}"><span class="num t">${boardTime(chat.updatedAt)}</span><span class="meet sm">${ix.people.map((p, i) => avatarBullet(p, 30, i ? 'margin-left:-14px' : '')).join('')}</span><span class="bd-tx"><b>${esc(ix.title)}</b><span>${esc(plain(named(textOf(lastMessage(chat)), character(lastMessage(chat)?.speaker) || ix.people[0])))}</span></span></a>`
+              ? `<a class="bd-row press" href="#/chat/${ix.id}" aria-label="Open ${esc(ix.title)}"><span class="num t">${boardTime(chat.updatedAt)}</span>${groupAvatar(ix, 30)}<span class="bd-tx"><b>${esc(ix.title)}</b><span>${esc(plain(named(textOf(lastMessage(chat)), character(lastMessage(chat)?.speaker) || ix.people[0])))}</span></span></a>`
               : `<a class="bd-row press" href="#/chat/${chat.id}" aria-label="Chat with ${esc(c.name)}"><span class="num t">${boardTime(chat.updatedAt)}</span>${avatarBullet(c, 30, '', `dep:${c.id}`)}<span class="bd-tx"><b>${esc(c.name)}</b><span>${esc(plain(named(textOf(lastMessage(chat)), c)) || c.tagline)}</span></span></a>`
         )
         .join('')}<a class="bd-foot press" href="#/lines/recent">All departures ${icon('chev', 14)}</a></div>`

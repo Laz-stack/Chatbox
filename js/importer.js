@@ -285,7 +285,8 @@ export async function applyPlan(plan, mode) {
     const ch = blankCharacter();
     Object.assign(ch, {
       name: (plan.names.length >= 2 ? plan.title : str(d.name)).slice(0, 60),
-      tagline: plan.names.length >= 2 ? plan.names.join(', ').slice(0, 80) : str(plan.blurb).split(/[.!?]/)[0].slice(0, 80),
+      tagline: plan.names.length >= 2 ? `Plays ${plan.names.join(', ')}`.slice(0, 80) : str(plan.blurb).split(/[.!?]/)[0].slice(0, 80),
+      narrator: plan.names.length >= 2,
       persona: [str(d.description), d.personality && `Personality: ${d.personality}`, d.system_prompt, d.mes_example && `Example dialogue:\n${d.mes_example}`].filter((x) => str(x).trim()).join('\n\n'),
       scenario: str(d.scenario),
       firstMessage: plan.openings[0] || '',
