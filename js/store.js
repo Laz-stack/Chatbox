@@ -337,6 +337,22 @@ export function newChat(charId, id = charId.startsWith('ix-') ? charId : `${char
 }
 
 // All chats with one character (or interchange), most recent first.
+// A new chat that starts as a copy of this one up to message i (Branch from here).
+export async function branchChat(chat, i) {
+  const c = newChat(chat.characterId, `${chat.characterId}~${uid()}`);
+  c.messages = structuredClone(chat.messages.slice(0, i + 1));
+  c.notes = structuredClone(chat.notes || []);
+  if (chat.personaId) c.personaId = chat.personaId;
+  if (chat.summary && chat.summary.upto <= i + 1) c.summary = structuredClone(chat.summary);
+  const ids = new Set(c.messages.map((m) => m.id));
+  if (chat.route) c.route = structuredClone(chat.route.filter((s) => ids.has(s.msgId)));
+  if (chat.bonds) c.bonds = structuredClone(chat.bonds);
+  if (chat.diary) c.diary = structuredClone(chat.diary.filter((e) => ids.has(e.msgId)));
+  if (chat.chron) c.chron = { ...chat.chron, upto: Math.min(chat.chron.upto || 0, i + 1) };
+  c.branchOf = { chat: chat.id, at: chat.messages[i].id };
+  await saveChat(c);
+  return c;
+}
 export const chatsFor = (ownerId) => [...S.chats.values()].filter((c) => c.characterId === ownerId).sort((a, b) => b.updatedAt - a.updatedAt);
 export const latestChat = (ownerId) => chatsFor(ownerId)[0] || null;
 

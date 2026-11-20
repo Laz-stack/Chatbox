@@ -12,6 +12,7 @@ import { interchangeView } from './views/interchange.js';
 import { loreListView, loreEditView, loreBookView } from './views/lore.js';
 import { importView, startImport } from './views/import.js';
 import { textView } from './views/text.js';
+import { routeView, bondsView, diaryView } from './views/chronicle.js';
 import { applyText } from './textstyle.js';
 import { openBuildSheet } from './build.js';
 import { reducedMotion } from './util.js';
@@ -38,6 +39,9 @@ const routes = [
   [/^#\/prompts$/, () => promptsView()],
   [/^#\/final\/([^/]+)$/, (id) => finalView(decodeURIComponent(id))],
   [/^#\/memory\/([^/]+)$/, (id) => memoryView(decodeURIComponent(id))],
+  [/^#\/route\/([^/]+)$/, (id) => routeView(decodeURIComponent(id))],
+  [/^#\/bonds\/([^/]+)$/, (id) => bondsView(decodeURIComponent(id))],
+  [/^#\/diary\/([^/]+)(?:\/([^/]+))?$/, (id, e) => diaryView(decodeURIComponent(id), e && decodeURIComponent(e))],
   [/^#\/persona$/, () => personasView()],
   [/^#\/persona\/([^/]+)$/, (id) => personaView(decodeURIComponent(id))],
   [/^#\/backup$/, () => backupView()],
