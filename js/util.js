@@ -83,7 +83,7 @@ export const setImageResolver = (fn) => (imageFor = fn);
 const unesc = (s) => s.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
 
 export function formatMessage(text) {
-  return esc(text || '')
+  return esc(tidyStars(text))
     .replace(/!\[([^\]\n]*)\]\((https?:\/\/[^)\s]+)\)/g, (_, alt, url) => `<img class="msg-img" src="${esc(imageFor(unesc(url)))}" alt="${alt.replace(/&quot;|“|”/g, '')}" loading="lazy" decoding="async">`)
     .replace(/(^|\n)\s*(?:-{3,}|\*{3,}|_{3,})\s*(?=\n|$)/g, '$1<hr class="msg-brk" aria-label="Scene break">')
     .replace(/&quot;([^\n<>]+?)&quot;/g, '<span class="say">&quot;$1&quot;</span>')
@@ -97,8 +97,11 @@ export function formatMessage(text) {
 
 // Display only: prose the model left unmarked is shown as an *action*, so narration, actions and
 // thoughts look the same whether or not the model used asterisks. Speech in quotes stays as it is.
+// "***x***" (bold italic) reads as bold; longer runs of stars collapse to two.
+// Lines that are only stars (*** scene breaks) are left alone.
+const tidyStars = (t) => (t || '').replace(/\*{3,}([^*\n]+?)\*{3,}/g, '**$1**').replace(/(^|[^*\n])\*{3,}(?=[^*\s])/g, '$1**').replace(/([^*\s])\*{3,}(?=\s|$)/g, '$1**');
 export function markProse(text) {
-  return (text || '')
+  return tidyStars(text)
     .split('\n')
     .map((line) => {
       if (/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line)) return line;
