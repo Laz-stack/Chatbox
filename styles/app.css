@@ -1066,3 +1066,13 @@ textarea.bp-ta.tall { min-height: 96px; }
 .tx-prev[data-layout='story'] :is(.tx-prev-bubble, .tx-cap-bubble, .cap-group) { display: none; }
 .tx-prev[data-layout='bubbles'] .cap-all { display: none; }
 .tx-prev[data-layout='bubbles'] :is(.tx-cap-bubble, .tx-prev-bubble) { order: -1; }
+
+/* ================= Story layout: your lines sit on the right ================= */
+.msg.scene.mine .scn-b { margin-left: auto; max-width: 88%; width: fit-content; padding-left: 0; padding-right: 14px; text-align: right; }
+.msg.scene.mine .scn-b::before { left: auto; right: 0; }
+.msg.scene.mine .scn-tag { padding: 0 2px 0 10px; }
+.msg.scene.mine .scn-tag .bullet { order: 2; }
+.msg.scene.mine:not(.dir) .bubble.scn { align-items: flex-end; }
+.msg.scene.mine .scn-t { text-wrap: pretty; }
+.msg.scene.mine .star-b { position: static; margin: -10px 18px 0 0; }
+.msg.scene.mine.enter .bubble { transform-origin: top right; }
