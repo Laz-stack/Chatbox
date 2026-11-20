@@ -38,7 +38,7 @@ const styleSummary = () => {
   return `${LENGTHS[rs.length] || 'Normal'} length · ${rs.person === 'first' ? 'first person' : rs.person === 'third' ? 'third person' : 'point of view as written'}${rs.format === 'written' ? ' · formatting as written' : ''}`;
 };
 // How characters write: length and point of view. "Normal" leaves it to your prompts.
-function replyStyleSheet(onDone) {
+export function replyStyleSheet(onDone) {
   const rs = { length: 'normal', person: 'written', format: 'asterisks', ...(S.settings.replyStyle || {}) };
   const seg = (name, opts) =>
     `<div class="seg ${opts.length === 3 ? 'three' : 'two'}" role="group" aria-label="${name}">${opts

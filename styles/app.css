@@ -1006,8 +1006,8 @@ textarea.bp-ta.tall { min-height: 96px; }
 .tx-prev .bubble { font-size: var(--read-bubble, 15px); font-family: var(--read-font, var(--font)); }
 .scn .say, .scn .dlg, .scn-narr .say, .scn-narr .dlg { color: var(--dlg-dark, #FFFFFF); }
 .msg.ai:not(.scene) .bubble .say, .msg.ai:not(.scene) .bubble .dlg, .tx-prev-bubble .bubble .say { color: var(--dlg-cream, inherit); }
-.dlg-line .scn-b:not(.you) :is(.say, .dlg) { color: color-mix(in srgb, var(--c) 55%, #FFFFFF); }
-.dlg-line :is(.msg.ai:not(.scene), .tx-prev-bubble) .bubble :is(.say, .dlg) { color: color-mix(in srgb, var(--accent, #2EAA67) 45%, #0A0A0A); }
+.dlg-line .scn-b:not(.you) :is(.say, .dlg, .shout) { color: color-mix(in srgb, var(--c) 55%, #FFFFFF); }
+.dlg-line :is(.msg.ai:not(.scene), .tx-prev-bubble) .bubble :is(.say, .dlg, .shout) { color: color-mix(in srgb, var(--accent, #2EAA67) 45%, #0A0A0A); }
 .tx-prev .scn-b { margin-top: 12px; }
 .chat .scn-narr, .chat .scn-narr .act, .chat .scn-t .act, .tx-prev .scn-narr, .tx-prev .scn-narr .act { color: var(--narr-dark, #BDBDBD); }
 .tx-prev { display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 22px; background: var(--bg); box-shadow: inset 0 0 0 1.5px rgba(236, 236, 236, .35); }
@@ -1076,3 +1076,9 @@ textarea.bp-ta.tall { min-height: 96px; }
 .msg.scene.mine .scn-t { text-wrap: pretty; }
 .msg.scene.mine .star-b { position: static; margin: -10px 18px 0 0; }
 .msg.scene.mine.enter .bubble { transform-origin: top right; }
+
+/* `Shouts and statements`: bold and upright, in the speech colour on black */
+.shout { font-weight: 900; font-style: normal; letter-spacing: .005em; }
+.act .shout { font-style: normal; }
+.scn .shout, .scn-narr .shout { color: var(--dlg-dark, #FFFFFF); }
+.msg.ai:not(.scene) .bubble .shout { color: var(--dlg-cream, inherit); }

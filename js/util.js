@@ -88,6 +88,7 @@ export function formatMessage(text) {
     .replace(/(^|\n)\s*(?:-{3,}|\*{3,}|_{3,})\s*(?=\n|$)/g, '$1<hr class="msg-brk" aria-label="Scene break">')
     .replace(/&quot;([^\n<>]+?)&quot;/g, '<span class="say">&quot;$1&quot;</span>')
     .replace(/“([^”\n<>]+)”/g, '<span class="say">“$1”</span>')
+    .replace(/`([^`\n]+)`/g, '<b class="shout">$1</b>')
     .replace(/\*\*([^*\n]+)\*\*/g, '<b class="dlg">$1</b>')
     .replace(/\*([^*\n]+)\*/g, '<span class="act">$1</span>')
     .replace(/\n/g, '<br>')
@@ -128,6 +129,14 @@ export function markProse(text) {
           const j = line.indexOf('**', i + 2);
           const end = j < 0 ? line.length : j + 2;
           out += line.slice(i, end) + (j < 0 ? '**' : '');
+          i = end;
+          continue;
+        }
+        if (c === '`') {
+          flush();
+          const j = line.indexOf('`', i + 1);
+          const end = j < 0 ? line.length : j + 1;
+          out += line.slice(i, end) + (j < 0 ? '`' : '');
           i = end;
           continue;
         }
