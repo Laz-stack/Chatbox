@@ -227,11 +227,12 @@ export function connectionEditView(id) {
           ${field('cMax', 'Max reply tokens', d.maxTokens, { type: 'number', attrs: 'min="16" max="32000" step="1"' })}
           ${field('cCtx', 'Context size', d.context, { type: 'number', attrs: 'min="1000" max="2000000" step="1000"' })}
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div id="priceBox"${d.provider === 'openrouter' ? ' hidden' : ''}><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           ${field('cPin', 'Input $ / 1M tokens', d.priceIn ?? '', { type: 'number', ph: 'e.g. 3', attrs: 'min="0" step="0.01" inputmode="decimal"' })}
           ${field('cPout', 'Output $ / 1M tokens', d.priceOut ?? '', { type: 'number', ph: 'e.g. 15', attrs: 'min="0" step="0.01" inputmode="decimal"' })}
         </div>
-        <p class="fhint" style="margin:-4px 2px 0">Prices from your provider's pricing page. Fares uses them to turn tokens into dollars.</p>
+        <p class="fhint" style="margin:-4px 2px 0">Prices from your provider's pricing page. Fares uses them to turn tokens into dollars.</p></div>
+        <p class="fhint" id="orCost" style="margin:-4px 2px 0"${d.provider === 'openrouter' ? '' : ' hidden'}>No prices needed: Fares uses what OpenRouter bills for each request.</p>
         <p class="fhint" style="margin:-4px 2px 0">Context size is how many tokens this model can read. Long chats get summarized when they pass about half of it.</p>
         <div id="proxyRow">${toggleRow('tProxy', 'Route through local server', 'Use if your provider blocks requests from the browser. Needs server.js running.', d.useProxy)}</div>
       </div></details>
@@ -266,6 +267,9 @@ export function connectionEditView(id) {
       if (u2) u2.innerHTML = showUrl() ? '' : urlField();
       bindUrl();
       root.querySelector('.dialbox .small').textContent = tempNote();
+      // OpenRouter says what it billed, so it has no price boxes.
+      $('#priceBox').hidden = d.provider === 'openrouter';
+      $('#orCost').hidden = d.provider !== 'openrouter';
     });
     const bindUrl = () => root.querySelectorAll('#cUrl').forEach((el) => el.addEventListener('input', () => (d.baseUrl = el.value.trim())));
     bindUrl();

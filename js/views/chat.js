@@ -1,4 +1,4 @@
-import { S, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, named, resetChat, recordFare, interchange, isInterchangeId, chatsFor, startNewChat, deleteChat, blankCharacter, saveInterchange, personaFor, personaById, newChat, branchChat, saveImages } from '../store.js';
+import { S, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, named, resetChat, recordFare, meter, interchange, isInterchangeId, chatsFor, startNewChat, deleteChat, blankCharacter, saveInterchange, personaFor, personaById, newChat, branchChat, saveImages } from '../store.js';
 import { textSheet } from './text.js';
 import { replyStyleSheet } from './settings.js';
 import { textPrefs } from '../textstyle.js';
@@ -430,6 +430,7 @@ export async function chatView(id, focusId = null) {
       let text = prev;
       let first = true;
       let error = null;
+      const mt = meter();
       try {
         await complete(conn, {
           system: built.system,
@@ -439,6 +440,7 @@ export async function chatView(id, focusId = null) {
           maxTokens: S.settings.replyStyle?.length === 'long' ? Math.max(conn.maxTokens || 600, 1000) : conn.maxTokens,
           temperature: conn.temperature,
           character: asked,
+          onUsage: mt.onUsage,
           onDelta(d) {
             if (destroyed) return;
             if (first && mode === 'continue') d = (prev && !/\s$/.test(prev) && !/^[\s.,!?;:)]/.test(d) ? ' ' : '') + d;
@@ -486,8 +488,9 @@ export async function chatView(id, focusId = null) {
         rerenderMsg(idx);
         if (moodChanged && !reducedMotion()) log.querySelector(`.msg[data-i="${idx}"] .msg-av`)?.classList.add('bump');
         if (S.settings.readAloud && !vm.on) speakReply(target);
-        // Fares: what this journey cost, as an estimate (about four characters per token).
-        recordFare(conn, sp.id, built.total, estimateTokens(text.slice(prev.length)));
+        // Fares: what this journey cost. OpenRouter says what it billed; otherwise tokens (the
+        // provider's count, else about four characters per token) at the connection's prices.
+        mt.commit(built.total, estimateTokens(text.slice(prev.length)), (i, o, c) => recordFare(conn, sp.id, i, o, c)).catch(() => {});
       }
       setBusy(false);
       setStatus('idle');
@@ -1420,10 +1423,12 @@ export async function chatView(id, focusId = null) {
       input.value = '';
       ctl = new AbortController();
       let out = '';
+      const mt = meter();
       try {
         await complete(conn, {
           system: built.system,
           messages: msgs,
+          onUsage: mt.onUsage,
           signal: ctl.signal,
           stream: true,
           maxTokens: 220,
@@ -1449,7 +1454,7 @@ export async function chatView(id, focusId = null) {
       sendBtn.disabled = !input.value.trim();
       if (input.value) {
         input.focus();
-        recordFare(conn, sp.id, built.total, estimateTokens(out));
+        mt.commit(built.total, estimateTokens(out), (i, o, c) => recordFare(conn, sp.id, i, o, c)).catch(() => {});
       }
     }
 

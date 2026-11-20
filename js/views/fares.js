@@ -3,13 +3,13 @@
 // Swipe the top receipt away (or tap a chip) to bring the next one up.
 // Tokens are estimates (about four characters each); dollars use the prices set on each connection,
 // or what OpenRouter reported for a picture.
-import { S, saveSettings, monthKey, fareCost, character, connection, interchange } from '../store.js';
+import { S, saveSettings, monthKey, costOf, character, connection, interchange } from '../store.js';
 import { picPrefs } from '../pictures.js';
 import { JOBS } from '../helper.js';
 import { esc, fmtNum, inkOn, reducedMotion } from '../util.js';
 import { title2, tabbar, avatarBullet, icon, openSheet, toast, groupAvatar } from '../ui.js';
 
-const money = (v) => (v == null ? '—' : '$' + (v < 0.01 && v > 0 ? v.toFixed(3) : v.toFixed(2)));
+const money = (v) => (v == null ? '—' : '$' + (v > 0 && v < 0.001 ? v.toFixed(4) : v > 0 && v < 0.01 ? v.toFixed(3) : v.toFixed(2)));
 const PAPERS = [
   ['replies', 'Replies'],
   ['scenes', 'Scenes'],
@@ -25,10 +25,13 @@ export function faresView() {
   const monthName = now.toLocaleDateString([], { month: 'short' });
 
   // ---------- Replies ----------
-  const conns = Object.entries(mo.conns).map(([id, c]) => ({ id, ...c, tok: c.in + c.out, cost: fareCost(id, c.in, c.out) }));
+  // What OpenRouter reported it billed, plus tokens it didn't report priced at the connection's
+  // typed prices (marked est.).
+  const priced = ([id, c]) => ({ id, ...c, tok: c.in + c.out, ...costOf(c, id) });
+  const conns = Object.entries(mo.conns).map(priced);
   conns.sort((a, b) => b.tok - a.tok);
   const repliesTotal = conns.filter((c) => c.cost != null).reduce((a, c) => a + c.cost, 0);
-  const repliesUnpriced = conns.some((c) => c.cost == null);
+  const repliesUnpriced = conns.some((c) => c.unpriced);
 
   // ---------- Scenes ----------
   // Reported by the provider, plus your price per picture as it was when each was painted.
@@ -40,17 +43,22 @@ export function faresView() {
   const scenesUnpriced = pics.some((p) => p.open > 0);
 
   // ---------- Helper ----------
-  const helpers = Object.entries(mo.helper?.conns || {}).map(([id, c]) => ({ id, ...c, tok: c.in + c.out, cost: fareCost(id, c.in, c.out) }));
+  const helpers = Object.entries(mo.helper?.conns || {}).map(priced);
   helpers.sort((a, b) => b.tok - a.tok);
   const helperTotal = helpers.filter((c) => c.cost != null).reduce((a, c) => a + c.cost, 0);
-  const helperUnpriced = helpers.some((c) => c.cost == null);
+  const helperUnpriced = helpers.some((c) => c.unpriced);
 
   const all = repliesTotal + scenesTotal + helperTotal;
   const budget = S.settings.budget;
   const left = budget != null ? budget - all : null;
   const frac = budget ? Math.max(0, Math.min(1, left / budget)) : 0;
 
-  const setPrice = (id) => (connection(id) ? `<a class="rc-set" href="#/connection/${esc(id)}">Set price</a>` : '—');
+  // OpenRouter connections have no price boxes (it reports what it bills), so nothing to set there.
+  const setPrice = (id) => (connection(id) && connection(id).provider !== 'openrouter' ? `<a class="rc-set" href="#/connection/${esc(id)}">Set price</a>` : '—');
+  const tag = (c) => (c.est ? ' · est.' : '') + (c.unpriced && c.cost != null ? ' · some unpriced' : '');
+  const val = (c) => (c.cost == null ? setPrice(c.id) : money(c.cost));
+  const srcNote = (rows) =>
+    (rows.some((c) => c.reported) ? `<div class="rc-note rc-src">Costs as reported by OpenRouter for each request${rows.some((c) => c.est) ? '; est. is worked out from the prices typed on a connection' : ''}.</div>` : rows.some((c) => c.est) ? `<div class="rc-note rc-src">Worked out from the prices typed on each connection.</div>` : '');
   const head = (kind) => `<div class="rc-h"><b>CHATBOX FARES${kind ? ' · ' + kind : ''}</b><span class="num">1–${now.getDate()} ${monthName}</span></div>`;
   const budgetBlock =
     budget != null
@@ -67,9 +75,10 @@ export function faresView() {
     replies: () =>
       head('') +
       (conns.length
-        ? conns.map((c) => `<div class="rc-r"><span>${esc(c.name)}<small>${esc(c.model || '')} · ${fmtNum(c.tok)} tokens · ${c.rides} ${c.rides === 1 ? 'reply' : 'replies'}</small></span><span class="num">${c.cost == null ? setPrice(c.id) : money(c.cost)}</span></div>`).join('')
+        ? conns.map((c) => `<div class="rc-r"><span>${esc(c.name)}<small>${esc(c.model || '')} · ${fmtNum(c.tok)} tokens · ${c.rides} ${c.rides === 1 ? 'reply' : 'replies'}${tag(c)}</small></span><span class="num">${val(c)}</span></div>`).join('')
         : `<div class="rc-r rc-none"><span>No journeys yet this month.<small>Every reply you get is added here.</small></span></div>`) +
-      totals(repliesTotal, repliesUnpriced, 'Connections without prices are not counted') +
+      totals(repliesTotal, repliesUnpriced, 'Tokens without a price are not counted') +
+      srcNote(conns) +
       budgetBlock,
     scenes: () =>
       head('SCENES') +
@@ -85,11 +94,12 @@ export function faresView() {
         ? helpers
             .map((c) => {
               const top = Object.entries(c.jobs || {}).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([j, n]) => `${JOBS[j] || j} ×${n}`).join(', ');
-              return `<div class="rc-r"><span>${esc(c.name)}<small>${esc(c.model || '')} · ${fmtNum(c.tok)} tokens · ${c.calls} ${c.calls === 1 ? 'job' : 'jobs'}${top ? ` · ${esc(top)}` : ''}</small></span><span class="num">${c.cost == null ? setPrice(c.id) : money(c.cost)}</span></div>`;
+              return `<div class="rc-r"><span>${esc(c.name)}<small>${esc(c.model || '')} · ${fmtNum(c.tok)} tokens · ${c.calls} ${c.calls === 1 ? 'job' : 'jobs'}${top ? ` · ${esc(top)}` : ''}${tag(c)}</small></span><span class="num">${val(c)}</span></div>`;
             })
             .join('')
         : `<div class="rc-r rc-none"><span>The helper hasn’t run this month.<small>Story tracking, summaries and other background jobs are added here.</small></span></div>`) +
-      totals(helperTotal, helperUnpriced, 'Connections without prices are not counted') +
+      totals(helperTotal, helperUnpriced, 'Tokens without a price are not counted') +
+      srcNote(helpers) +
       budgetBlock,
   };
 
@@ -102,12 +112,14 @@ export function faresView() {
           const c = character(id);
           if (!c) return null;
           let cost = 0;
+          let est = false;
           for (const [cid, t] of Object.entries(l.byConn || {})) {
-            const v = fareCost(cid, t.in, t.out);
-            if (v == null) cost = null;
-            else if (cost != null) cost += v;
+            const v = costOf(t, cid);
+            est ||= v.est;
+            if (v.cost == null || v.unpriced) cost = null;
+            else if (cost != null) cost += v.cost;
           }
-          return { c, val: l.in + l.out, label: cost == null ? fmtNum(l.in + l.out) + ' tok' : money(cost) };
+          return { c, val: l.in + l.out, label: cost == null ? fmtNum(l.in + l.out) + ' tok' : money(cost) + (est ? ' est.' : '') };
         })
         .filter(Boolean);
       return { title: 'Busiest lines', rows };
@@ -166,7 +178,7 @@ export function faresView() {
     <div class="rc-wrap"><div class="rc-stack" id="rcStack">${stackHTML(lastTop)}</div></div>
     <p class="rc-hint" id="rcHint">${hint(lastTop)}</p>
     <div id="rcBusy">${busyHTML(PAPERS[lastTop][0])}</div>
-    <p class="fhint" style="margin-top:18px">Token counts are estimates (about four characters each). Prices come from each connection’s More options, your price per picture, or what OpenRouter reported.</p>
+    <p class="fhint" style="margin-top:18px">OpenRouter costs are what it billed for each request. Other connections use the prices in their More options, with tokens counted by the provider or estimated (about four characters each); pictures use your price per picture.</p>
   </div>${tabbar('fares')}`;
 
   return {
