@@ -6,6 +6,7 @@
 // (or "Update the map"); the diary is written on request.
 import { PROVIDERS } from './providers.js';
 import { helperComplete } from './helper.js';
+import { clockOn, advance, hhmm, WEATHER } from './clock.js';
 import { extractJson, compileSheet } from './blueprint.js';
 import { textOf, named } from './store.js';
 import { uid } from './util.js';
@@ -68,18 +69,19 @@ async function read({ chat, cast, persona, conn, settings, whole = false, signal
   if (!whole) from = Math.max(from, len - CHUNK);
   const out = { stations: [], changes: [] };
   // If any part fails, put everything back as it was.
-  const before = structuredClone({ route: chat.route, bonds: chat.bonds });
+  const before = structuredClone({ route: chat.route, bonds: chat.bonds, clock: chat.clock });
   try {
     if (whole) chat.route = chat.route.filter((s) => !s.auto);
     for (let a = from; a < len; a += CHUNK) {
       const b = Math.min(len, a + CHUNK);
       onStep?.(a, len);
       const res = isDemo(conn) ? demoRead(chat, a, b, cast) : await readPart({ chat, cast, persona, conn, settings, a, b, signal });
-      apply(chat, res, cast, a, b, out);
+      apply(chat, res, cast, a, b, out, whole);
     }
   } catch (e) {
     chat.route = before.route;
     chat.bonds = before.bonds;
+    if (before.clock) chat.clock = before.clock;
     chat.chron = { ...(chat.chron || {}), failAt: chat.messages.length };
     throw e;
   }
@@ -95,6 +97,7 @@ async function readPart({ chat, cast, persona, conn, signal, a, b }) {
     user: you,
     bonds_now: bonds,
     stations_so_far: chat.route.slice(-8).map((s) => s.title),
+    ...(clockOn(chat) ? { story_time_at_start: `Day ${chat.clock.day}, ${hhmm(chat.clock.min)}, ${chat.clock.weather}` } : {}),
     story_part: transcript(chat, a, b, cast, persona),
   };
   const system = 'You keep continuity notes for an ongoing roleplay story. Reply with ONE JSON object and nothing else. Every character is an adult.';
@@ -103,21 +106,31 @@ async function readPart({ chat, cast, persona, conn, signal, a, b }) {
     `stations: only real turning points in this part of the story, usually 0 or 1, at most 2. Count a first meeting, a secret revealed, a fight, an important new place, a decision that changes things, two people getting closer, or a loss. Skip small talk and anything already in stations_so_far. ` +
     `msg is the [#n] number where it happens. title: 3 to 6 words, no quotes. kind: one of meet, secret, fight, place, turn, closer, loss. line: one sentence under 16 words saying what happened. who: the cast member it centres on, or "".\n` +
     `bonds: for each cast member who dealt with ${you} in this part, how they feel about ${you} now, 0 to 100 each (trust, affection, tension). Values change gradually: usually a few points, at most 15, unless something major happened. If a bond is "not set yet", judge starting values from who they are and the story so far. ` +
-    `view: one sentence, third person, how they see ${you} now. why: under 10 words, what caused the change, speaking to the user as "you" (for example "you told her the truth"). Leave bonds empty if nothing changed.`;
+    `view: one sentence, third person, how they see ${you} now. why: under 10 words, what caused the change, speaking to the user as "you" (for example "you told her the truth"). Leave bonds empty if nothing changed.` +
+    (clockOn(chat)
+      ? `\nAlso return "time":{"minutes":0,"weather":"..."}: how many minutes of story time passed during this part (0 if it is one continuous conversation of a few minutes; count skips like "an hour later" or "the next morning"), and the weather at the end (one of ${Object.keys(WEATHER).join(', ')}, or "" if unchanged).`
+      : '');
   const text = await helperComplete(conn, 'track', { system, messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: 600, temperature: 0.4, signal });
   return extractJson(text);
 }
 
 const pick = (b) => ({ trust: b.trust, affection: b.affection, tension: b.tension, view: b.view || '' });
 
-function apply(chat, res, cast, a, b, out) {
+function apply(chat, res, cast, a, b, out, whole = false) {
+  // Story time moves on by what the read says passed (at most a day per read). A re-read of the
+  // whole story doesn't move it again.
+  if (clockOn(chat) && res?.time && !whole) {
+    const mins = Math.max(0, Math.min(1440, Math.round(Number(res.time.minutes) || 0)));
+    if (mins) advance(chat.clock, mins), (out.time = mins);
+    if (WEATHER[res.time.weather]) chat.clock.weather = res.time.weather;
+  }
   for (const s of Array.isArray(res?.stations) ? res.stations.slice(0, 2) : []) {
     const n = Math.round(Number(s.msg)) - 1;
     if (!(n >= a && n < b)) continue;
     const m = chat.messages[n];
     const title = str(s.title).replace(/^["“]|["”]$/g, '').slice(0, 60);
     if (!m || !title || chat.route.some((x) => x.msgId === m.id || x.title.toLowerCase() === title.toLowerCase())) continue;
-    const st = { id: uid(), msgId: m.id, title, kind: KINDS[s.kind] ? s.kind : 'turn', line: str(s.line).slice(0, 160), who: castByName(cast, s.who)?.id || null, auto: true, at: Date.now() };
+    const st = { id: uid(), msgId: m.id, title, kind: KINDS[s.kind] ? s.kind : 'turn', line: str(s.line).slice(0, 160), who: castByName(cast, s.who)?.id || null, auto: true, at: Date.now(), ...(clockOn(chat) ? { day: chat.clock.day } : {}) };
     chat.route.push(st);
     out.stations.push(st);
   }
@@ -171,6 +184,7 @@ export function bondsLayer(chat, people, youName) {
 
 // Undo what a read attached to one reply (when that reply is regenerated or deleted).
 export function undoReply(chat, m) {
+  if (m.chron?.time && chat.clock) advance(chat.clock, -m.chron.time);
   for (const x of m.chron?.bonds || []) {
     const b = chat.bonds?.[x.who];
     if (!b || b.locked) continue;
@@ -249,6 +263,7 @@ function demoRead(chat, a, b, cast) {
   const words = (lastAi ? textOf(lastAi[1]) : '').replace(/^[^:\n]{1,30}:\s*/gm, '').replace(/[*"“”`_]/g, '').split(/[.!?]/)[0].split(/\s+/).filter(Boolean).slice(0, 5).join(' ');
   return {
     stations: lastAi && words && (!chat.route.length || b - a >= 6) ? [{ msg: a + lastAi[0] + 1, title: words, kind: chat.route.length ? 'turn' : 'meet', line: 'A moment from the demo story.', who: p.name }] : [],
+    time: { minutes: 20, weather: '' },
     bonds: [{ who: p.name, trust: (prev?.trust ?? 30) + 4, affection: (prev?.affection ?? 20) + 2, tension: Math.max(0, (prev?.tension ?? 15) - 1), view: `${p.name} is getting used to having you around.`, why: 'you kept the conversation going' }],
   };
 }

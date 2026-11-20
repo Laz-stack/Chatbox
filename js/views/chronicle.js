@@ -44,7 +44,7 @@ export async function routeView(id) {
       : '';
     return `<li class="rt-st${isOpen ? ' open' : ''}" style="--m:${ix && who ? colorOf(who) : CREAM}">
       <button type="button" class="rt-hit press" data-st="${esc(s.id)}" aria-expanded="${isOpen}" aria-label="${esc(s.title)}"><span class="rt-dot" aria-hidden="true"></span>
-        <b>${esc(s.title)}</b>${s.line && !isOpen ? `<span class="rt-line">${esc(s.line)}</span>` : ''}<small>${esc(KINDS[s.kind] || 'Station')} · message ${n}${m && n === chat.messages.length ? ' · latest' : ''}</small></button>${card}</li>`;
+        <b>${esc(s.title)}</b>${s.line && !isOpen ? `<span class="rt-line">${esc(s.line)}</span>` : ''}<small>${s.day ? `Day ${s.day} · ` : ''}${esc(KINDS[s.kind] || 'Station')} · message ${n}${m && n === chat.messages.length ? ' · latest' : ''}</small></button>${card}</li>`;
   };
   const listHTML = () =>
     chat.route.length

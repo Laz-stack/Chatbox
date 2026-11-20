@@ -7,6 +7,7 @@ import { complete, PROVIDERS } from '../providers.js';
 import { buildPrompt } from '../prompt.js';
 import { shouldSummarize, summarize } from '../memory.js';
 import { chronicle, chronicleDue, trackingOn, changeText, markStation, undoReply } from '../chronicle.js';
+import { clockOn, chipText, longText, partOfDay, clockSheet } from '../clock.js';
 import { esc, uid, formatMessage, markProse, fmtNum, estimateTokens, inkOn, ago, plain, detectMood, copyText, download, slug, reducedMotion, motion, lineAccent, EASE_OUT } from '../util.js';
 import { avatarTile } from '../avatar.js';
 import { sceneSVG } from '../scenes.js';
@@ -106,6 +107,7 @@ export async function chatView(id, focusId = null) {
     <header class="chat-head">
       ${ibtn('back', 'Back to home', { href: '#/' })}
       <button type="button" class="chat-who press" id="whoBtn" aria-haspopup="dialog" aria-label="${esc(ch.name)}: chat details">${ix ? groupAvatar(ix, 36) : avatarBullet(ch, 36, '', `head:${ch.id}`)}<span class="who-tx"><span class="who-n">${esc(ch.name)}</span><span class="who-s"><span class="who-meta" id="meta"><span class="dot${conn0?.provider === 'demo' ? ' demo' : ''}" id="connDot"></span><span class="ell" id="connName">${esc(connText(conn0))}</span><span id="tokPill" ${S.settings.showCounter ? '' : 'hidden'}>· <span class="num" id="tokN">…</span></span><span id="noteWrap" ${!ix && chat.notes.length ? '' : 'hidden'}>· ${icon('pin', 12)}<span id="noteN">${chat.notes.length}</span></span></span><span id="status" hidden></span></span></span></button>
+      <button type="button" class="ck-chip press num" id="clockBtn" ${clockOn(chat) ? '' : 'hidden'} aria-haspopup="dialog" aria-label="Story time">${clockOn(chat) ? chipText(chat.clock) : ''}</button>
       ${ibtn('more', 'Chat options', { id: 'moreBtn' })}
     </header>
     <div class="log${story ? ' story' : ''}" id="log" role="log" aria-live="polite" aria-relevant="additions" aria-label="Chat with ${esc(ch.name)}"></div>
@@ -228,6 +230,7 @@ export async function chatView(id, focusId = null) {
     }
     // A stage direction in the log: Steering bar choices and "While you were away".
     function dirSign(m) {
+      if (m.dir === 'time') return `<p class="scn-dir">${icon('clock', 14)}${esc(m.time || 'Time skip')}</p>`;
       const label = m.dir === 'away' ? `While you were away · ${awaySpan(m.away?.ms || 0)}` : STEER[m.dir]?.label || 'Direction';
       return `<p class="scn-dir">${icon(m.dir === 'away' ? 'bell' : STEER[m.dir]?.icon || 'chev', 14)}${esc(label)}</p>`;
     }
@@ -500,10 +503,11 @@ export async function chatView(id, focusId = null) {
       const target = chat.messages[chat.messages.length - 1];
       try {
         const res = await chronicle({ chat, cast: ix ? ix.people : [ch], persona: me(), conn, settings: S.settings });
-        if (res.changes.length || res.stations.length) target.chron = { bonds: res.changes, stations: res.stations.map((s) => s.title) };
+        if (res.changes.length || res.stations.length || res.time) target.chron = { bonds: res.changes, stations: res.stations.map((s) => s.title), ...(res.time ? { time: res.time } : {}) };
         await saveChat(chat, false);
         const i = chat.messages.indexOf(target);
         if (!destroyed && target.chron && i >= 0) rerenderMsg(i);
+        if (!destroyed) updateClock();
       } catch (e) {
         console.warn('chronicle failed', e);
         await saveChat(chat, false);
@@ -591,6 +595,34 @@ export async function chatView(id, focusId = null) {
       await save();
       generate('reply');
     }
+    // ---------- story time ----------
+    function updateClock() {
+      const b = root.querySelector('#clockBtn');
+      if (!b) return;
+      b.hidden = !clockOn(chat);
+      if (!clockOn(chat)) return;
+      const t = chipText(chat.clock);
+      b.setAttribute('aria-label', `Story time: ${longText(chat.clock)}, ${partOfDay(chat.clock.min)}`);
+      if (b.textContent !== t) (b.textContent = t), b.classList.remove('tick'), void b.offsetWidth, b.classList.add('tick');
+    }
+    function openClock() {
+      clockSheet(chat, {
+        save: () => saveChat(chat),
+        onChange: updateClock,
+        onSkip: async (label, note) => {
+          const m = { id: uid(), role: 'user', dir: 'time', time: label, alts: [note], alt: 0, at: Date.now() };
+          chat.messages.push(m);
+          log.querySelector('.empty')?.remove();
+          log.insertAdjacentHTML('beforeend', msgHTML(m, chat.messages.length - 1, true));
+          toBottom(true);
+          renderChips();
+          await saveChat(chat);
+        },
+      });
+    }
+    root.querySelector('#clockBtn').addEventListener('click', openClock);
+    updateClock();
+
     // Sync brought newer messages into this chat (updated in place): redraw when it's safe.
     const onSynced = (e) => {
       if (destroyed) return removeEventListener('chatbox-synced', onSynced);
@@ -851,6 +883,7 @@ export async function chatView(id, focusId = null) {
               { icon: 'layers', label: 'Final prompt', on: () => (location.hash = `#/final/${chat.id}`) },
               { icon: 'download', label: 'Export card (PNG)', on: async () => download(await exportCardPng(ch), slug(ch.name) + '.card.png') },
             ]),
+        { icon: 'clock', label: clockOn(chat) ? `Story time: ${longText(chat.clock)}` : 'Story time', on: openClock },
         { icon: 'route', label: 'Route map', on: () => (location.hash = `#/route/${encodeURIComponent(chat.id)}`) },
         { icon: 'heart', label: 'Bonds', on: () => (location.hash = `#/bonds/${encodeURIComponent(chat.id)}`) },
         { icon: 'book', label: 'Diary', on: () => (location.hash = `#/diary/${encodeURIComponent(chat.id)}`) },
@@ -971,6 +1004,7 @@ export async function chatView(id, focusId = null) {
         if (m.error) continue;
         if (m.dir) {
           if (m.dir === 'skip' || m.dir === 'away') out.push('* * *', '');
+          if (m.dir === 'time') out.push('* * *', '', `*${m.time}*`, '');
           continue;
         }
         const who = m.role === 'assistant' ? speakerOf(m) : ix ? ix.people[0] : ch;
