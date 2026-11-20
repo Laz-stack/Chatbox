@@ -27,9 +27,9 @@ const b64FromBytes = (bytes) => {
   return btoa(s);
 };
 const utf8b64 = (str) => b64FromBytes(new TextEncoder().encode(str));
-const b64utf8 = (b64) => new TextDecoder().decode(Uint8Array.from(atob(b64.trim()), (c) => c.charCodeAt(0)));
+export const b64utf8 = (b64) => new TextDecoder().decode(Uint8Array.from(atob(b64.trim()), (c) => c.charCodeAt(0)));
 
-function pngTextChunks(buf) {
+export function pngTextChunks(buf) {
   const v = new DataView(buf);
   const sig = [137, 80, 78, 71, 13, 10, 26, 10];
   for (let i = 0; i < 8; i++) if (v.getUint8(i) !== sig[i]) throw new Error('Not a PNG file.');

@@ -19,6 +19,9 @@ export function buildPrompt({ char, chat, conn, settings, persona, upto = null, 
 
   if (useGlobal && settings.globalPrompt?.trim()) layers.push({ key: 'global', name: 'Global prompt', text: m(settings.globalPrompt) });
   if (conn?.prompt?.trim()) layers.push({ key: 'connection', name: 'Connection prompt', text: m(conn.prompt) });
+  // World: an imported story's setting and rules, or a narrator character's scenario.
+  const world = group?.world || (!group && char.scenario) || '';
+  if (world.trim()) layers.push({ key: 'world', name: 'World', text: m(world) });
 
   // The Blueprint sheet (if filled) plus Extra notes; older characters are just their prompt text.
   const personaText = [m(compileSheet(char)) || `You are ${char.name}.`, char.tagline ? `${char.name} in a few words: ${char.tagline}.` : '']
@@ -95,7 +98,7 @@ export function buildPrompt({ char, chat, conn, settings, persona, upto = null, 
     .filter((x) => !x.error)
     .map((x) => {
       const own = group?.people.find((p) => p.id === x.speaker) || char;
-      const t = macro(textOf(x), own, persona);
+      const t = macro(textOf(x), own, persona).replace(/!\[[^\]]*\]\([^)]*\)\s*/g, '').trim();
       if (isScene) {
         // Replies from Take turns (one speaker each) are rewritten as "Name: …" so the scene keeps its format.
         if (x.role === 'assistant') return { role: 'assistant', content: x.speaker && !hasCastLines(t, group.people) ? turnAsScene(t, nameOf(x.speaker)) : t };

@@ -77,10 +77,20 @@ export function motion(el, frames, opts) {
 export const EASE_OUT = 'cubic-bezier(.16,1,.3,1)';
 
 // Roleplay formatting: *actions* in italics, line breaks kept.
+// Pictures inside messages resolve through this (the store maps a web address to its saved copy).
+let imageFor = (url) => url;
+export const setImageResolver = (fn) => (imageFor = fn);
+const unesc = (s) => s.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+
 export function formatMessage(text) {
   return esc(text || '')
+    .replace(/!\[([^\]\n]*)\]\((https?:\/\/[^)\s]+)\)/g, (_, alt, url) => `<img class="msg-img" src="${esc(imageFor(unesc(url)))}" alt="${alt}" loading="lazy" decoding="async">`)
+    .replace(/(^|\n)\s*(?:-{3,}|\*{3,}|_{3,})\s*(?=\n|$)/g, '$1<hr class="msg-brk" aria-label="Scene break">')
+    .replace(/\*\*([^*\n]+)\*\*/g, '<b class="dlg">$1</b>')
     .replace(/\*([^*\n]+)\*/g, '<span class="act">$1</span>')
-    .replace(/\n/g, '<br>');
+    .replace(/\n/g, '<br>')
+    .replace(/<br>(<hr class="msg-brk"[^>]*>)<br>/g, '$1')
+    .replace(/(<img class="msg-img"[^>]*>)<br>/g, '$1');
 }
 
 // Display only: prose the model left unmarked is shown as an *action*, so narration, actions and
@@ -89,6 +99,7 @@ export function markProse(text) {
   return (text || '')
     .split('\n')
     .map((line) => {
+      if (/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/.test(line)) return line;
       let out = '';
       let buf = '';
       const flush = () => {
@@ -100,6 +111,21 @@ export function markProse(text) {
       };
       for (let i = 0; i < line.length; ) {
         const c = line[i];
+        const pic = line.startsWith('![', i) && line.slice(i).match(/^!\[[^\]]*\]\([^)\s]+\)/);
+        if (pic) {
+          flush();
+          out += pic[0];
+          i += pic[0].length;
+          continue;
+        }
+        if (line.startsWith('**', i)) {
+          flush();
+          const j = line.indexOf('**', i + 2);
+          const end = j < 0 ? line.length : j + 2;
+          out += line.slice(i, end) + (j < 0 ? '**' : '');
+          i = end;
+          continue;
+        }
         if (c === '*' || c === '"' || c === '“') {
           flush();
           const close = c === '“' ? '”' : c;

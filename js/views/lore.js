@@ -11,12 +11,23 @@ const scopeText = (e) => {
   return names.length ? names.join(', ') : 'No lines chosen';
 };
 
+// Entries you wrote first, then each imported book under its own heading.
+const grouped = (row) => {
+  const books = [...new Set(S.lore.map((e) => e.book || ''))].sort((a, b) => (a ? 1 : 0) - (b ? 1 : 0));
+  return books
+    .map((bk) => {
+      const list = S.lore.filter((e) => (e.book || '') === bk);
+      return (bk ? `<h3 class="lore-book">${esc(bk)}<span>${list.length} entr${list.length === 1 ? 'y' : 'ies'}</span></h3>` : '') + list.map(row).join('');
+    })
+    .join('');
+};
+
 export function loreListView() {
   const row = (e) => `<div class="lore-row${e.on ? '' : ' off'}">
       <a class="lore-main press" href="#/lore/${e.id}">
         <span class="lore-t">${esc(e.title || e.keys[0] || 'Untitled entry')}</span>
         <span class="lore-keys">${e.always ? '<span class="kchip always">Always</span>' : ''}${e.keys.slice(0, 5).map((k) => `<span class="kchip">${esc(k)}</span>`).join('')}${e.keys.length > 5 ? `<span class="kchip more">+${e.keys.length - 5}</span>` : ''}</span>
-        <span class="lore-s">${e.scope === 'lines' ? esc(scopeText(e)) + ' · ' : ''}${esc((e.text || '').replace(/\s+/g, ' ').slice(0, 70))}</span>
+        <span class="lore-s">${e.scope === 'lines' && !e.book ? esc(scopeText(e)) + ' · ' : ''}${esc((e.text || '').replace(/\s+/g, ' ').slice(0, 70))}</span>
       </a>
       ${sw('on-' + e.id, e.on, `Use ${e.title || 'this entry'}`).replace('class="switch"', `class="switch" data-on="${e.id}"`)}
     </div>`;
@@ -24,7 +35,7 @@ export function loreListView() {
     ${topbar({ back: '#/settings', right: ibtn('plus', 'New lore entry', { href: '#/lore/new', cls: 'yellow' }) })}
     ${title2('Lorebook', 'World info')}
     <p class="lore-intro">Places, people and rules of your world. An entry is sent only when one of its keywords comes up in the chat, so the prompt stays short.</p>
-    <div class="lore-list">${S.lore.length ? S.lore.map(row).join('') : `<div class="lore-empty">${icon('book', 22)}<span><b>No entries yet.</b> Try one for a place your characters keep visiting, e.g. <i>Kita Station</i> with the keywords <i>Kita, the station</i>.</span></div>`}</div>
+    <div class="lore-list">${S.lore.length ? grouped(row) : `<div class="lore-empty">${icon('book', 22)}<span><b>No entries yet.</b> Try one for a place your characters keep visiting, e.g. <i>Kita Station</i> with the keywords <i>Kita, the station</i>.</span></div>`}</div>
     <a class="dashed press" href="#/lore/new" style="margin-top:12px">${icon('plus', 20)}New entry</a>
   </div>`;
   return {

@@ -1,5 +1,6 @@
 import { S, activeConnection, saveSettings, savePersona, personaById, newPersona, savePersonaEntry, setDefaultPersona, deletePersona, snapshot, restore, saveCharacter, newChat, saveChat, isPersistent } from '../store.js';
 import { readCardFile, exportAllCardsJson } from '../cards.js';
+import { startImport } from './import.js';
 import { esc, download, resizeImage } from '../util.js';
 import { avatarTile, avatarSVG, PRESETS, PRESET_KEYS } from '../avatar.js';
 import { ttsSupported, voices, speak } from '../tts.js';
@@ -253,7 +254,7 @@ export function backupView() {
         <label class="drop" id="drop">${bullet(arrow(18, '#0A0A0A', -45), '#FDCD15', '#0A0A0A', 40)}<b>Drop a backup file here</b><span class="pill">Choose file</span><input type="file" accept=".json,application/json" id="restoreIn" class="vh"></label></div>
       <div><div class="hrow"><h2 class="h">Character cards</h2></div>
         ${group(
-          `<label class="row press" style="cursor:pointer"><span class="row-ic" style="background:var(--yellow);color:#0A0A0A">${icon('upload', 19)}</span><span class="row-tx"><span class="row-t">Import a card</span><span class="row-s">PNG or JSON from other sites</span></span><span class="row-chev">${icon('chev', 18)}</span><input type="file" accept=".png,.json,image/png,application/json" id="cardIn" class="vh" multiple></label>`,
+          `<label class="row press" style="cursor:pointer"><span class="row-ic" style="background:var(--yellow);color:#0A0A0A">${icon('upload', 19)}</span><span class="row-tx"><span class="row-t">Import a card</span><span class="row-s">PNG or JSON from other sites</span></span><span class="row-chev">${icon('chev', 18)}</span><input type="file" accept=".zip,.png,.json,application/zip,image/png,application/json" id="cardIn" class="vh" multiple></label>`,
           row({ id: 'exportCards', ic: 'download', bc: 'var(--cream)', title: 'Export all cards', sub: 'Every character in one JSON file' })
         )}
         <p class="fhint">To export one character as a PNG card, open it and use the export button.</p>
@@ -305,7 +306,7 @@ export function backupView() {
         if (f) doRestore(f);
       });
 
-      $('#cardIn').addEventListener('change', (e) => importCardFiles(e.target));
+      $('#cardIn').addEventListener('change', (e) => (startImport([...e.target.files]), (e.target.value = '')));
     },
   };
 }

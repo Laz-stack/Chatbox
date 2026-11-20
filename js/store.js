@@ -1,6 +1,6 @@
 // App state, persisted to the browser. Everything lives on this device.
 import * as db from './db.js';
-import { uid } from './util.js';
+import { uid, setImageResolver } from './util.js';
 
 export const LINE_COLORS = ['#2EAA67', '#FB4DAA', '#FE6500', '#B8ACFE', '#FDCD15', '#065BFE', '#ECECEC', '#E70404'];
 
@@ -37,6 +37,8 @@ export const S = {
   fares: { months: {} },
   interchanges: [],
   lore: [],
+  // Pictures inside messages (from imported openings), saved so they show offline: { url: dataURL }.
+  images: {},
 };
 
 export function newConnection(provider = 'anthropic') {
@@ -109,6 +111,8 @@ export async function load() {
   if (all.has('fares')) S.fares = { months: {}, ...all.get('fares') };
   S.interchanges = all.get('interchanges') || [];
   S.lore = all.get('lore') || [];
+  S.images = all.get('images') || {};
+  setImageResolver((url) => S.images[url] || url);
   S.connections = all.get('connections') || [];
   S.characters = all.get('characters') || [];
   S.chats = new Map();
@@ -190,6 +194,7 @@ export const saveCharacters = () => db.set('characters', S.characters);
 export const saveFares = () => db.set('fares', S.fares);
 export const saveInterchanges = () => db.set('interchanges', S.interchanges);
 export const saveLore = () => db.set('lore', S.lore);
+export const saveImages = () => db.set('images', S.images);
 
 // ---------- Lorebook: world info that joins the prompt when its keywords come up ----------
 export const newLore = () => ({ id: 'lore-' + uid(), title: '', keys: [], text: '', scope: 'all', lines: [], always: false, on: true, createdAt: Date.now() });
@@ -319,9 +324,13 @@ export const shownText = (m, ch) => named(textOf(m), ch);
 // "their most recent chat" and a chat id always means that exact chat. An interchange's chat keeps its id.
 export function newChat(charId, id = charId.startsWith('ix-') ? charId : `${charId}~${uid()}`) {
   const ch = character(charId);
+  const ix = !ch && S.interchanges.find((x) => x.id === charId);
   const messages = [];
+  // Every opening is a swipe on the first message (like SillyTavern): pick where the story starts.
   if (ch?.firstMessage?.trim()) {
-    messages.push({ id: uid(), role: 'assistant', alts: [ch.firstMessage], alt: 0, mood: 'happy', at: Date.now(), first: true });
+    messages.push({ id: uid(), role: 'assistant', alts: [ch.firstMessage, ...(ch.greetings || []).filter((g) => g?.trim())], alt: 0, mood: 'happy', at: Date.now(), first: true });
+  } else if (ix?.openings?.length) {
+    messages.push({ id: uid(), role: 'assistant', alts: [...ix.openings], alt: 0, at: Date.now(), first: true });
   }
   return { id, characterId: charId, messages, summary: null, notes: [], updatedAt: Date.now(), startedAt: Date.now() };
 }
@@ -416,6 +425,7 @@ export function snapshot({ includeKeys = true } = {}) {
     fares: S.fares,
     interchanges: S.interchanges,
     lore: S.lore,
+    images: S.images,
   };
 }
 
@@ -431,6 +441,7 @@ export async function restore(data) {
   S.fares = { months: {}, ...(data.fares || {}) };
   S.interchanges = data.interchanges || [];
   S.lore = data.lore || [];
+  S.images = data.images || {};
   S.chats = new Map();
   for (const c of data.chats || []) S.chats.set((c.id ||= c.characterId), c);
   for (const c of [...S.chats.values()])
@@ -443,6 +454,7 @@ export async function restore(data) {
     saveFares(),
     saveInterchanges(),
     saveLore(),
+    saveImages(),
     ...[...S.chats.values()].map((c) => db.set('chat:' + c.id, c)),
   ]);
 }

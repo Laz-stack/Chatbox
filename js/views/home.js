@@ -2,7 +2,7 @@ import { S, activeConnection, lastMessage, textOf, named, departures, logbook, c
 import { esc, ago, agoLong, plain, inkOn, luminance, boardTime, formatMessage } from '../util.js';
 import { avatarTile } from '../avatar.js';
 import { title2, bullet, avatarBullet, tabbar, icon, arrow } from '../ui.js';
-import { importCardFiles } from './settings.js';
+import { startImport } from './import.js';
 
 export function homeView() {
   const conn = activeConnection();
@@ -70,7 +70,7 @@ export function homeView() {
   const html = `<div class="screen">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
       ${title2('Chatbox', 'Your lines tonight')}
-      <label class="ibtn press" title="Import a character card" style="cursor:pointer">${icon('upload')}<span class="vh">Import a character card</span><input type="file" accept=".png,.json,image/png,application/json" id="homeCardIn" class="vh" multiple></label>
+      <label class="ibtn press" title="Import a card, ZIP or lorebook" style="cursor:pointer">${icon('upload')}<span class="vh">Import a card, ZIP or lorebook</span><input type="file" accept=".zip,.png,.json,application/zip,image/png,application/json" id="homeCardIn" class="vh" multiple></label>
     </div>
     ${hero}${banner}
     <div class="blk">${board}</div>
@@ -81,7 +81,7 @@ export function homeView() {
     html,
     depth: 0,
     mount(root) {
-      root.querySelector('#homeCardIn').addEventListener('change', (e) => importCardFiles(e.target));
+      root.querySelector('#homeCardIn').addEventListener('change', (e) => (startImport([...e.target.files]), (e.target.value = '')));
     },
   };
 }

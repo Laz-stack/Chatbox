@@ -72,7 +72,7 @@ export async function chatView(id, focusId = null) {
   const ch = ix ? { ...ix.people[0], id: ix.id, name: ix.title, tagline: scene ? `Carriage · ${ix.people.length} aboard` : `Interchange · ${ix.people.length} lines`, connectionId: null } : character(owner);
   if (!ch) return null;
   const speakerOf = (m) => (ix ? ix.people.find((p) => p.id === m?.speaker) || ix.people[0] : ch);
-  const group = ix ? { people: ix.people, scene: ix.scene, mode: ix.mode || 'turns', passengers: ix.passengers !== false } : null;
+  const group = ix ? { people: ix.people, scene: ix.scene, world: ix.world || '', mode: ix.mode || 'turns', passengers: ix.passengers !== false } : null;
   // Who you are in this chat (its own pick, else your default persona).
   const me = () => personaFor(chat);
   const youWho = () => ({ name: me().name?.trim() || 'You', preset: me().preset, avatarImage: me().avatarImage, line: { color: '#FDCD15' } });
@@ -128,7 +128,9 @@ export async function chatView(id, focusId = null) {
       if (!isLast || m.role !== 'assistant') return '';
       const pager =
         m.alts.length > 1
-          ? `<div class="pager"><button type="button" data-alt="-1" aria-label="Previous reply" ${m.alt === 0 ? 'disabled' : ''}>${icon('back', 18)}</button><span class="num" aria-live="polite">${m.alt + 1} / ${m.alts.length}</span><button type="button" data-alt="1" aria-label="Next reply">${icon('chev', 18)}</button></div>`
+          ? m.first
+            ? `<div class="pager opening"><button type="button" data-alt="-1" aria-label="Previous opening" ${m.alt === 0 ? 'disabled' : ''}>${icon('back', 18)}</button><span class="num" aria-live="polite">Opening ${m.alt + 1} of ${m.alts.length}</span><button type="button" data-alt="1" aria-label="Next opening" ${m.alt === m.alts.length - 1 ? 'disabled' : ''}>${icon('chev', 18)}</button></div>`
+            : `<div class="pager"><button type="button" data-alt="-1" aria-label="Previous reply" ${m.alt === 0 ? 'disabled' : ''}>${icon('back', 18)}</button><span class="num" aria-live="polite">${m.alt + 1} / ${m.alts.length}</span><button type="button" data-alt="1" aria-label="Next reply">${icon('chev', 18)}</button></div>`
           : '';
       const read = ttsSupported ? `<button type="button" class="mini press" data-read aria-label="Read aloud">${icon('speaker', 18)}</button>` : '';
       const used = (m.lore?.[m.alt] || []).filter((id) => S.lore.some((e) => e.id === id));
@@ -229,7 +231,7 @@ export async function chatView(id, focusId = null) {
         h += msgHTML(m, i);
       });
       if (scene) {
-        h = `<div class="scn-card"><span class="scn-card-h"><b>Scene</b><a class="scn-edit press" href="#/interchange/${ix.id}">Edit</a></span>${ix.scene?.trim() ? esc(ix.scene.trim()) : 'No scene set yet. Tap Edit to say where everyone is.'}</div>${h}`;
+        h = `<div class="scn-card"><span class="scn-card-h"><b>Scene</b><a class="scn-edit press" href="#/interchange/${ix.id}">Edit</a></span>${ix.scene?.trim() ? esc(ix.scene.trim()) : ix.world?.trim() ? 'The world, its rules and the cast came with the imported card. Swipe the first message to pick where the story starts.' : 'No scene set yet. Tap Edit to say where everyone is.'}</div>${h}`;
         if (!chat.messages.length) h += `<p class="empty scn-empty">${esc(ix.people.length > 1 ? ix.people.slice(0, -1).map((p) => p.name).join(', ') + ' and ' + ix.people[ix.people.length - 1].name : ix.people[0].name)} are on board. Write what you do, or tap <b>Let them talk</b> to get the scene going.</p>`;
       } else if (!chat.messages.length)
         h = ix
@@ -576,7 +578,7 @@ export async function chatView(id, focusId = null) {
       const m = chat.messages[i];
       const next = m.alt + dir;
       if (next < 0) return;
-      if (next >= m.alts.length) return generate('regen');
+      if (next >= m.alts.length) return m.first ? undefined : generate('regen');
       const b = log.querySelector(`.msg[data-i="${i}"] .bubble`);
       if (b) await motion(b, [{ transform: 'none', opacity: 1 }, { transform: `translateX(${-dir * 28}px)`, opacity: 0 }], { duration: 140, easing: 'ease-in' }).finished.catch(() => {});
       m.alt = next;
@@ -1045,6 +1047,22 @@ export async function chatView(id, focusId = null) {
 
     log.addEventListener('click', (e) => {
       onChip(e);
+      const pic = e.target.closest('.msg-img');
+      if (pic) {
+        const lb = document.createElement('button');
+        lb.type = 'button';
+        lb.className = 'lightbox';
+        lb.setAttribute('aria-label', 'Close picture');
+        lb.innerHTML = `<img src="${pic.getAttribute('src')}" alt="">`;
+        const shut = () => (lb.remove(), removeEventListener('keydown', esc1), pic.focus?.());
+        const esc1 = (k) => k.key === 'Escape' && shut();
+        lb.addEventListener('click', shut);
+        addEventListener('keydown', esc1);
+        if (!pic.hasAttribute('tabindex')) pic.setAttribute('tabindex', '-1');
+        document.body.appendChild(lb);
+        lb.focus();
+        return;
+      }
       const ps = e.target.closest('[data-pass]');
       if (ps) return passengerSheet(ps.dataset.pass);
       const a = e.target.closest('[data-alt]');

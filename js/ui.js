@@ -276,6 +276,7 @@ export function toast(msg, { kind = '', action = '', onAction, ms = 3600 } = {})
     onAction?.();
   });
   while (root.children.length > 3) root.firstElementChild.remove();
+  return { remove: () => (clearTimeout(timer), kill()) };
 }
 
 // ---------- ruler (tick slider) ----------
