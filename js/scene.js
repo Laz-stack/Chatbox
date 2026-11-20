@@ -78,7 +78,7 @@ function attribute(blocks, cast) {
   const out = [];
   for (const b of blocks) {
     const prev = out[out.length - 1];
-    if (b.kind === 'narr' && /["“]/.test(b.text)) {
+    if (b.kind === 'narr' && /["“]|`[^`\n]+`/.test(b.text)) {
       const lead = b.text.replace(/^[\s*_]+/, '');
       const opener = cast.find((n) => new RegExp(`^(${reEsc(n.trim())}|${reEsc(first(n))})\\b`, 'i').test(lead));
       // "...," someone mutters / a student asks: a background voice, so it stays narration.
@@ -102,7 +102,7 @@ export function splitTurn(text, name) {
   for (const para of (text || '').split(/\n\s*\n/)) {
     const t = para.trim();
     if (!t) continue;
-    const said = /["“”]/.test(t);
+    const said = /["“”]|`[^`\n]+`/.test(t);
     const prev = blocks[blocks.length - 1];
     if (said && prev?.kind === 'say') prev.text += '\n\n' + t;
     else blocks.push(said ? { kind: 'say', name, text: t } : { kind: 'narr', text: t });

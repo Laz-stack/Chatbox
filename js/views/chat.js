@@ -1,5 +1,6 @@
 import { S, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, named, resetChat, recordFare, interchange, isInterchangeId, chatsFor, startNewChat, deleteChat, blankCharacter, saveInterchange, personaFor, personaById, newChat } from '../store.js';
 import { textSheet } from './text.js';
+import { replyStyleSheet } from './settings.js';
 import { textPrefs } from '../textstyle.js';
 import { STEER, parseScene, splitTurn, hasCastLines, resolveSpeaker, passengersIn, demoScene } from '../scene.js';
 import { complete, PROVIDERS } from '../providers.js';
@@ -747,6 +748,7 @@ export async function chatView(id, focusId = null) {
         { icon: 'user', label: `You: ${me().name?.trim() || 'You'}`, on: personaSheet },
         { icon: 'download', label: 'Export as story', on: exportStory },
         { icon: 'sliders', label: 'Reading text', on: textSheet },
+        { icon: 'talk', label: 'Reply style', on: () => replyStyleSheet(() => updateTokens()) },
         '-',
         ...(ix
           ? []
