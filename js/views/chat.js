@@ -195,7 +195,7 @@ export async function chatView(id, focusId = null) {
       (last?.querySelector('.scn-t') || last || box).appendChild(caret);
     }
     function sceneMsgHTML(m, i, enter) {
-      const star = m.star ? `<span class="star-b" title="In your Logbook">${icon('star', 13)}</span>` : '';
+      const star = m.star || m.quotes?.length ? `<span class="star-b" title="In your Logbook">${icon('star', 13)}</span>` : '';
       let inner;
       if (m.role === 'user') {
         if (m.dir) inner = `<p class="scn-dir">${icon(STEER[m.dir]?.icon || 'chev', 14)}${esc(STEER[m.dir]?.label || 'Direction')}</p>`;
@@ -215,11 +215,11 @@ export async function chatView(id, focusId = null) {
     function msgHTML(m, i, enter = false) {
       if (ix) return sceneMsgHTML(m, i, enter);
       const cls = `msg ${m.role === 'user' ? 'user' : 'ai'}${enter ? ' enter' : ''}`;
-      const star = m.star ? `<span class="star-b" title="In your Logbook">${icon('star', 13)}</span>` : '';
+      const star = m.star || m.quotes?.length ? `<span class="star-b" title="In your Logbook">${icon('star', 13)}</span>` : '';
       if (m.role === 'user') return `<div class="${cls}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="bubble">${formatMessage(named(textOf(m), ch, 'you', me()))}${star}</div></div>`;
       const sp = speakerOf(m);
       const tag = ix ? `<span class="spk-tag" style="--c:${sp.line?.color || '#2EAA67'};--ink:${inkOn(sp.line?.color || '#2EAA67')}">${esc(sp.name)}</span>` : '';
-      return `<div class="${cls}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}">${avatarTile(sp, 30, { expr: m.mood || 'happy', radius: 10, cls: 'msg-av' })}<div class="msg-col"><div class="bubble">${tag}${formatMessage(showAi(named(textOf(m), sp, 'you', me())))}${star}</div>${toolsHTML(m, i)}</div></div>`;
+      return `<div class="${cls}${m.star || m.quotes?.length ? ' starred' : ''}" data-i="${i}" data-id="${m.id}">${avatarTile(sp, 30, { expr: m.mood || 'happy', radius: 10, cls: 'msg-av' })}<div class="msg-col"><div class="bubble">${tag}${formatMessage(showAi(named(textOf(m), sp, 'you', me())))}${star}</div>${toolsHTML(m, i)}</div></div>`;
     }
     function renderAll() {
       const cut = chat.summary?.upto || 0;
@@ -589,24 +589,29 @@ export async function chatView(id, focusId = null) {
     }
 
     // ---------- message actions ----------
+    let menuOpen = false;
     function messageMenu(el) {
       const i = +el.dataset.i;
       const m = chat.messages[i];
-      if (!m || busy) return;
+      // A long press fires both our hold timer and the browser's contextmenu: open one menu only.
+      if (!m || busy || menuOpen) return;
+      menuOpen = true;
       el.classList.add('lifted');
+      const lines = quoteLines(m);
       openMenu(
         el.querySelector('.bubble'),
         [
           { icon: 'edit', label: 'Edit message', on: () => editMessage(i) },
           { icon: 'copy', label: 'Copy', on: () => copyText(textOf(m)).then(() => toast('Copied')) },
           ...(ttsSupported ? [{ icon: 'speaker', label: 'Read aloud', on: () => speak(textOf(m)) }] : []),
-          { icon: 'star', label: m.star ? 'Remove star' : 'Star to Logbook', on: () => toggleStar(m, i) },
+          ...(lines.length ? [{ icon: 'star', label: m.quotes?.length ? `Star a line (${m.quotes.length} starred)` : 'Star a line', on: () => starLineSheet(m, i, lines) }] : []),
+          { icon: 'star', label: m.star ? 'Remove star from reply' : lines.length ? 'Star whole reply' : 'Star to Logbook', on: () => toggleStar(m, i) },
           { icon: 'pin', label: 'Pin to notes', on: () => pin(m) },
           ...(ix ? [] : [{ icon: 'track', label: 'Branch from here', on: () => branch(i) }]),
           '-',
           { icon: 'trash', label: 'Delete', danger: true, on: () => remove(i) },
         ],
-        { onClose: () => el.classList.remove('lifted'), spotlight: el.querySelector('.bubble') }
+        { onClose: () => (el.classList.remove('lifted'), (menuOpen = false)), spotlight: el.querySelector('.bubble') }
       );
     }
     function editMessage(i) {
@@ -629,6 +634,57 @@ export async function chatView(id, focusId = null) {
         },
       });
     }
+    // ---------- star a line: the quoted lines in a message, each with who said it ----------
+    const QUOTE = /"([^"\n]{2,}?)"|“([^”\n]{2,}?)”/g;
+    function quoteLines(m) {
+      const text = textOf(m);
+      let parts;
+      if (m.role === 'user') parts = [m.as ? { who: speakerOf({ speaker: m.as }) } : { you: true }];
+      if (m.role === 'user') parts[0].text = text;
+      else if (ix) {
+        const blocks = m.speaker && !hasCastLines(text, ix.people) ? splitTurn(text, speakerOf(m).name) : parseScene(text);
+        parts = blocks
+          .filter((b) => b.kind === 'say')
+          .map((b) => {
+            const r = resolveSpeaker(b.name, ix.people, me().name);
+            return { who: r.kind === 'line' ? r.who : null, name: r.kind === 'passenger' ? r.name : null, you: r.kind === 'you', text: b.text };
+          });
+      } else parts = [{ who: ch, text }];
+      const out = [];
+      for (const p of parts)
+        for (const mm of named(p.text, p.who || (ix ? ix.people[0] : ch), 'you', me()).matchAll(QUOTE)) {
+          const t = (mm[1] || mm[2]).trim();
+          if (t && !out.some((x) => x.text === t)) out.push({ text: t, whoId: p.who?.id || null, name: p.you ? me().name?.trim() || 'You' : p.name || p.who?.name || ch.name });
+        }
+      return out;
+    }
+    function starLineSheet(m, i, lines) {
+      const isOn = (l) => (m.quotes || []).some((q) => q.text === l.text);
+      const rows = () =>
+        lines
+          .map((l, k) => `<button type="button" class="qline press${isOn(l) ? ' on' : ''}" data-k="${k}" aria-pressed="${isOn(l)}"><span class="ql-tx"><b>${esc(l.name)}</b><span>“${esc(l.text)}”</span></span><span class="ql-star">${icon('star', 18)}</span></button>`)
+          .join('');
+      openSheet({
+        label: 'Star a line',
+        html: `<h2 class="sheet-title">Star a line</h2><p class="sheet-p">Tap the lines you want to keep. Each one lands in your Logbook on its own.</p><div class="qlist" id="ql">${rows()}</div>`,
+        onMount(s) {
+          s.querySelector('#ql').addEventListener('click', async (e) => {
+            const b = e.target.closest('[data-k]');
+            if (!b) return;
+            const l = lines[+b.dataset.k];
+            m.quotes ||= [];
+            const j = m.quotes.findIndex((q) => q.text === l.text);
+            if (j >= 0) m.quotes.splice(j, 1);
+            else m.quotes.push({ id: uid(), text: l.text, who: l.whoId, name: l.name, at: Date.now() });
+            if (!m.quotes.length) delete m.quotes;
+            s.querySelector('#ql').innerHTML = rows();
+            rerenderMsg(i);
+            await saveChat(chat, false);
+          });
+        },
+      });
+    }
+
     // Starred messages collect in the Logbook (Platform and Lines › Starred).
     async function toggleStar(m, i) {
       if (m.star) delete m.star;

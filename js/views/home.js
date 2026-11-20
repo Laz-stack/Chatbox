@@ -55,14 +55,14 @@ export function homeView() {
 
   // Logbook: starred moments from every chat, each ticket in its character's own colour.
   const log = logbook();
-  const stub = ({ chat, m }) => {
+  const stub = ({ chat, m, q, at }) => {
     // In an interchange the ticket belongs to whoever said it (you: the first member's colour).
     const ixr = interchange(chat.characterId);
-    const c = character(m.speaker) || character(chat.characterId) || ixr?.people[0];
+    const c = (q && character(q.who)) || character(m.speaker) || character(chat.characterId) || ixr?.people[0];
     if (!c) return '';
     const col = c.line?.color || '#2EAA67';
-    const t = named(textOf(m), c);
-    return `<a class="stub press" href="#/chat/${chat.id}/m/${m.id}" style="--c:${col};--ink:${inkOn(col)}"><span class="stub-l">${avatarBullet(c, 32)}</span><span class="stub-r"><span class="stub-m"><b>${esc(c.name)}</b><span>${agoLong(m.star)}</span></span><span class="stub-p">${formatMessage(t.length > 200 ? t.slice(0, 197) + '…' : t)}</span></span></a>`;
+    const t = q ? `“${q.text}”` : named(textOf(m), c);
+    return `<a class="stub press" href="#/chat/${chat.id}/m/${m.id}" style="--c:${col};--ink:${inkOn(col)}"><span class="stub-l">${avatarBullet(c, 32)}</span><span class="stub-r"><span class="stub-m"><b>${esc(q?.name || c.name)}</b><span>${agoLong(at)}</span></span><span class="stub-p">${formatMessage(t.length > 200 ? t.slice(0, 197) + '…' : t)}</span></span></a>`;
   };
   const logbookHTML = `<div class="blk logbook"><div class="hrow"><h2 class="h">Logbook</h2>${log.length > 3 ? `<a class="small press" href="#/lines/starred">See all ${log.length}</a>` : `<span class="small">${log.length ? log.length + ' starred' : 'Starred moments'}</span>`}</div>
     ${log.length ? `<div class="roll">${log.slice(0, 3).map(stub).join('')}</div>` : `<div class="log-empty">${icon('star', 20)}<span>Long-press any message in a chat and tap <b>Star</b>. Your favourite moments land here.</span></div>`}</div>`;

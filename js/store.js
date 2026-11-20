@@ -386,10 +386,15 @@ export function departures() {
 }
 
 // The Logbook: every starred message across all chats, newest star first: [{ chat, m }].
+// Starred replies and starred lines (m.quotes), newest first. A line entry carries `q`.
 export function logbook() {
   const out = [];
-  for (const chat of S.chats.values()) for (const m of chat.messages) if (m.star) out.push({ chat, m });
-  return out.sort((a, b) => b.m.star - a.m.star);
+  for (const chat of S.chats.values())
+    for (const m of chat.messages) {
+      if (m.star) out.push({ chat, m, at: m.star });
+      for (const q of m.quotes || []) out.push({ chat, m, q, at: q.at });
+    }
+  return out.sort((a, b) => b.at - a.at);
 }
 
 export function lastMessage(chat) {
