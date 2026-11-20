@@ -38,7 +38,7 @@ export async function makeMap({ chat, cast, ids, conn, signal }) {
     const ask =
       `Pick the PLACES from this lorebook (locations people can go to: buildings, rooms, districts, landmarks), at most ${MAX_PLACES}. Skip people, objects, factions and rules. ` +
       `Return {"places":[{"name":"...","note":"...","usual":["..."],"scene":"...","lore_title":"..."}],"here":"..."}. name: 1 to 4 words. note: one sentence under 16 words. usual: cast members who are usually found there (may be empty). scene: the closest background of ${MAP_SCENES.join(', ')}. here: the place the story is at now, if clear, else "".`;
-    const text = await helperComplete(conn, 'track', { system: 'You build a map for an interactive story. Reply with ONE JSON object and nothing else.', messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: 900, temperature: 0.3, signal });
+    const text = await helperComplete(conn, 'map', { system: 'You build a map for an interactive story. Reply with ONE JSON object and nothing else.', messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: 900, temperature: 0.3, signal });
     res = extractJson(text);
   }
   chat.map ||= { places: [], here: null, removed: [], suggest: [] };

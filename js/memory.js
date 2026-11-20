@@ -1,7 +1,7 @@
 // Auto-summary: when a chat grows past ~55% of the connection's context size,
 // older messages are condensed into a running summary. The last 8 stay verbatim.
 import { complete } from './providers.js';
-import { helperFor } from './helper.js';
+import { helperFor, helperComplete } from './helper.js';
 import { estimateTokens } from './util.js';
 import { textOf, saveChat } from './store.js';
 import { macro } from './prompt.js';
@@ -46,7 +46,7 @@ export async function summarize({ chat, char, conn, persona, force = false, sign
   const readTo = (force ? 0 : from) + lines.length;
   const transcript = lines.join('\n');
   const prev = force ? '' : chat.summary?.text || '';
-  const text = await complete(run, {
+  const text = await helperComplete(conn, 'summary', {
     system:
       'You condense roleplay transcripts into a compact memory. Write in past tense, third person. Keep names, facts, promises, feelings, places and open threads. No commentary.',
     messages: [

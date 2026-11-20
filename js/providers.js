@@ -181,7 +181,7 @@ export async function complete(conn, { system, messages, signal, onDelta = () =>
 // Returns a data: URL (or a plain URL when the provider only gives one).
 export async function generateImage(conn, { model, prompt, signal }) {
   const p = PROVIDERS[conn.provider] || PROVIDERS.openai;
-  if (p.format === 'demo') return demoPicture(prompt);
+  if (p.format === 'demo') return { url: demoPicture(prompt), cost: 0 };
   if (p.format === 'anthropic') throw new ProviderError('Anthropic models can’t paint pictures.', 0, 'Pick an OpenAI or OpenRouter connection for Pictures.');
   const m = model || conn.model;
   // "Failed to fetch": the request never reached the provider. Say why it usually happens.
@@ -199,22 +199,23 @@ export async function generateImage(conn, { model, prompt, signal }) {
   };
   if (conn.provider === 'openrouter') {
     // Some image models answer with text and pictures, some only pictures: try both shapes.
-    const ask = (modalities) => reach(baseOf(conn) + '/chat/completions', { method: 'POST', headers: headers(conn), body: JSON.stringify({ model: m, messages: [{ role: 'user', content: prompt }], modalities }), signal });
+    const ask = (modalities) => reach(baseOf(conn) + '/chat/completions', { method: 'POST', headers: headers(conn), body: JSON.stringify({ model: m, messages: [{ role: 'user', content: prompt }], modalities, usage: { include: true } }), signal });
     let res = await ask(['image', 'text']);
     if (!res.ok && (res.status === 400 || res.status === 404)) res = await ask(['image']);
     if (!res.ok) throw await readError(res);
     const j = await res.json();
     const url = j.choices?.[0]?.message?.images?.[0]?.image_url?.url;
     if (!url) throw new ProviderError('That model didn’t return a picture.', 0, 'Pick an image model, for example google/gemini-2.5-flash-image.');
-    return url;
+    // OpenRouter reports what this request was billed (in dollars of credit).
+    return { url, cost: Number.isFinite(+j.usage?.cost) ? +j.usage.cost : null };
   }
   // gpt-image models always answer with base64; others are asked for it too (a plain link may not load here).
   const size = /^gpt-image/.test(m) ? { size: '1536x1024' } : /dall-e-3/.test(m) ? { size: '1792x1024', response_format: 'b64_json' } : { response_format: 'b64_json' };
   const res = await reach(baseOf(conn) + '/images/generations', { method: 'POST', headers: headers(conn), body: JSON.stringify({ model: m, prompt, n: 1, ...size }), signal });
   if (!res.ok) throw await readError(res);
   const d = (await res.json()).data?.[0];
-  if (d?.b64_json) return 'data:image/png;base64,' + d.b64_json;
-  if (d?.url) return d.url;
+  if (d?.b64_json) return { url: 'data:image/png;base64,' + d.b64_json, cost: null };
+  if (d?.url) return { url: d.url, cost: null };
   throw new ProviderError('The provider didn’t return a picture.');
 }
 // Demo mode: a painted-looking placeholder, so the feature can be tried without a key.
