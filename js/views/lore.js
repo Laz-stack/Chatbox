@@ -1,6 +1,6 @@
 // Lorebook: world info (places, factions, items, history) that joins the prompt only when its
 // keywords come up in the chat, so long stories stay consistent without a giant prompt.
-import { S, newLore, loreEntry, saveLoreEntry, deleteLoreEntry, character, interchange, activeConnection } from '../store.js';
+import { S, newLore, loreEntry, saveLoreEntry, deleteLoreEntry, character, interchange, activeConnection, saveSettings } from '../store.js';
 import { enhanceLore } from '../loregen.js';
 import { esc, inkOn } from '../util.js';
 import { topbar, title2, ibtn, field, toggleRow, bindSwitch, avatarBullet, icon, arrow, toast, confirmSheet, sw } from '../ui.js';
@@ -11,54 +11,129 @@ const scopeText = (e) => {
   return names.length ? names.join(', ') : 'No lines chosen';
 };
 
-// Entries you wrote first, then each imported book under its own heading.
-const grouped = (row) => {
-  const books = [...new Set(S.lore.map((e) => e.book || ''))].sort((a, b) => (a ? 1 : 0) - (b ? 1 : 0));
-  return books
-    .map((bk) => {
-      const list = S.lore.filter((e) => (e.book || '') === bk);
-      return (bk ? `<h3 class="lore-book">${esc(bk)}<span>${list.length} entr${list.length === 1 ? 'y' : 'ies'}</span></h3>` : '') + list.map(row).join('');
-    })
-    .join('');
+// ---------- folders: one per imported book, plus "Your entries" ----------
+const MINE = '_mine';
+const keyOf = (book) => (book ? encodeURIComponent(book) : MINE);
+const bookOf = (key) => (key === MINE ? '' : decodeURIComponent(key));
+export const bookHome = (book) => `#/lore/book/${keyOf(book || '')}`;
+const isOff = (book) => (S.settings.booksOff || []).includes(book || '');
+// A book's picture: the cover of the story or character its entries belong to.
+const coverOf = (list) => {
+  for (const e of list)
+    for (const id of e.lines || []) {
+      const img = interchange(id)?.cover || character(id)?.avatarImage;
+      if (img) return img;
+    }
+  return null;
+};
+// Which chats a book is for. A story named like its book is shown by its cast instead.
+const where = (list, book = '') => {
+  const label = (id) => {
+    const ix = interchange(id);
+    if (ix) return ix.title !== book ? ix.title : ix.people.map((p) => p.name.split(' ')[0]).slice(0, 3).join(', ') + (ix.people.length > 3 ? ` +${ix.people.length - 3}` : '');
+    const c = character(id);
+    return c && (c.name !== book ? c.name : 'narrator');
+  };
+  const names = [...new Set(list.flatMap((e) => (e.scope === 'lines' ? e.lines : [])).map(label).filter(Boolean))];
+  return names.length ? names.slice(0, 2).join(' · ') : 'every chat';
 };
 
+async function setBook(book, on) {
+  const off = new Set(S.settings.booksOff || []);
+  on ? off.delete(book || '') : off.add(book || '');
+  S.settings.booksOff = [...off];
+  await saveSettings();
+}
+
 export function loreListView() {
-  const row = (e) => `<div class="lore-row${e.on ? '' : ' off'}">
-      <a class="lore-main press" href="#/lore/${e.id}">
-        <span class="lore-t">${esc(e.title || e.keys[0] || 'Untitled entry')}</span>
-        <span class="lore-keys">${e.always ? '<span class="kchip always">Always</span>' : ''}${e.keys.slice(0, 5).map((k) => `<span class="kchip">${esc(k)}</span>`).join('')}${e.keys.length > 5 ? `<span class="kchip more">+${e.keys.length - 5}</span>` : ''}</span>
-        <span class="lore-s">${e.scope === 'lines' && !e.book ? esc(scopeText(e)) + ' · ' : ''}${esc((e.text || '').replace(/\s+/g, ' ').slice(0, 70))}</span>
-      </a>
-      ${sw('on-' + e.id, e.on, `Use ${e.title || 'this entry'}`).replace('class="switch"', `class="switch" data-on="${e.id}"`)}
+  const books = [...new Set(S.lore.map((e) => e.book || ''))].sort((x, y) => (x ? 0 : 1) - (y ? 0 : 1) || x.localeCompare(y));
+  const card = (bk) => {
+    const list = S.lore.filter((e) => (e.book || '') === bk);
+    const on = list.filter((e) => e.on).length;
+    const img = bk ? coverOf(list) : null;
+    const pic = img ? `<img class="lf-cover" src="${img}" alt="">` : `<span class="lf-cover lf-icon">${icon('book', 22)}</span>`;
+    return `<div class="lf${bk ? '' : ' mine'}${isOff(bk) ? ' off' : ''}" data-book="${esc(keyOf(bk))}">
+      <a class="lf-main press" href="${bookHome(bk)}">${pic}<span class="lf-tx"><b>${esc(bk || 'Your entries')}</b><span>${list.length} entr${list.length === 1 ? 'y' : 'ies'} · ${isOff(bk) ? 'book off' : on === list.length ? 'all on' : `${on} on`} · ${esc(where(list, bk))}</span></span></a>
+      ${sw('bk-' + keyOf(bk), !isOff(bk), `Use ${bk || 'your entries'}`).replace('class="switch"', `class="switch" data-bk="${esc(keyOf(bk))}"`)}
+      <a class="lf-go press" href="${bookHome(bk)}" aria-label="Open ${esc(bk || 'your entries')}">${icon('chev', 20)}</a>
     </div>`;
+  };
   const html = `<div class="screen no-tab">
     ${topbar({ back: '#/settings', right: ibtn('plus', 'New lore entry', { href: '#/lore/new', cls: 'yellow' }) })}
     ${title2('Lorebook', 'World info')}
-    <p class="lore-intro">Places, people and rules of your world. An entry is sent only when one of its keywords comes up in the chat, so the prompt stays short.</p>
-    <div class="lore-list">${S.lore.length ? grouped(row) : `<div class="lore-empty">${icon('book', 22)}<span><b>No entries yet.</b> Try one for a place your characters keep visiting, e.g. <i>Kita Station</i> with the keywords <i>Kita, the station</i>.</span></div>`}</div>
+    <p class="lore-intro">Entries are sent only when a keyword comes up.</p>
+    <div class="lf-list">${S.lore.length ? books.map(card).join('') : `<div class="lore-empty">${icon('book', 22)}<span><b>No entries yet.</b> Import a card or lorebook from Build, or write one for a place your characters keep visiting, e.g. <i>Kita Station</i> with the keywords <i>Kita, the station</i>.</span></div>`}</div>
     <a class="dashed press" href="#/lore/new" style="margin-top:12px">${icon('plus', 20)}New entry</a>
   </div>`;
   return {
     html,
     depth: 1,
     mount(root) {
-      root.querySelectorAll('[data-on]').forEach((b) =>
+      root.querySelectorAll('[data-bk]').forEach((b) =>
         bindSwitch(b, async (v) => {
-          const e = loreEntry(b.dataset.on);
-          e.on = v;
-          b.closest('.lore-row').classList.toggle('off', !v);
-          await saveLoreEntry(e);
+          const bk = bookOf(b.dataset.bk);
+          await setBook(bk, v);
+          const el = b.closest('.lf');
+          el.classList.toggle('off', !v);
+          const list = S.lore.filter((e) => (e.book || '') === bk);
+          const on = list.filter((e) => e.on).length;
+          el.querySelector('.lf-tx span').textContent = `${list.length} entr${list.length === 1 ? 'y' : 'ies'} · ${!v ? 'book off' : on === list.length ? 'all on' : `${on} on`} · ${where(list, bk)}`;
+          toast(v ? `${bk || 'Your entries'} is on` : `${bk || 'Your entries'} is off. Its entries won’t be sent.`);
         })
       );
     },
   };
 }
 
-export function loreEditView(id) {
+// Inside one book: compact rows (title, keywords on one line, a switch); search once it's long.
+export function loreBookView(key) {
+  const bk = bookOf(key);
+  const list = S.lore.filter((e) => (e.book || '') === bk);
+  if (!list.length && bk) return null;
+  const row = (e) => `<div class="lr${e.on ? '' : ' off'}" data-find="${esc((e.title + ' ' + e.keys.join(' ')).toLowerCase())}">
+      <a class="lr-main press" href="#/lore/${e.id}"><b>${esc(e.title || e.keys[0] || 'Untitled entry')}</b><span>${e.always ? '<i class="lr-always">Always</i> ' : ''}<i class="lr-k">${esc(e.keys.slice(0, 3).join(', '))}</i>${e.keys.length > 3 ? ` <i class="lr-more">+${e.keys.length - 3}</i>` : ''}</span></a>
+      ${sw('on-' + e.id, e.on, `Use ${e.title || 'this entry'}`).replace('class="switch"', `class="switch" data-on="${e.id}"`)}
+    </div>`;
+  const html = `<div class="screen no-tab">
+    ${topbar({ back: '#/lore', title: bk || 'Your entries', right: ibtn('plus', 'New entry in this book', { href: `#/lore/new/${key}`, cls: 'yellow' }) })}
+    ${isOff(bk) ? `<p class="lb-off">${icon('shield', 16)}This book is off, so none of its entries are sent. Turn it on in the Lorebook.</p>` : ''}
+    ${list.length >= 12 ? `<label class="lb-find">${icon('search', 18)}<input id="loFind" type="search" placeholder="Find an entry or keyword" autocomplete="off" aria-label="Find an entry or keyword"></label>` : ''}
+    <div class="lr-list" id="lrList">${list.map(row).join('') || `<p class="lore-intro">Nothing here yet.</p>`}</div>
+    <p class="lore-intro" id="lrNone" hidden>No entry matches that.</p>
+    <a class="dashed press" href="#/lore/new/${key}" style="margin-top:12px">${icon('plus', 20)}New entry${bk ? ` in ${esc(bk)}` : ''}</a>
+  </div>`;
+  return {
+    html,
+    depth: 2,
+    mount(root) {
+      root.querySelectorAll('[data-on]').forEach((b) =>
+        bindSwitch(b, async (v) => {
+          const e = loreEntry(b.dataset.on);
+          e.on = v;
+          b.closest('.lr').classList.toggle('off', !v);
+          await saveLoreEntry(e);
+        })
+      );
+      root.querySelector('#loFind')?.addEventListener('input', (ev) => {
+        const q = ev.target.value.trim().toLowerCase();
+        let shown = 0;
+        root.querySelectorAll('.lr').forEach((r) => {
+          const hit = !q || r.dataset.find.includes(q);
+          r.hidden = !hit;
+          shown += hit;
+        });
+        root.querySelector('#lrNone').hidden = shown > 0;
+      });
+    },
+  };
+}
+
+export function loreEditView(id, inBook = null) {
   const isNew = id === 'new';
-  const src = isNew ? newLore() : loreEntry(id);
+  const src = isNew ? { ...newLore(), ...(inBook && inBook !== MINE ? { book: bookOf(inBook) } : {}) } : loreEntry(id);
   if (!src) return null;
   const d = structuredClone(src);
+  const home = bookHome(d.book);
   const chips = () => d.keys.map((k, i) => `<button type="button" class="kchip edit press" data-k="${i}" aria-label="Remove keyword ${esc(k)}">${esc(k)}${icon('x', 13)}</button>`).join('');
   const pick = (c) => {
     const on = d.lines.includes(c.id);
@@ -75,7 +150,7 @@ export function loreEditView(id) {
     `<div class="ixgrid">${S.characters.map(pick).join('')}</div>` +
     (groups().length ? `<p class="lore-sub">Interchanges and carriages</p><div class="lore-ixlist">${groups().map(pickIx).join('')}</div>` : '');
   const html = `<div class="screen no-tab">
-    ${topbar({ back: '#/lore', backIcon: 'x', backLabel: 'Close', title: isNew ? 'New entry' : 'Lore entry', right: isNew ? '' : ibtn('trash', 'Delete entry', { id: 'delLore' }) })}
+    ${topbar({ back: home, backIcon: 'x', backLabel: 'Close', title: isNew ? 'New entry' : 'Lore entry', right: isNew ? '' : ibtn('trash', 'Delete entry', { id: 'delLore' }) })}
     <div class="stack" style="gap:18px">
       ${field('loTitle', 'Title', d.title, { ph: 'e.g. Kita Station', attrs: 'maxlength="80" autocomplete="off"' })}
       <div class="field"><div class="flabel"><label for="loKey">Keywords</label><span class="small">${d.always ? 'Not needed: always on' : 'Any one of them brings it in'}</span></div>
@@ -219,7 +294,7 @@ export function loreEditView(id) {
         e.preventDefault();
         if (!(await confirmSheet({ title: 'Discard your changes?', body: 'This entry has unsaved edits.', ok: 'Discard', danger: true }))) return;
         leaving = true;
-        location.hash = '#/lore';
+        location.hash = home;
       });
       $('#saveLore').addEventListener('click', async () => {
         if (key.value.trim()) addKeys(key.value), (key.value = '');
@@ -238,14 +313,14 @@ export function loreEditView(id) {
         await saveLoreEntry(d);
         leaving = true;
         toast(isNew ? 'Added to the Lorebook' : 'Entry saved');
-        location.hash = '#/lore';
+        location.hash = home;
       });
       $('#delLore')?.addEventListener('click', async () => {
         if (!(await confirmSheet({ title: 'Delete this entry?', body: 'It stops joining your chats. This cannot be undone.', ok: 'Delete', danger: true }))) return;
         await deleteLoreEntry(d.id);
         leaving = true;
         toast('Entry deleted');
-        location.hash = '#/lore';
+        location.hash = home;
       });
     },
   };

@@ -9,8 +9,10 @@ import { settingsView, personasView, personaView, backupView } from './views/set
 import { linesView } from './views/lines.js';
 import { faresView } from './views/fares.js';
 import { interchangeView } from './views/interchange.js';
-import { loreListView, loreEditView } from './views/lore.js';
+import { loreListView, loreEditView, loreBookView } from './views/lore.js';
 import { importView, startImport } from './views/import.js';
+import { textView } from './views/text.js';
+import { applyText } from './textstyle.js';
 import { openBuildSheet } from './build.js';
 import { reducedMotion } from './util.js';
 import { toast, closeOverlays } from './ui.js';
@@ -23,7 +25,10 @@ const routes = [
   [/^#\/lines(?:\/(\w+))?$/, (f) => linesView(f)],
   [/^#\/fares$/, () => faresView()],
   [/^#\/lore$/, () => loreListView()],
+  [/^#\/lore\/book\/(.+)$/, (k) => loreBookView(k)],
+  [/^#\/lore\/new\/(.+)$/, (k) => loreEditView('new', k)],
   [/^#\/import$/, () => importView()],
+  [/^#\/text$/, () => textView()],
   [/^#\/lore\/([^/]+)$/, (id) => loreEditView(decodeURIComponent(id))],
   [/^#\/interchange\/([^/]+)$/, (id) => interchangeView(decodeURIComponent(id))],
   [/^#\/edit\/([^/]+)$/, (id) => editorView(decodeURIComponent(id))],
@@ -219,6 +224,7 @@ window.addEventListener('unhandledrejection', (e) => {
 (async () => {
   try {
     await load();
+    applyText();
   } catch (e) {
     console.error(e);
     toast('Could not open saved data. Starting fresh for this session.', { kind: 'err' });

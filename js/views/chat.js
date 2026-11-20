@@ -1,4 +1,5 @@
 import { S, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, named, resetChat, recordFare, interchange, isInterchangeId, chatsFor, startNewChat, deleteChat, blankCharacter, saveInterchange, personaFor, personaById, newChat } from '../store.js';
+import { textSheet } from './text.js';
 import { STEER, parseScene, splitTurn, hasCastLines, resolveSpeaker, passengersIn, demoScene } from '../scene.js';
 import { complete, PROVIDERS } from '../providers.js';
 import { buildPrompt } from '../prompt.js';
@@ -83,30 +84,24 @@ export async function chatView(id, focusId = null) {
   let destroyed = false;
 
   const conn0 = connectionFor(ch);
-  const connText = (c) => (!c ? 'No connection' : c.provider === 'demo' ? 'Demo replies' : c.model || c.name);
+  const connText = (c) => (!c ? 'No connection' : c.provider === 'demo' ? 'Demo replies' : String(c.model || c.name).split('/').pop());
   // Short placeholder: a long name would wrap the composer onto several lines.
   const callName = scene ? 'the scene' : ix ? 'the interchange' : ch.name.length > 14 ? ch.name.split(/\s+/)[0].slice(0, 14) : ch.name;
   const html = `<div class="chat" id="chat" style="--blur:${ch.sceneBlur ?? 4}px;--dim:${(ch.sceneDim ?? 60) / 100};--accent:${lineAccent(ch.line?.color)}">
     <div class="chat-scene" id="scene" aria-hidden="true">${ch.scene && ch.scene !== 'none' ? sceneSVG(ch.scene) : ''}</div>
     <header class="chat-head">
       ${ibtn('back', 'Back to home', { href: '#/' })}
-      <a class="chat-who press" href="${ix ? `#/interchange/${ix.id}` : `#/edit/${ch.id}`}" aria-label="Edit ${esc(ch.name)}">${ix ? `<span class="meet">${ix.people.map((p, i) => avatarBullet(p, 38, i ? 'margin-left:-12px' : '')).join('')}</span>` : avatarBullet(ch, 42, '', `head:${ch.id}`)}<span class="who-tx"><span class="who-n">${esc(ch.name)}</span><span class="who-s" id="status">${esc(ch.tagline || 'Online')}</span></span></a>
+      <button type="button" class="chat-who press" id="whoBtn" aria-haspopup="dialog" aria-label="${esc(ch.name)}: chat details">${ix ? `<span class="meet">${ix.people.slice(0, 4).map((p, i) => avatarBullet(p, 32, i ? 'margin-left:-10px' : '')).join('')}</span>` : avatarBullet(ch, 36, '', `head:${ch.id}`)}<span class="who-tx"><span class="who-n">${esc(ch.name)}</span><span class="who-s"><span class="who-meta" id="meta"><span class="dot${conn0?.provider === 'demo' ? ' demo' : ''}" id="connDot"></span><span class="ell" id="connName">${esc(connText(conn0))}</span><span id="tokPill" ${S.settings.showCounter ? '' : 'hidden'}>· <span class="num" id="tokN">…</span></span><span id="noteWrap" ${!ix && chat.notes.length ? '' : 'hidden'}>· ${icon('pin', 12)}<span id="noteN">${chat.notes.length}</span></span></span><span id="status" hidden></span></span></span></button>
       ${ibtn('more', 'Chat options', { id: 'moreBtn' })}
     </header>
-    <div class="chat-meta">
-      <a class="pill press" href="#/connections" aria-label="Connection: ${esc(connText(conn0))}. Tap to switch."><span class="dot${conn0?.provider === 'demo' ? ' demo' : ''}" id="connDot"></span><span class="ell" id="connName">${esc(connText(conn0))}</span></a>
-      <span class="pill muted" id="tokPill" ${S.settings.showCounter ? '' : 'hidden'} title="Estimated tokens sent with the next reply">${icon('layers', 14)}<span><span class="num" id="tokN">…</span> tokens</span></span>
-      <a class="pill y press end" href="#/memory/${chat.id}" ${ix ? 'hidden' : ''}>${icon('pin', 15)}<span id="noteN">${chat.notes.length}</span>&nbsp;note${chat.notes.length === 1 ? '' : 's'}</a>
-    </div>
-    ${scene ? '<div class="aboard" id="aboard" role="group" aria-label="On board"></div>' : ''}
     <div class="log${ix ? ' story' : ''}" id="log" role="log" aria-live="polite" aria-relevant="additions" aria-label="Chat with ${esc(ch.name)}"></div>
     <div class="chips${scene ? ' steer' : ''}" id="chips"></div>
     ${ix && !scene ? '<div class="nextbar" id="nextbar" role="radiogroup" aria-label="Who answers next"></div>' : ''}
     <form class="composer" id="composer">
-      ${scene ? `<button type="button" class="ibtn as-btn press" id="asBtn" aria-label="Speaking as you. Tap to speak as someone else." aria-haspopup="menu">${avatarBullet(youWho(), 36)}</button>` : ''}
+      ${scene ? `<button type="button" class="ibtn as-btn press" id="asBtn" aria-label="Speaking as you. Tap to speak as someone else." aria-haspopup="menu">${avatarBullet(youWho(), 32)}</button>` : ''}
       ${ibtn('asterisk', 'Add an *action*', { id: 'actBtn', attrs: 'title="Add an *action*: wraps the selection in asterisks"' })}
       <textarea id="input" rows="1" placeholder="${scene ? 'What you do or say…' : `Message ${esc(callName)}…`}" aria-label="Message ${esc(ch.name)}" enterkeyhint="send"></textarea>
-      <button type="submit" class="send press" id="sendBtn" aria-label="Send" disabled>${arrow(24, 'currentColor')}</button>
+      <button type="submit" class="send press" id="sendBtn" aria-label="Send" disabled>${arrow(22, 'currentColor')}</button>
     </form>
   </div>`;
 
@@ -207,8 +202,8 @@ export async function chatView(id, focusId = null) {
       return `<div class="msg scene ${m.role === 'user' ? 'mine' : 'ai'}${m.dir ? ' dir' : ''}${enter ? ' enter' : ''}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="msg-col"><div class="bubble scn">${inner}${star}</div>${m.role === 'assistant' ? toolsHTML(m, i) : ''}</div></div>`;
     }
     function renderAboard() {
-      const bar = root.querySelector('#aboard');
-      if (!bar) return;
+      const bar = document.querySelector('#aboard');
+      if (!bar || !ix) return;
       bar.innerHTML =
         '<span class="lbl">On board</span>' +
         ix.people.map((p) => `<span class="ab" style="--c:${p.line?.color || '#2EAA67'}">${avatarBullet(p, 24)}${esc(p.name)}</span>`).join('') +
@@ -299,11 +294,14 @@ export async function chatView(id, focusId = null) {
     const toBottom = (smooth = false) => log.scrollTo({ top: log.scrollHeight, behavior: smooth && !reducedMotion() ? 'smooth' : 'auto' });
 
     function setStatus(kind) {
+      const meta = root.querySelector('#meta');
+      meta.hidden = kind !== 'idle';
+      status.hidden = kind === 'idle';
       status.classList.toggle('busy', kind !== 'idle');
       if (kind === 'typing') status.innerHTML = 'typing <span class="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span>';
       else if (kind === 'you') status.innerHTML = 'writing your line <span class="typing-dots" aria-hidden="true"><i></i><i></i><i></i></span>';
       else if (kind === 'summary') status.innerHTML = `${reel(16, { spd: 0.8 })} summarizing`;
-      else status.textContent = ch.tagline || 'Online';
+      else status.textContent = '';
     }
     function updateTokens() {
       const c = connectionFor(ch);
@@ -524,7 +522,7 @@ export async function chatView(id, focusId = null) {
       const b = root.querySelector('#asBtn');
       if (!b) return;
       const p = id ? speakerOf({ speaker: id }) : null;
-      b.innerHTML = avatarBullet(p || youWho(), 36);
+      b.innerHTML = avatarBullet(p || youWho(), 32);
       b.classList.toggle('on', !!p);
       b.setAttribute('aria-label', p ? `Speaking as ${p.name}. Tap to change.` : 'Speaking as you. Tap to speak as someone else.');
       input.placeholder = p ? `Write ${p.name}'s line…` : 'What you do or say…';
@@ -699,7 +697,7 @@ export async function chatView(id, focusId = null) {
       const t = textOf(m).replace(/\s+/g, ' ').trim();
       chat.notes.push({ id: uid(), text: t.length > 220 ? t.slice(0, 217) + '…' : t, at: Date.now() });
       await save();
-      root.querySelector('#noteN').textContent = chat.notes.length;
+      setNotes();
       updateTokens();
       toast('Pinned to notes', { action: 'View', onAction: () => (location.hash = `#/memory/${chat.id}`) });
     }
@@ -742,6 +740,7 @@ export async function chatView(id, focusId = null) {
             ]),
         { icon: 'user', label: `You: ${me().name?.trim() || 'You'}`, on: personaSheet },
         { icon: 'download', label: 'Export as story', on: exportStory },
+        { icon: 'sliders', label: 'Reading text', on: textSheet },
         '-',
         ...(ix
           ? []
@@ -772,7 +771,7 @@ export async function chatView(id, focusId = null) {
                 renderAll();
                 toBottom();
                 updateTokens();
-                root.querySelector('#noteN').textContent = chat.notes.length;
+                setNotes();
               },
             });
           },
@@ -1024,10 +1023,36 @@ export async function chatView(id, focusId = null) {
       if (b.dataset.chip === 'write') return writeForMe();
       generate(b.dataset.chip);
     };
-    root.querySelector('#aboard')?.addEventListener('click', (e) => {
-      const b = e.target.closest('[data-pass]');
-      if (b) passengerSheet(b.dataset.pass);
-    });
+    // Chat details: who's on board, the connection, tokens and notes (moved out of the header).
+    function infoSheet() {
+      const c = connectionFor(ch);
+      const nt = chat.notes.length;
+      const linkRow = (href, ic, t, s) => `<a class="info-row press" href="${href}" data-close><span class="row-ic">${icon(ic, 18)}</span><span class="row-tx"><span class="row-t">${t}</span><span class="row-s">${s}</span></span>${icon('chev', 18)}</a>`;
+      openSheet({
+        label: 'Chat details',
+        html: `<h2 class="sheet-title">${esc(ch.name)}</h2>
+          ${ix ? `<p class="info-lbl">${scene ? 'On board' : 'In this interchange'}</p><div class="aboard" id="aboard" role="group" aria-label="On board"></div>` : ''}
+          <div class="info-list">
+            ${linkRow(ix ? `#/interchange/${ix.id}` : `#/edit/${ch.id}`, 'card', ix ? (scene ? 'Edit carriage' : 'Edit interchange') : 'Edit character', ix ? 'Cast, world and scene' : 'Sheet, picture and first message')}
+            ${linkRow('#/connections', 'link', esc(connText(c)), 'Connection · tap to switch')}
+            ${linkRow(`#/final/${chat.id}`, 'layers', `${root.querySelector('#tokN').textContent} tokens`, 'Sent with the next reply · see the final prompt')}
+            ${ix ? '' : linkRow(`#/memory/${chat.id}`, 'pin', `${nt} note${nt === 1 ? '' : 's'}`, 'Memory and pinned notes')}
+          </div>`,
+        onMount(s, close) {
+          renderAboard();
+          s.querySelectorAll('[data-close]').forEach((a) => a.addEventListener('click', () => close()));
+          s.querySelector('#aboard')?.addEventListener('click', (e) => {
+            const b = e.target.closest('[data-pass]');
+            if (b) close(), passengerSheet(b.dataset.pass);
+          });
+        },
+      });
+    }
+    root.querySelector('#whoBtn').addEventListener('click', infoSheet);
+    const setNotes = () => {
+      root.querySelector('#noteN').textContent = chat.notes.length;
+      root.querySelector('#noteWrap').hidden = !!ix || !chat.notes.length;
+    };
     root.querySelector('#asBtn')?.addEventListener('click', (e) =>
       openMenu(e.currentTarget, [
         { icon: 'user', label: 'As yourself', on: () => setSpeakAs(null) },

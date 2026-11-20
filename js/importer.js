@@ -305,7 +305,12 @@ export async function applyPlan(plan, mode) {
   // Lorebook: tied to what was imported, grouped under the card's name; repeats are skipped.
   let added = 0;
   for (const e of plan.lore) {
-    if (S.lore.some((x) => x.book === e.book && x.title === e.title && x.text === e.text)) continue;
+    // Already there (the same card imported again): link it to this import too.
+    const same = S.lore.find((x) => x.book === e.book && x.title === e.title && x.text === e.text);
+    if (same) {
+      if (same.scope === 'lines' && !same.lines.includes(target)) same.lines.push(target), added++;
+      continue;
+    }
     S.lore.push({ id: 'lore-' + uid(), createdAt: Date.now(), ...e, scope: 'lines', lines: [target] });
     added++;
   }

@@ -1,6 +1,7 @@
 import { S, activeConnection, saveSettings, savePersona, personaById, newPersona, savePersonaEntry, setDefaultPersona, deletePersona, snapshot, restore, saveCharacter, newChat, saveChat, isPersistent } from '../store.js';
 import { readCardFile, exportAllCardsJson } from '../cards.js';
 import { startImport } from './import.js';
+import { textSummary } from '../textstyle.js';
 import { esc, download, resizeImage } from '../util.js';
 import { avatarTile, avatarSVG, PRESETS, PRESET_KEYS } from '../avatar.js';
 import { ttsSupported, voices, speak } from '../tts.js';
@@ -81,6 +82,7 @@ export function settingsView() {
     )}
     <h2 class="sec">Chat</h2>
     ${group(
+      row({ href: '#/text', ic: 'edit', bc: 'var(--cream)', fc: '#0A0A0A', title: 'Reading text', sub: textSummary() }),
       row({ id: 'styleRow', ic: 'sliders', bc: 'var(--pink)', fc: '#0A0A0A', title: 'Reply style', sub: `<span id="styleSub">${styleSummary()}</span>` }),
       `<div class="row">${'<span class="row-ic" style="background:var(--green2);color:#0A0A0A">' + icon('spark', 19) + '</span>'}<span class="row-tx"><span class="row-t">Auto-summary</span><span class="row-s">Condense long chats so they keep fitting</span></span>${sw('tAuto', S.settings.autoSummary, 'Auto-summary')}</div>`,
       `<div class="row"><span class="row-ic" style="background:var(--lilac);color:#0A0A0A">${icon('layers', 19)}</span><span class="row-tx"><span class="row-t">Token counter</span><span class="row-s">Show the estimate in the chat header</span></span>${sw('tCounter', S.settings.showCounter, 'Token counter')}</div>`,
