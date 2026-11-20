@@ -63,6 +63,8 @@ function replyStyleSheet(onDone) {
   });
 }
 
+const matureSub = () => (S.settings.mature ? 'On · explicit scenes allowed, adults only' : 'Off · stories fade to black');
+
 export function settingsView() {
   const conn = activeConnection();
   const v = ttsSupported ? voices().find((x) => x.voiceURI === S.settings.voiceURI) : null;
@@ -85,6 +87,10 @@ export function settingsView() {
             row({ id: 'voiceRow', ic: 'user', bc: 'var(--plate2)', fc: 'var(--cream)', title: 'Voice', sub: `<span id="voiceName">${esc(v?.name || 'Browser default')}</span>` })
         : ''
     )}
+    <h2 class="sec">Content</h2>
+    ${group(
+      `<div class="row"><span class="row-ic" style="background:var(--plate2);color:var(--cream)">${icon('shield', 19)}</span><span class="row-tx"><span class="row-t">18+ content</span><span class="row-s" id="matureSub">${matureSub()}</span></span>${sw('tAdult', S.settings.mature, '18+ content')}</div>`
+    )}
     <h2 class="sec">Data</h2>
     ${group(row({ href: '#/backup', ic: 'box', bc: 'var(--blue)', fc: '#fff', title: 'Backup and cards', sub: S.settings.lastBackup ? `Last backup ${new Date(S.settings.lastBackup).toLocaleDateString()}` : 'No backup yet' }))}
     <div class="note" style="margin-top:18px">${icon('shield', 18)}<span>${isPersistent() ? 'Everything is saved in this browser only. Nothing goes to a server of ours.' : 'This browser is blocking storage (private mode?), so changes will be lost when you close the tab.'}</span></div>
@@ -94,6 +100,22 @@ export function settingsView() {
     depth: 0,
     mount(root) {
       root.querySelector('#styleRow')?.addEventListener('click', () => replyStyleSheet(() => (root.querySelector('#styleSub').textContent = styleSummary())));
+      const tAdult = root.querySelector('#tAdult');
+      bindSwitch(tAdult, async (on) => {
+        if (on) {
+          const ok = await confirmSheet({
+            title: 'Are you 18 or older?',
+            body: 'Turning this on lets characters write explicit adult scenes, if your AI provider allows them, and unlocks Mature details in the Character Builder. Characters are always adults. You can turn it off any time.',
+            ok: 'I’m 18 or older, turn it on',
+          });
+          if (!ok) return tAdult.setAttribute('aria-checked', 'false');
+          S.settings.ageConfirmedAt = Date.now();
+        }
+        S.settings.mature = on;
+        await saveSettings();
+        root.querySelector('#matureSub').textContent = matureSub();
+        toast(on ? '18+ content is on' : '18+ content is off. Stories fade to black.');
+      });
       bindSwitch(root.querySelector('#tAuto'), (x) => ((S.settings.autoSummary = x), saveSettings()));
       bindSwitch(root.querySelector('#tCounter'), (x) => ((S.settings.showCounter = x), saveSettings()));
       bindSwitch(root.querySelector('#tRead'), (x) => ((S.settings.readAloud = x), saveSettings()));

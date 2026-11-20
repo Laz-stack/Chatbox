@@ -2,6 +2,10 @@
 // what the model receives as the character (compileSheet); the old free-text prompt is "Extra notes".
 // Random / Enhance / per-section reroll use the active connection; Demo gets a built-in generator.
 import { complete, PROVIDERS } from './providers.js';
+import { S } from './store.js';
+
+// A character's Mature details apply only while 18+ content is on in Depot.
+export const matureOn = (ch) => !!ch?.mature && !!S.settings.mature;
 
 // short: one-line input. long fields grow as you type. mature: hidden unless Mature details is on.
 export const SECTIONS = [
@@ -72,7 +76,7 @@ export function compileSheet(ch) {
   const parts = [];
   for (const s of SECTIONS) {
     const lines = s.fields
-      .filter((f) => (ch.mature || !f.mature) && filled(sheet, f.k))
+      .filter((f) => (matureOn(ch) || !f.mature) && filled(sheet, f.k))
       .map((f) => `${f.label.toUpperCase().replace('{{USER}}', '{{user}}')}: ${String(sheet[f.k]).trim()}`);
     if (s.key === 'basic' && ch.name?.trim()) lines.unshift(`NAME: ${ch.name.trim()}`);
     if (lines.length) parts.push(`## ${s.head}\n${lines.join('\n')}`);
@@ -105,7 +109,7 @@ const fixAge = (v) => {
 
 // keys: which fields to write. Returns { values: {k: text}, name?: text }.
 export async function generate({ conn, ch, keys, hint, mode = 'random', signal }) {
-  const mature = !!ch.mature;
+  const mature = matureOn(ch);
   keys = keys.filter((k) => mature || !FIELDS.find((f) => f.k === k)?.mature);
   const wantName = mode !== 'section' && !ch.name?.trim();
   if (!conn || PROVIDERS[conn.provider]?.format === 'demo') return demoGenerate({ keys, wantName, mature });

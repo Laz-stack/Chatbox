@@ -841,3 +841,8 @@ textarea.bp-ta.tall { min-height: 96px; }
 .pick-p.on { background: var(--yellow); }
 .pick-p.on .def-chip { background: var(--bg); color: var(--yellow); }
 .locked-row .switch { opacity: .55; pointer-events: none; }
+
+/* ================= 18+ content: the builder's locked state ================= */
+.bp-mature-off { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 16px; background: var(--plate); font: 500 13.5px/1.45 var(--font); color: var(--cream); }
+.bp-mature-off .ic { flex: none; margin-top: 1px; color: var(--cream); }
+.bp-mature-off b { font-weight: 800; color: var(--white); }

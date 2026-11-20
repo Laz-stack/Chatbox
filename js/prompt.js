@@ -63,6 +63,15 @@ export function buildPrompt({ char, chat, conn, settings, persona, upto = null, 
   if (rs.person === 'third' && !isScene) style.push(`Write ${char.name}'s actions and narration in third person ("${char.name} smiles"), even if earlier messages use first person. This overrides other guidance above.`), remind.push('third person');
   if (style.length) layers.push({ key: 'style', name: 'Reply style', text: style.join('\n') });
 
+  // Content rules (Depot › Content › 18+ content).
+  layers.push({
+    key: 'content',
+    name: 'Content rules',
+    text: settings.mature
+      ? 'The user is a confirmed adult and has allowed mature content. Explicit romantic and sexual content between adult characters is allowed when the story leads there and everyone involved is willing. Every character is an adult (18 or older); never sexualise minors or anyone who seems underage.'
+      : 'Keep the story free of explicit sexual content: if a scene heads that way, fade to black or cut away. Every character is an adult (18 or older); never sexualise minors or anyone who seems underage.',
+  });
+
   const memory = [];
   if (chat.summary?.text) memory.push('Story so far:\n' + chat.summary.text.trim());
   if (chat.notes?.length) memory.push('Remember:\n' + chat.notes.map((n) => '- ' + m(n.text)).join('\n'));
