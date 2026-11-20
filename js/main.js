@@ -15,6 +15,7 @@ import { textView } from './views/text.js';
 import { routeView, bondsView, diaryView } from './views/chronicle.js';
 import { syncView } from './views/sync.js';
 import { adventureView } from './views/adventure.js';
+import { worldMapView } from './views/worldmap.js';
 import { startAutoSync, syncOn, signedIn, localChanges } from './sync.js';
 import { applyText } from './textstyle.js';
 import { openBuildSheet } from './build.js';
@@ -44,6 +45,7 @@ const routes = [
   [/^#\/memory\/([^/]+)$/, (id) => memoryView(decodeURIComponent(id))],
   [/^#\/sync$/, () => syncView()],
   [/^#\/adventure\/([^/]+)$/, (id) => adventureView(decodeURIComponent(id))],
+  [/^#\/map\/([^/]+)$/, (id) => worldMapView(decodeURIComponent(id))],
   [/^#\/route\/([^/]+)$/, (id) => routeView(decodeURIComponent(id))],
   [/^#\/bonds\/([^/]+)(?:\/(them))?$/, (id, t) => bondsView(decodeURIComponent(id), t || 'you')],
   [/^#\/diary\/([^/]+)(?:\/([^/]+))?$/, (id, e) => diaryView(decodeURIComponent(id), e && decodeURIComponent(e))],
