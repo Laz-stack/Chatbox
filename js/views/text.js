@@ -1,11 +1,11 @@
 // Depot › Reading text: size, font and colours for chat messages, with live previews of both layouts.
 import { S, saveSettings } from '../store.js';
-import { SIZES, FONTS, DIALOGUE, NARRATION, LAYOUTS, DEFAULT_TEXT, textPrefs, applyText } from '../textstyle.js';
+import { SIZES, FONTS, DIALOGUE, NARRATION, LAYOUTS, WIDTHS, ALIGNS, TRACKS, PARAS, DEFAULT_TEXT, textPrefs, applyText } from '../textstyle.js';
 import { esc, formatMessage } from '../util.js';
 import { topbar, title2, icon, openSheet } from '../ui.js';
 
 const SAMPLE_SCENE = '*The first corpse coughs when Lumi Quill opens its chest.* “Remember what it looks like.” *She holds the vial out to you.*';
-const SAMPLE_BUBBLE = '*looks up from the counter* “Oh! You came back. Same window seat?”';
+const SAMPLE_BUBBLE = '*looks up from the counter* “Oh! You came back. Same window seat?”\n\n*slides a menu across before you can answer* “The soup is still warm, if you want it.”';
 
 async function setPref(k, v) {
   S.settings.text = { ...textPrefs(), [k]: v };
@@ -30,12 +30,29 @@ const swatches = (name, list, cur) =>
     .map(([k, c]) => `<button type="button" class="press${k === 'line' ? ' line' : ''}" role="radio" aria-checked="${cur === k}" data-${name}="${k}" aria-label="${esc(c.label)}" title="${esc(c.label)}" style="--c:${c.dark}"><i></i><span>${esc(c.label)}</span></button>`)
     .join('')}</div>`;
 
+// Three-option rows for the character's text, each with a small drawn picture of the choice.
+const PICS = {
+  width: (k) => `<span class="tx-pic w ${k}" aria-hidden="true"><i></i><i></i><i></i></span>`,
+  align: (k) => `<span class="tx-pic a ${k}" aria-hidden="true"><i></i><i></i><i></i></span>`,
+  track: (k) => `<span class="tx-pic t" aria-hidden="true" style="letter-spacing:${{ tight: '-0.07em', normal: '0', wide: '0.22em' }[k]}">Aa</span>`,
+  para: (k) => `<span class="tx-pic p ${k}" aria-hidden="true"><i></i><i></i><i></i><i></i></span>`,
+};
+const seg = (name, label, list, cur) =>
+  `<div class="tx-seg" role="radiogroup" aria-label="${label}">${Object.entries(list)
+    .map(([k, o]) => `<button type="button" class="press" role="radio" aria-checked="${cur === k}" data-${name}="${k}">${PICS[name](k)}<b>${o.label}</b></button>`)
+    .join('')}</div>`;
+const shapeRows = (t, all = true) =>
+  `<p class="tx-lbl">Width <span>character and narrator only</span></p>${seg('width', 'Text width', WIDTHS, t.width)}
+    <p class="tx-lbl">Alignment <span>character and narrator only</span></p>${seg('align', 'Text alignment', ALIGNS, t.align)}` +
+  (all ? `<p class="tx-lbl">Letter spacing <span>character and narrator only</span></p>${seg('track', 'Letter spacing', TRACKS, t.track)}
+    <p class="tx-lbl">Paragraph spacing <span>character and narrator only</span></p>${seg('para', 'Paragraph spacing', PARAS, t.para)}` : '');
+
 // Mark the chosen option in a group (the page and the quick sheet both use this).
 function bindPrefs(root, after = () => {}) {
   root.addEventListener('click', async (e) => {
-    const b = e.target.closest('[data-size],[data-font],[data-dialogue],[data-narration],[data-layout]');
+    const b = e.target.closest('[data-size],[data-font],[data-dialogue],[data-narration],[data-layout],[data-width],[data-align],[data-track],[data-para]');
     if (!b) return;
-    const k = ['size', 'font', 'dialogue', 'narration', 'layout'].find((x) => b.dataset[x] != null);
+    const k = ['size', 'font', 'dialogue', 'narration', 'layout', 'width', 'align', 'track', 'para'].find((x) => b.dataset[x] != null);
     await setPref(k, b.dataset[k]);
     b.parentElement.querySelectorAll('[role=radio]').forEach((x) => x.setAttribute('aria-checked', x === b));
     after();
@@ -56,6 +73,7 @@ export function textView() {
     <p class="tx-lbl">Chat layout <span>one-on-one chats; group chats are always Story</span></p>${layoutRow(t)}
     <p class="tx-lbl">Size</p>${sizeRow(t)}
     <p class="tx-lbl">Font</p>${fontGrid(t)}
+    ${shapeRows(t)}
     <p class="tx-lbl">Speech colour</p>${swatches('dialogue', DIALOGUE, t.dialogue)}
     <p class="tx-lbl">Narration colour <span>on black; cream bubbles keep dark text</span></p>${swatches('narration', NARRATION, t.narration)}
     <button type="button" class="tx-reset press" id="txReset">${icon('restart', 16)}Reset to Signboard</button>
@@ -80,7 +98,7 @@ export function textSheet() {
   const t = textPrefs();
   openSheet({
     label: 'Text size',
-    html: `<h2 class="sheet-title">Text</h2><p class="tx-lbl" style="margin-top:0">Chat layout</p>${layoutRow(t)}<p class="tx-lbl">Size</p>${sizeRow(t)}<p class="tx-lbl">Font</p>${fontGrid(t)}
+    html: `<h2 class="sheet-title">Text</h2><p class="tx-lbl" style="margin-top:0">Chat layout</p>${layoutRow(t)}<p class="tx-lbl">Size</p>${sizeRow(t)}<p class="tx-lbl">Font</p>${fontGrid(t)}${shapeRows(t, false)}
       <a class="dashed press" href="#/text" data-close style="margin-top:14px">${icon('sliders', 20)}More text options</a>`,
     onMount(s, close) {
       // Switching layout redraws the chat underneath.
