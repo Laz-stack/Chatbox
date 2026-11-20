@@ -1,7 +1,8 @@
 // Character Builder ("Blueprint"): a structured sheet in the owner's template. The filled sheet is
 // what the model receives as the character (compileSheet); the old free-text prompt is "Extra notes".
 // Random / Enhance / per-section reroll use the active connection; Demo gets a built-in generator.
-import { complete, PROVIDERS } from './providers.js';
+import { PROVIDERS } from './providers.js';
+import { helperComplete } from './helper.js';
 import { S } from './store.js';
 
 // A character's Mature details apply only while 18+ content is on in Depot.
@@ -138,7 +139,7 @@ export async function generate({ conn, ch, keys, hint, mode = 'random', signal }
         '"sharpen": for at most 6 fields that ARE in known_fields and could be clearly more vivid, an improved version that keeps the same facts. ' +
         (wantName ? 'Also include "name" in "fill".' : '')
       : `Return an object with exactly these keys: ${keys.join(', ')}${wantName ? ', name' : ''}. Build on the hint, known_fields and extra_notes. Do not repeat known values.`;
-  const text = await complete(conn, {
+  const text = await helperComplete(conn, 'builder', {
     system,
     messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + instructions }],
     stream: false,

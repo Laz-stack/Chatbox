@@ -4,7 +4,8 @@
 // - Diary: a character's private entry about recent events, in their own voice.
 // Stations and bonds come from one short background AI call after every couple of replies
 // (or "Update the map"); the diary is written on request.
-import { complete, PROVIDERS } from './providers.js';
+import { PROVIDERS } from './providers.js';
+import { helperComplete } from './helper.js';
 import { extractJson, compileSheet } from './blueprint.js';
 import { textOf, named } from './store.js';
 import { uid } from './util.js';
@@ -103,7 +104,7 @@ async function readPart({ chat, cast, persona, conn, signal, a, b }) {
     `msg is the [#n] number where it happens. title: 3 to 6 words, no quotes. kind: one of meet, secret, fight, place, turn, closer, loss. line: one sentence under 16 words saying what happened. who: the cast member it centres on, or "".\n` +
     `bonds: for each cast member who dealt with ${you} in this part, how they feel about ${you} now, 0 to 100 each (trust, affection, tension). Values change gradually: usually a few points, at most 15, unless something major happened. If a bond is "not set yet", judge starting values from who they are and the story so far. ` +
     `view: one sentence, third person, how they see ${you} now. why: under 10 words, what caused the change, speaking to the user as "you" (for example "you told her the truth"). Leave bonds empty if nothing changed.`;
-  const text = await complete(conn, { system, messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: 600, temperature: 0.4, signal });
+  const text = await helperComplete(conn, 'track', { system, messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: 600, temperature: 0.4, signal });
   return extractJson(text);
 }
 
@@ -230,7 +231,7 @@ export async function writeDiary({ chat, who, cast, persona, conn, settings, sig
     const ask =
       `Return {"title":"...","text":"..."}. text: first person, as ${who.name}, 90 to 180 words about the recent events from their point of view: what they noticed, what they felt, what they did not say out loud, and what they hope or fear next. ` +
       `Use their own voice and vocabulary. ${named_ ? `Call the user ${you}.` : 'Refer to the user as "you", as if writing to them.'} Plain paragraphs separated by a blank line: no asterisks, no quotation-style dialogue, no date line. Do not repeat the last entry. title: 2 to 4 words naming the moment, for example "The rain".`;
-    const text = await complete(conn, { system, messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: 700, temperature: 0.9, signal });
+    const text = await helperComplete(conn, 'diary', { system, messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: 700, temperature: 0.9, signal });
     const j = extractJson(text);
     entry = { title: str(j.title).replace(/^["“]|["”]$/g, '').slice(0, 50), text: str(j.text).replace(/\*/g, '').slice(0, 2400) };
     if (!entry.text) throw new Error('The diary came back empty. Try again.');
