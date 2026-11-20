@@ -1,5 +1,5 @@
 import { S, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, named, resetChat, recordFare, interchange, isInterchangeId, chatsFor, startNewChat, deleteChat, blankCharacter, saveInterchange, personaFor, personaById, newChat } from '../store.js';
-import { STEER, parseScene, splitTurn, resolveSpeaker, passengersIn, demoScene } from '../scene.js';
+import { STEER, parseScene, splitTurn, hasCastLines, resolveSpeaker, passengersIn, demoScene } from '../scene.js';
 import { complete, PROVIDERS } from '../providers.js';
 import { buildPrompt } from '../prompt.js';
 import { shouldSummarize, summarize } from '../memory.js';
@@ -152,7 +152,8 @@ export async function chatView(id, focusId = null) {
     function sceneParts(text, m, streaming = false) {
       const shown = new Set();
       // A Take-turns reply has one known speaker: split it into narration and that speaker's lines.
-      const blocks = m?.speaker ? splitTurn(text, speakerOf(m).name) : parseScene(text);
+      // Unless the text itself names the cast ("Sina: …"), e.g. a reply first written in Take turns and regenerated as a scene.
+      const blocks = m?.speaker && !hasCastLines(text, ix.people) ? splitTurn(text, speakerOf(m).name) : parseScene(text);
       return blocks.map((b) => {
         if (b.kind === 'narr') return blockHTML({ kind: 'narr' }, b.text);
         const r = resolveSpeaker(b.name, ix.people, me().name);
