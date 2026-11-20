@@ -15,6 +15,7 @@ const DEFAULT_SETTINGS = {
   autoSummary: true,
   showCounter: true,
   readAloud: false,
+  awayNotes: true,
   voiceURI: '',
   remindBackup: true,
   lastBackup: null,

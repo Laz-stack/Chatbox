@@ -1215,3 +1215,9 @@ textarea.bp-ta.tall { min-height: 96px; }
 .mk-in { width: 100%; height: 52px; padding: 0 16px; border-radius: 16px; border: 0; background: var(--plate); color: var(--white); font: 700 16px/1 var(--font); }
 .mk-in:focus { outline: 2px solid var(--yellow); outline-offset: 0; }
 @media (prefers-reduced-motion: reduce) { .rt-st, .rt-dot, .rt-card, .bd-card, .bd-seg i, .dy, .chr-row { animation: none !important; } }
+
+/* ================= While you were away ================= */
+.msg.dirline { display: block; align-self: stretch; max-width: 100%; }
+.msg.dirline .scn-dir { margin: 4px 0 !important; }
+.msg.enter.dirline .scn-dir, .msg.scene.dir.enter .scn-dir { animation: riseIn .4s var(--out) both; }
+@media (prefers-reduced-motion: reduce) { .msg.dirline .scn-dir { animation: none !important; } }
