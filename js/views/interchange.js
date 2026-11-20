@@ -8,7 +8,7 @@ export function interchangeView(id) {
   const existing = isNew ? null : interchange(id);
   if (!isNew && !existing) return null;
   const d = existing
-    ? { id: existing.id, name: existing.name || '', members: existing.people.map((p) => p.id), scene: existing.scene || '', mode: existing.mode || 'turns', passengers: existing.passengers !== false }
+    ? { id: existing.id, name: existing.name || '', members: existing.people.map((p) => p.id), scene: existing.scene || '', world: existing.world || '', mode: existing.mode || 'turns', passengers: existing.passengers !== false }
     : { id: 'ix-' + uid(), name: '', members: [], scene: '', mode: 'scene', passengers: true };
   const max = () => (d.mode === 'scene' ? 5 : 3);
   const hint = () => (d.mode === 'scene' ? `Pick 2 to 5 lines. One scene: the AI narrates and voices everyone at once.` : `Pick 2 or 3 lines. They take turns, and you choose who answers next.`);
@@ -29,6 +29,7 @@ export function interchangeView(id) {
         <p class="fhint" id="ixHint">${hint()}</p></div>
       <div id="passRow" ${d.mode === 'scene' ? '' : 'hidden'}>${toggleRow('ixPass', 'Passengers', 'Side characters can turn up in the scene. You can save any of them as a line.', d.passengers)}</div>
       ${field('ixName', 'Name', d.name, { ph: 'e.g. Late shift at the cafe', attrs: 'maxlength="60" autocomplete="off"', right: '<span class="small">Optional</span>' })}
+      ${d.world ? area('ixWorld', 'World', d.world, { rows: 6, right: `<span class="small">From the imported card</span>` }) : ''}
       ${area('ixScene', 'The scene', d.scene, { rows: 4, ph: 'Where are they, and what is happening? e.g. A signal failure strands Ren at Mika\'s cafe after closing.', right: '<span class="small">Optional</span>' })}
     </div>
     <div class="sticky-cta"><button type="button" class="btn-primary press" id="saveIx"><span id="ixCta">${isNew ? (d.mode === 'scene' ? 'Open the carriage' : 'Open the interchange') : 'Save'}</span>${arrow(30)}</button></div>
@@ -63,9 +64,12 @@ export function interchangeView(id) {
       bindSwitch($('#ixPass'), (v) => (d.passengers = v));
       $('#ixName').addEventListener('input', (e) => (d.name = e.target.value));
       $('#ixScene').addEventListener('input', (e) => (d.scene = e.target.value));
+      $('#ixWorld')?.addEventListener('input', (e) => (d.world = e.target.value));
       $('#saveIx').addEventListener('click', async () => {
         if (d.members.length < 2) return toast('Pick at least two lines to meet.');
-        await saveInterchange({ id: d.id, name: d.name.trim(), members: d.members, scene: d.scene.trim(), mode: d.mode, passengers: d.passengers, createdAt: existing?.createdAt || Date.now() });
+        // Keep everything else on the record (an imported story's world, openings, cover, tags).
+        const raw = store.interchanges.find((x) => x.id === d.id) || {};
+        await saveInterchange({ ...raw, id: d.id, name: d.name.trim(), members: d.members, scene: d.scene.trim(), world: (d.world || '').trim(), mode: d.mode, passengers: d.passengers, createdAt: existing?.createdAt || Date.now() });
         if (isNew) await saveChat(newChat(d.id), false);
         else await getChat(d.id);
         location.hash = `#/chat/${d.id}`;

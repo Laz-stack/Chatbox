@@ -55,6 +55,7 @@ export function editorView(id) {
       </div>
       ${blueprintHTML(d)}
       ${area('fFirst', 'First message', d.firstMessage, { rows: 3, ph: 'How they open the chat. *Actions* go in asterisks.' })}
+      ${d.greetings?.length ? `<p class="fhint">Plus ${d.greetings.length} more opening${d.greetings.length === 1 ? '' : 's'} from the imported card. In a new chat, swipe the first message to pick one.</p>` : ''}
       <div><div class="hrow"><h2 class="h">Expressions</h2><span class="small">Swap with the reply's mood</span></div><div id="exprRow">${exprRow()}</div></div>
       ${group(
         row({ id: 'sceneRow', lead: `<span class="row-ic" style="overflow:hidden;background:var(--plate2)" id="sceneThumb">${d.scene !== 'none' ? `<span style="width:100%;height:100%;filter:grayscale(1)">${sceneSVG(d.scene)}</span>` : icon('image', 19)}</span>`, title: 'Scene', sub: `<span id="sceneName">${SCENES.find((s) => s.key === d.scene)?.name || 'None'}</span>` }),

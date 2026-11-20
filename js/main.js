@@ -10,6 +10,7 @@ import { linesView } from './views/lines.js';
 import { faresView } from './views/fares.js';
 import { interchangeView } from './views/interchange.js';
 import { loreListView, loreEditView } from './views/lore.js';
+import { importView, startImport } from './views/import.js';
 import { openBuildSheet } from './build.js';
 import { reducedMotion } from './util.js';
 import { toast, closeOverlays } from './ui.js';
@@ -22,6 +23,7 @@ const routes = [
   [/^#\/lines(?:\/(\w+))?$/, (f) => linesView(f)],
   [/^#\/fares$/, () => faresView()],
   [/^#\/lore$/, () => loreListView()],
+  [/^#\/import$/, () => importView()],
   [/^#\/lore\/([^/]+)$/, (id) => loreEditView(decodeURIComponent(id))],
   [/^#\/interchange\/([^/]+)$/, (id) => interchangeView(decodeURIComponent(id))],
   [/^#\/edit\/([^/]+)$/, (id) => editorView(decodeURIComponent(id))],
@@ -176,6 +178,16 @@ document.addEventListener('click', (e) => {
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
+
+// Drop a ZIP, card or lorebook anywhere to import it.
+addEventListener('dragover', (e) => {
+  if ([...(e.dataTransfer?.types || [])].includes('Files')) e.preventDefault();
+});
+addEventListener('drop', (e) => {
+  if (!e.dataTransfer?.files?.length) return;
+  e.preventDefault();
+  startImport(e.dataTransfer.files);
+});
 
 // New versions: an open tab keeps running the code it loaded. GitHub Pages stamps every file with the
 // deploy time, so when that stamp changes (checked on coming back to the app, and every few minutes)
