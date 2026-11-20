@@ -6,6 +6,7 @@ import { bondsLayer } from './chronicle.js';
 import { clockLayer } from './clock.js';
 import { tiesLayer } from './ties.js';
 import { advLayer, rollNote, rollShort } from './adventure.js';
+import { mapLayer } from './worldmap.js';
 import { textOf, matchLore } from './store.js';
 import { PROVIDERS } from './providers.js';
 import { compileSheet } from './blueprint.js';
@@ -90,6 +91,8 @@ export function buildPrompt({ char, chat, conn, settings, persona, upto = null, 
   if (bonds) memory.push(bonds);
   const ties = tiesLayer(chat, group?.people, isScene ? null : char.id);
   if (ties) memory.push(ties);
+  const place = mapLayer(chat, group?.people || [char]);
+  if (place) memory.push(place);
   const adv = advLayer(chat, youName);
   if (adv) memory.push(adv);
   const time = clockLayer(chat);

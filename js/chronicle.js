@@ -9,6 +9,7 @@ import { helperComplete } from './helper.js';
 import { clockOn, advance, hhmm, WEATHER } from './clock.js';
 import { tiesBrief, tiesAsk, applyTies, undoTies } from './ties.js';
 import { advOn, advBrief, advAsk, applyAdv, undoAdv } from './adventure.js';
+import { mapOn, mapBrief, mapAsk, applyMap, undoMap } from './worldmap.js';
 import { extractJson, compileSheet } from './blueprint.js';
 import { textOf, named } from './store.js';
 import { uid } from './util.js';
@@ -71,7 +72,7 @@ async function read({ chat, cast, persona, conn, settings, whole = false, signal
   if (!whole) from = Math.max(from, len - CHUNK);
   const out = { stations: [], changes: [] };
   // If any part fails, put everything back as it was.
-  const before = structuredClone({ route: chat.route, bonds: chat.bonds, clock: chat.clock, ties: chat.ties, quests: chat.quests, items: chat.items });
+  const before = structuredClone({ route: chat.route, bonds: chat.bonds, clock: chat.clock, ties: chat.ties, quests: chat.quests, items: chat.items, map: chat.map });
   try {
     if (whole) chat.route = chat.route.filter((s) => !s.auto);
     for (let a = from; a < len; a += CHUNK) {
@@ -87,6 +88,8 @@ async function read({ chat, cast, persona, conn, settings, whole = false, signal
     chat.ties = before.ties;
     chat.quests = before.quests;
     chat.items = before.items;
+    // The map: take back only what this read did (a trip made meanwhile stays).
+    if (out.place) undoMap(chat, out.place);
     chat.chron = { ...(chat.chron || {}), failAt: chat.messages.length };
     throw e;
   }
@@ -104,6 +107,7 @@ async function readPart({ chat, cast, persona, conn, signal, a, b }) {
     stations_so_far: chat.route.slice(-8).map((s) => s.title),
     ...(cast.length > 1 ? { cast_ties_now: tiesBrief(chat, cast) } : {}),
     ...(advOn(chat) ? advBrief(chat) : {}),
+    ...(mapOn(chat) ? mapBrief(chat) : {}),
     ...(clockOn(chat) ? { story_time_at_start: `Day ${chat.clock.day}, ${hhmm(chat.clock.min)}, ${chat.clock.weather}` } : {}),
     story_part: transcript(chat, a, b, cast, persona),
   };
@@ -118,8 +122,9 @@ async function readPart({ chat, cast, persona, conn, signal, a, b }) {
       ? `\nAlso return "time":{"minutes":0,"weather":"..."}: how many minutes of story time passed during this part (0 if it is one continuous conversation of a few minutes; count skips like "an hour later" or "the next morning"), and the weather at the end (one of ${Object.keys(WEATHER).join(', ')}, or "" if unchanged).`
       : '') +
     (cast.length > 1 ? tiesAsk(cast.map((p) => p.name)) : '') +
-    (advOn(chat) ? advAsk(you) : '');
-  const text = await helperComplete(conn, 'track', { system, messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: (cast.length > 1 ? 1100 : 600) + (advOn(chat) ? 300 : 0), temperature: 0.4, signal });
+    (advOn(chat) ? advAsk(you) : '') +
+    (mapOn(chat) ? mapAsk() : '');
+  const text = await helperComplete(conn, 'track', { system, messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: (cast.length > 1 ? 1100 : 600) + (advOn(chat) ? 300 : 0) + (mapOn(chat) ? 80 : 0), temperature: 0.4, signal });
   return extractJson(text);
 }
 
@@ -145,6 +150,11 @@ function apply(chat, res, cast, a, b, out, whole = false) {
   }
   sortRoute(chat);
   const lastId = chat.messages[b - 1]?.id;
+  // World map: where the scene is now (the last part read wins).
+  if (mapOn(chat) && !whole && res?.place) {
+    const m = applyMap(chat, res.place);
+    if (m) out.place = m;
+  }
   // Adventure mode: quests and items.
   if (advOn(chat) && !whole && (res?.quests || res?.items)) {
     const a = applyAdv(chat, res, lastId);
@@ -205,6 +215,7 @@ export function bondsLayer(chat, people, youName) {
 export function undoReply(chat, m) {
   undoTies(chat, m.chron?.ties);
   undoAdv(chat, m.chron?.adv);
+  undoMap(chat, m.chron?.place);
   if (m.chron?.time && chat.clock) advance(chat.clock, -m.chron.time);
   for (const x of m.chron?.bonds || []) {
     const b = chat.bonds?.[x.who];

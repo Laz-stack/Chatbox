@@ -1392,3 +1392,43 @@ textarea.bp-ta.tall { min-height: 96px; }
 .ad-acts { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 18px; }
 .ad-acts .btn-primary { width: auto; min-width: 140px; justify-content: center; }
 @media (prefers-reduced-motion: reduce) { .mv-b, .ad-board, .roll-n.settle, .roll-w.in { animation: none !important; } }
+
+/* ================= World map ================= */
+.wm-here { padding: 14px 16px; border-radius: 22px; background: var(--plate); animation: riseIn .4s var(--out) both; }
+.wm-here small { font: 800 12px/1 var(--font); color: var(--yellow); }
+.wm-here.none small { color: var(--muted); }
+.wm-here b { display: block; margin-top: 4px; font: 900 22px/1.15 var(--font); }
+.wm-here p { margin-top: 4px; font: 500 13.5px/1.4 var(--font); color: var(--cream); }
+.wm-map { position: relative; margin-top: 12px; border-radius: 22px; background: var(--plate); }
+.wm-map svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.wm-seg { stroke: var(--cream); stroke-width: 7; stroke-linecap: round; }
+.wm-seg.faint { stroke: var(--plate2); stroke-dasharray: 2 10; stroke-width: 5; }
+.wm-st { position: absolute; transform: translate(-50%, -12px); display: flex; flex-direction: column; align-items: center; gap: 7px; min-height: 64px; padding: 0 4px; color: var(--cream); animation: popIn .4s var(--spring) both; }
+.wm-st i { width: 24px; height: 24px; border-radius: 50%; background: var(--plate); box-shadow: inset 0 0 0 3px var(--plate2); }
+.wm-st.seen i { background: var(--bg); box-shadow: inset 0 0 0 4px var(--cream); }
+.wm-st.picked i { box-shadow: inset 0 0 0 6px var(--cream); }
+.wm-st.here i { background: var(--yellow); box-shadow: 0 0 0 4px var(--bg), 0 0 0 7px var(--yellow); }
+.wm-st span { font: 800 12px/1.2 var(--font); text-align: center; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.wm-st.here span { color: var(--yellow); }
+.wm-card { margin-top: 12px; padding: 16px; border-radius: 22px; background: var(--cream); color: var(--bg); animation: riseIn .35s var(--out) both; }
+.wm-card > b { display: block; font: 900 20px/1.15 var(--font); }
+.wm-card > p { margin-top: 6px; font: 500 14.5px/1.45 var(--font); }
+.wm-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
+.wm-k { font: 800 12px/1 var(--font); color: var(--inkm); margin-right: 2px; }
+.wm-who, .wm-tag { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 10px; border-radius: 13px; background: var(--bg); color: var(--cream); font: 800 12px/1 var(--font); }
+.wm-who i { width: 9px; height: 9px; border-radius: 50%; }
+.wm-go, .wm-make { display: inline-flex; align-items: center; gap: 8px; min-height: 48px; margin-top: 14px; padding: 0 18px; border-radius: 24px; background: var(--red); color: var(--white); font: 800 15px/1 var(--font); }
+.wm-at { margin-top: 12px; font: 800 14px/1 var(--font); }
+.wm-empty { padding: 18px 16px 6px; border-radius: 22px; background: var(--plate); }
+.wm-empty > b { font: 900 20px/1.15 var(--font); }
+.wm-empty > p { margin-top: 6px; font: 500 14px/1.45 var(--font); color: var(--cream); }
+.wm-empty .ad-add { margin: 10px -16px 0; width: calc(100% + 32px); }
+.wm-edit { min-width: 64px; height: 44px; padding: 0 16px; border-radius: 22px; background: var(--plate); color: var(--cream); font: 800 14px/1 var(--font); }
+.wm-edit[aria-pressed='true'] { background: var(--cream); color: var(--bg); }
+.wm-from { margin-top: 8px; font: 700 12px/1.2 var(--font); color: var(--inkm); }
+.wm-er { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--hair); }
+.ad-h + .wm-er { border-top: 0; }
+.wm-er .input { flex: 1; min-width: 0; height: 44px; }
+.wm-sc { flex: none; max-width: 104px; height: 40px; padding: 0 12px; border-radius: 20px; box-shadow: inset 0 0 0 2px var(--cream); color: var(--cream); font: 800 12px/1 var(--font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ad-add[disabled] { opacity: .45; }
+@media (prefers-reduced-motion: reduce) { .wm-here, .wm-st, .wm-card { animation: none !important; } }

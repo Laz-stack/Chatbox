@@ -39,14 +39,16 @@ export function connectionsView() {
         stack.classList.add('still');
         stack.innerHTML = S.connections.map(card).join('');
       };
-      root.addEventListener('click', async (e) => {
+      // Listen on this page only: the app container is shared by every screen.
+      root.querySelector('.screen').addEventListener('click', async (e) => {
         if (e.target.closest('#helperRow')) return helperSheet(helperChanged);
         const b = e.target.closest('[data-use]');
         if (!b) return;
         S.settings.activeConnectionId = b.dataset.use;
         await saveSettings();
-        const v = connectionsView();
-        root.innerHTML = v.html;
+        const stack = root.querySelector('.stack[role=radiogroup]');
+        stack.classList.add('still');
+        stack.innerHTML = S.connections.map(card).join('');
         motion(root.querySelector(`[data-use="${b.dataset.use}"]`)?.closest('.conn'), [{ transform: 'scale(.97)' }, { transform: 'scale(1)' }], { duration: 260, easing: 'cubic-bezier(.16,1,.3,1)' });
       });
     },

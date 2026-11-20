@@ -9,6 +9,7 @@ import { shouldSummarize, summarize } from '../memory.js';
 import { chronicle, chronicleDue, trackingOn, changeText, markStation, undoReply } from '../chronicle.js';
 import { clockOn, chipText, longText, partOfDay, clockSheet } from '../clock.js';
 import { advOn, roll, RESULT, suggestMoves, advRowText } from '../adventure.js';
+import { hereOf, untravel } from '../worldmap.js';
 import { esc, uid, formatMessage, markProse, fmtNum, estimateTokens, inkOn, ago, plain, detectMood, copyText, download, slug, reducedMotion, motion, lineAccent, EASE_OUT } from '../util.js';
 import { avatarTile } from '../avatar.js';
 import { sceneSVG } from '../scenes.js';
@@ -92,6 +93,7 @@ export async function chatView(id, focusId = null) {
   const group = ix ? { people: ix.people, scene: ix.scene, world: ix.world || '', mode: ix.mode || 'turns', passengers: ix.passengers !== false } : null;
   // Who you are in this chat (its own pick, else your default persona).
   const me = () => personaFor(chat);
+  const sceneKey = () => hereOf(chat)?.scene || ch.scene;
   const youWho = () => ({ name: me().name?.trim() || 'You', preset: me().preset, avatarImage: me().avatarImage, line: { color: '#FDCD15' } });
   const chat = await getChat(id);
   if (!chat) return null;
@@ -104,7 +106,7 @@ export async function chatView(id, focusId = null) {
   // Short placeholder: a long name would wrap the composer onto several lines.
   const callName = scene ? 'the scene' : ix ? 'the interchange' : ch.name.length > 14 ? ch.name.split(/\s+/)[0].slice(0, 14) : ch.name;
   const html = `<div class="chat" id="chat" style="--blur:${ch.sceneBlur ?? 4}px;--dim:${(ch.sceneDim ?? 60) / 100};--accent:${lineAccent(ch.line?.color)}">
-    <div class="chat-scene" id="scene" aria-hidden="true">${ch.scene && ch.scene !== 'none' ? sceneSVG(ch.scene) : ''}</div>
+    <div class="chat-scene" id="scene" aria-hidden="true" data-k="${esc(sceneKey() || '')}">${sceneKey() && sceneKey() !== 'none' ? sceneSVG(sceneKey()) : ''}</div>
     <header class="chat-head">
       ${ibtn('back', 'Back to home', { href: '#/' })}
       <button type="button" class="chat-who press" id="whoBtn" aria-haspopup="dialog" aria-label="${esc(ch.name)}: chat details">${ix ? groupAvatar(ix, 36) : avatarBullet(ch, 36, '', `head:${ch.id}`)}<span class="who-tx"><span class="who-n">${esc(ch.name)}</span><span class="who-s"><span class="who-meta" id="meta"><span class="dot${conn0?.provider === 'demo' ? ' demo' : ''}" id="connDot"></span><span class="ell" id="connName">${esc(connText(conn0))}</span><span id="tokPill" ${S.settings.showCounter ? '' : 'hidden'}>· <span class="num" id="tokN">…</span></span><span id="noteWrap" ${!ix && chat.notes.length ? '' : 'hidden'}>· ${icon('pin', 12)}<span id="noteN">${chat.notes.length}</span></span></span><span id="status" hidden></span></span></span></button>
@@ -233,6 +235,7 @@ export async function chatView(id, focusId = null) {
     // A stage direction in the log: Steering bar choices and "While you were away".
     function dirSign(m) {
       if (m.dir === 'time') return `<p class="scn-dir">${icon('clock', 14)}${esc(m.time || 'Time skip')}</p>`;
+      if (m.dir === 'travel') return `<p class="scn-dir">${icon('route', 14)}${esc(m.time || 'Travelled')}</p>`;
       const label = m.dir === 'away' ? `While you were away · ${awaySpan(m.away?.ms || 0)}` : STEER[m.dir]?.label || 'Direction';
       return `<p class="scn-dir">${icon(m.dir === 'away' ? 'bell' : STEER[m.dir]?.icon || 'chev', 14)}${esc(label)}</p>`;
     }
@@ -278,7 +281,7 @@ export async function chatView(id, focusId = null) {
       const last = chat.messages[chat.messages.length - 1];
       let h = '';
       if (scene) {
-        if (last?.role === 'user' && !last.dir) h += `<button type="button" class="press" data-chip="reply">${icon('refresh', 16)}Get the scene</button>`;
+        if (last?.role === 'user' && (!last.dir || last.dir === 'travel' || last.dir === 'time')) h += `<button type="button" class="press" data-chip="reply">${icon('refresh', 16)}Get the scene</button>`;
         // After a reply, the reply's own actions come first; the steering choices follow the separator.
         if (last?.role === 'assistant' && !last.first) h += `<button type="button" class="press" data-chip="regen">${icon('refresh', 16)}Regenerate</button><button type="button" class="press" data-chip="continue">${icon('chev', 16)}Continue</button>${writeChip()}<span class="chip-sep" aria-hidden="true"></span>`;
         h += Object.entries(STEER).map(([k, s]) => `<button type="button" class="press" data-steer="${k}">${icon(s.icon, 16)}${s.label}</button>`).join('');
@@ -511,7 +514,8 @@ export async function chatView(id, focusId = null) {
       const target = chat.messages[chat.messages.length - 1];
       try {
         const res = await chronicle({ chat, cast: ix ? ix.people : [ch], persona: me(), conn, settings: S.settings });
-        if (res.changes.length || res.stations.length || res.time || res.ties || res.adv) target.chron = { bonds: res.changes, stations: res.stations.map((s) => s.title), ...(res.time ? { time: res.time } : {}), ...(res.ties ? { ties: res.ties } : {}), ...(res.adv ? { adv: res.adv } : {}) };
+        if (res.changes.length || res.stations.length || res.time || res.ties || res.adv || res.place) target.chron = { bonds: res.changes, stations: res.stations.map((s) => s.title), ...(res.time ? { time: res.time } : {}), ...(res.ties ? { ties: res.ties } : {}), ...(res.adv ? { adv: res.adv } : {}), ...(res.place ? { place: res.place } : {}) };
+        if (res.place) setScene();
         await saveChat(chat, false);
         const i = chat.messages.indexOf(target);
         if (!destroyed && target.chron && i >= 0) rerenderMsg(i);
@@ -531,6 +535,7 @@ export async function chatView(id, focusId = null) {
         const p = cast.find((q) => q.id === x.who);
         return p ? `<a class="chr-row press" href="#/bonds/${encodeURIComponent(chat.id)}"><span class="chr-dot" style="background:${p.line?.color || '#2EAA67'}" aria-hidden="true"></span><span>${esc(p.name)} · ${esc(changeText(x.d))}${x.why ? ` · ${esc(x.why)}` : ''}</span></a>` : '';
       });
+      if (c.place) rows.push(`<a class="chr-row press" href="#/map/${encodeURIComponent(chat.id)}">${icon('route', 13)}<span>${c.place.created ? 'New place' : 'Now at'} · ${esc(c.place.name)}</span></a>`);
       if (c.adv?.length) rows.push(`<a class="chr-row press" href="#/adventure/${encodeURIComponent(chat.id)}">${icon('dice', 13)}<span>${esc(advRowText(c.adv))}</span></a>`);
       for (const s of c.stations || []) rows.push(`<a class="chr-row press" href="#/route/${encodeURIComponent(chat.id)}">${icon('route', 13)}<span>New station · ${esc(s)}</span></a>`);
       return rows.filter(Boolean).length ? `<div class="chr">${rows.join('')}</div>` : '';
@@ -609,6 +614,39 @@ export async function chatView(id, focusId = null) {
       await save();
       generate('reply');
     }
+    // ---------- world map ----------
+    // The background follows where the story is (a place's scene), else the character's own.
+    function setScene() {
+      const el = root.querySelector('#scene');
+      const k = sceneKey();
+      if (el && el.dataset.k !== k) (el.dataset.k = k), (el.innerHTML = k && k !== 'none' ? sceneSVG(k) : '');
+    }
+    // Arriving from the World map: the scene starts at the new place.
+    {
+      const last = chat.messages[chat.messages.length - 1];
+      if (last?.dir === 'travel' && last.go) {
+        // The flag goes only once the reply really starts, so leaving early doesn't lose it.
+        setTimeout(() => {
+          if (destroyed || busy || !chat.messages.includes(last)) return;
+          delete last.go;
+          saveChat(chat, false);
+          generate('reply');
+        }, 400);
+        toast(last.time || 'Travelled', {
+          action: 'Undo',
+          ms: 6000,
+          onAction: async () => {
+            if (busy) ctl?.abort();
+            untravel(chat, last);
+            await saveChat(chat);
+            renderAll();
+            setScene();
+            updateClock();
+          },
+        });
+      }
+    }
+
     // ---------- adventure mode ----------
     function rollHTML(m, enter = false) {
       if (!m.roll) return '';
@@ -964,6 +1002,7 @@ export async function chatView(id, focusId = null) {
               { icon: 'download', label: 'Export card (PNG)', on: async () => download(await exportCardPng(ch), slug(ch.name) + '.card.png') },
             ]),
         { icon: 'clock', label: clockOn(chat) ? `Story time: ${longText(chat.clock)}` : 'Story time', on: openClock },
+        { icon: 'route', label: hereOf(chat) ? `World map: ${hereOf(chat).name}` : 'World map', on: () => (location.hash = `#/map/${encodeURIComponent(chat.id)}`) },
         { icon: 'dice', label: advOn(chat) ? 'Quests and items' : 'Adventure mode', on: () => (location.hash = `#/adventure/${encodeURIComponent(chat.id)}`) },
         { icon: 'route', label: 'Route map', on: () => (location.hash = `#/route/${encodeURIComponent(chat.id)}`) },
         { icon: 'heart', label: 'Bonds', on: () => (location.hash = `#/bonds/${encodeURIComponent(chat.id)}`) },
@@ -1085,6 +1124,7 @@ export async function chatView(id, focusId = null) {
         if (m.error) continue;
         if (m.dir) {
           if (m.dir === 'skip' || m.dir === 'away') out.push('* * *', '');
+          if (m.dir === 'travel') out.push('* * *', '', `*${m.time}*`, '');
           if (m.dir === 'time') out.push('* * *', '', `*${m.time}*`, '');
           continue;
         }
