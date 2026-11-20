@@ -29,6 +29,8 @@ export function bindMarkButton(btn, { onTap, color = () => '#ECECEC' }) {
   let timer = null;
   let pop = null; // { el, stops, hot, close }
   let downAt = null;
+  let typing = null; // the text box you were typing in, kept focused so the keyboard stays up
+  const keepTyping = () => typing?.isConnected && typing.focus({ preventScroll: true });
 
   function open(fromKeyboard = false) {
     if (pop) return;
@@ -48,6 +50,9 @@ export function bindMarkButton(btn, { onTap, color = () => '#ECECEC' }) {
           `<button type="button" class="mkp-o${i === cur ? ' cur' : ''}" role="menuitemradio" aria-checked="${i === cur}" data-i="${i}" style="left:${cx - 23}px;top:${cy - FIRST - STEP * i - 23}px;--d:${i * 30}ms">${markGlyph(m)}<small>${m.label}</small></button>`
       ).join('');
     document.body.appendChild(el);
+    // Touching a stop must not take focus from the text box (that would close the keyboard).
+    el.addEventListener('pointerdown', (e) => e.target.closest('.mkp-o') && e.pointerType !== 'mouse' && e.preventDefault());
+    el.addEventListener('mousedown', (e) => e.preventDefault());
     const stops = [...el.querySelectorAll('.mkp-o')];
     navigator.vibrate?.(12);
     requestAnimationFrame(() => el.classList.add('on'));
@@ -60,6 +65,7 @@ export function bindMarkButton(btn, { onTap, color = () => '#ECECEC' }) {
       setTimeout(() => p.el.remove(), reducedMotion() ? 0 : 160);
       btn.classList.remove('held');
       removeEventListener('keydown', onKey, true);
+      keepTyping();
     };
     const onKey = (e) => {
       if (e.key === 'Escape') return e.preventDefault(), close(), btn.focus();
@@ -72,7 +78,12 @@ export function bindMarkButton(btn, { onTap, color = () => '#ECECEC' }) {
       }
     };
     addEventListener('keydown', onKey, true);
-    el.querySelector('.mkp-scrim').addEventListener('click', () => close());
+    // A new touch on the background closes it. Not 'click': the browser's late click from the
+    // hold that opened it would land on the background and close it at once.
+    el.querySelector('.mkp-scrim').addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'mouse') e.preventDefault();
+      close();
+    });
     el.addEventListener('click', (e) => {
       const o = e.target.closest('.mkp-o');
       if (o) pick(+o.dataset.i);
@@ -90,7 +101,7 @@ export function bindMarkButton(btn, { onTap, color = () => '#ECECEC' }) {
     saveSettings();
     paint();
     pop?.close();
-    btn.focus({ preventScroll: true });
+    if (!typing) btn.focus({ preventScroll: true });
   }
   // The stop nearest the finger, once it has moved up past the button; none on the button itself.
   function nearest(y) {
@@ -101,6 +112,11 @@ export function bindMarkButton(btn, { onTap, color = () => '#ECECEC' }) {
 
   btn.addEventListener('pointerdown', (e) => {
     if (e.button > 0) return;
+    // Keep the text box focused: a tap on the button would otherwise move focus here (on phones a
+    // late compatibility mousedown does it after the tap) and the keyboard would close.
+    const a = document.activeElement;
+    typing = a && (a.tagName === 'TEXTAREA' || a.tagName === 'INPUT') ? a : null;
+    if (typing) e.preventDefault();
     downAt = Date.now();
     btn.setPointerCapture?.(e.pointerId);
     btn.classList.add('held');
@@ -122,6 +138,7 @@ export function bindMarkButton(btn, { onTap, color = () => '#ECECEC' }) {
     btn.classList.remove('held');
     if (!cancel) onTap(markNow());
   };
+  btn.addEventListener('mousedown', (e) => typing && e.preventDefault());
   btn.addEventListener('pointerup', (e) => end(e));
   btn.addEventListener('pointercancel', (e) => end(e, true));
   // Long-press menus and right-click open the stops; the keyboard: Arrow Up, or Enter/Space to wrap.
