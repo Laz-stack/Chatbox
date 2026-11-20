@@ -3,6 +3,7 @@ import { S, getChat, saveChat, saveSettings, character, interchange, isInterchan
 import { KINDS, BOND_KEYS, chronicle, writeDiary, changeText, unread, trackingOn, sortRoute } from '../chronicle.js';
 import { esc, inkOn, agoLong as ago } from '../util.js';
 import { topbar, icon, avatarBullet, primary, toggleRow, bindSwitch, toast, confirmSheet } from '../ui.js';
+import { tiesPanel } from './ties.js';
 
 const CREAM = '#ECECEC';
 
@@ -129,7 +130,7 @@ export async function routeView(id) {
 }
 
 // ================= Bonds =================
-export async function bondsView(id) {
+export async function bondsView(id, tab = 'you') {
   const c = await load(id);
   if (!c) return null;
   const { chat, cast } = c;
@@ -161,8 +162,10 @@ export async function bondsView(id) {
 
   const html = `<div class="screen no-tab cr-screen">
     ${topbar({ back: `#/chat/${encodeURIComponent(chat.id)}`, title: 'Bonds' })}
-    <p class="cr-sub">How they feel about ${esc(c.persona?.name?.trim() || 'you')}</p>
-    <div id="bdList" class="bd-list">${listHTML()}</div>
+    <p class="cr-sub" id="bdSub">${cast.length > 1 && tab === 'them' ? 'How they see each other' : `How they feel about ${esc(c.persona?.name?.trim() || 'you')}`}</p>
+    ${cast.length > 1 ? `<div class="bd-tabs" role="tablist" aria-label="Bonds"><button type="button" class="press" role="tab" id="tabYou" aria-selected="${tab !== 'them'}" aria-controls="bdList">With you</button><button type="button" class="press" role="tab" id="tabThem" aria-selected="${tab === 'them'}" aria-controls="twBox">Between them</button></div>` : ''}
+    <div id="bdList" class="bd-list" role="tabpanel" ${cast.length > 1 && tab === 'them' ? 'hidden' : ''}>${listHTML()}</div>
+    ${cast.length > 1 ? `<div id="twBox" class="tw-box" role="tabpanel" ${tab === 'them' ? '' : 'hidden'}></div>` : ''}
     <p class="fhint" style="margin-top:14px">${trackingOn(S.settings) ? 'Bonds update with the Route map as the story goes. The AI is told where things stand.' : 'Story tracking is off (Route map › Track the story), so bonds only change when you change them.'}</p>
   </div>`;
 
@@ -182,6 +185,30 @@ export async function bondsView(id) {
       };
       redraw();
       list.classList.add('in');
+      // Group chats: "Between them" shows how the characters see each other.
+      if (cast.length > 1) {
+        const box = root.querySelector('#twBox');
+        const panel = tiesPanel(chat, cast);
+        let mounted = false;
+        const show = (which) => {
+          root.querySelector('#tabYou').setAttribute('aria-selected', which === 'you');
+          root.querySelector('#tabThem').setAttribute('aria-selected', which === 'them');
+          list.hidden = which === 'them';
+          box.hidden = which !== 'them';
+          root.querySelector('#bdSub').textContent = which === 'them' ? 'How they see each other' : `How they feel about ${c.persona?.name?.trim() || 'you'}`;
+          if (which === 'them' && !mounted) (mounted = true), panel.mount(box);
+          history.replaceState(null, '', `#/bonds/${encodeURIComponent(chat.id)}${which === 'them' ? '/them' : ''}`);
+        };
+        root.querySelector('#tabYou').addEventListener('click', () => show('you'));
+        root.querySelector('#tabThem').addEventListener('click', () => show('them'));
+        root.querySelector('.bd-tabs').addEventListener('keydown', (e) => {
+          if (!['ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+          const next = root.querySelector('#tabYou').getAttribute('aria-selected') === 'true' ? 'them' : 'you';
+          show(next);
+          root.querySelector(next === 'them' ? '#tabThem' : '#tabYou').focus();
+        });
+        if (tab === 'them') (mounted = true), panel.mount(box);
+      }
       list.addEventListener('click', async (e) => {
         const o = e.target.closest('[data-open]');
         if (o) {

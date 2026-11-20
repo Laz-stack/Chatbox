@@ -2,6 +2,7 @@
 import * as db from './db.js';
 import { uid, setImageResolver } from './util.js';
 import { bondsAt } from './chronicle.js';
+import { tiesAt } from './ties.js';
 
 // A character's line colour. Never red (action) or yellow (selected): those mean something else in the app.
 export const LINE_COLORS = ['#2EAA67', '#FB4DAA', '#FE6500', '#B8ACFE', '#065BFE', '#12A5A5', '#5BC2F2', '#8A5530', '#ECECEC'];
@@ -369,6 +370,7 @@ export async function branchChat(chat, i) {
   const ids = new Set(c.messages.map((m) => m.id));
   if (chat.route) c.route = structuredClone(chat.route.filter((s) => ids.has(s.msgId)));
   if (chat.bonds) c.bonds = bondsAt(chat.bonds, ids);
+  if (chat.ties) c.ties = tiesAt(chat.ties, ids);
   if (chat.diary) c.diary = structuredClone(chat.diary.filter((e) => ids.has(e.msgId)));
   if (chat.chron) c.chron = { ...chat.chron, upto: Math.min(chat.chron.upto || 0, i + 1) };
   c.branchOf = { chat: chat.id, at: chat.messages[i].id };
