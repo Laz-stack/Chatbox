@@ -1,6 +1,6 @@
 // Depot › Reading text: size, font and colours for chat messages, with live previews of both layouts.
 import { S, saveSettings } from '../store.js';
-import { SIZES, FONTS, DIALOGUE, NARRATION, LAYOUTS, WIDTHS, ALIGNS, TRACKS, PARAS, DEFAULT_TEXT, textPrefs, applyText } from '../textstyle.js';
+import { SIZES, FONTS, DIALOGUE, NARRATION, BUBBLES, MY_BUBBLES, LAYOUTS, WIDTHS, ALIGNS, TRACKS, PARAS, DEFAULT_TEXT, textPrefs, applyText } from '../textstyle.js';
 import { esc, formatMessage } from '../util.js';
 import { topbar, title2, icon, openSheet } from '../ui.js';
 
@@ -30,6 +30,15 @@ const swatches = (name, list, cur) =>
     .map(([k, c]) => `<button type="button" class="press${k === 'line' ? ' line' : ''}" role="radio" aria-checked="${cur === k}" data-${name}="${k}" aria-label="${esc(c.label)}" title="${esc(c.label)}" style="--c:${c.dark}"><i></i><span>${esc(c.label)}</span></button>`)
     .join('')}</div>`;
 
+// Bubble colours: each swatch is a small bubble in that colour, with an "Aa" in its text colour.
+const bubbles = (name, list, cur, label) =>
+  `<div class="tx-bub" role="radiogroup" aria-label="${label}">${Object.entries(list)
+    .map(([k, c]) => `<button type="button" class="press${c.bg === 'line' ? ' line' : ''}${c.dark ? ' dark' : ''}" role="radio" aria-checked="${cur === k}" data-${name}="${k}" aria-label="${esc(c.label)}" title="${esc(c.label)}"${c.bg === 'line' ? '' : ` style="--b:${c.bg}"`}><i aria-hidden="true">Aa</i><span>${esc(c.label)}</span></button>`)
+    .join('')}</div>`;
+const bubbleRows = (t) =>
+  `<p class="tx-lbl">Character’s bubble <span>Bubbles layout</span></p>${bubbles('bubble', BUBBLES, t.bubble, 'Character’s bubble colour')}
+    <p class="tx-lbl">Your bubble</p>${bubbles('me', MY_BUBBLES, t.me, 'Your bubble colour')}`;
+
 // Three-option rows for the character's text, each with a small drawn picture of the choice.
 const PICS = {
   width: (k) => `<span class="tx-pic w ${k}" aria-hidden="true"><i></i><i></i><i></i></span>`,
@@ -50,9 +59,9 @@ const shapeRows = (t, all = true) =>
 // Mark the chosen option in a group (the page and the quick sheet both use this).
 function bindPrefs(root, after = () => {}) {
   root.addEventListener('click', async (e) => {
-    const b = e.target.closest('[data-size],[data-font],[data-dialogue],[data-narration],[data-layout],[data-width],[data-align],[data-track],[data-para]');
+    const b = e.target.closest('[data-size],[data-font],[data-dialogue],[data-narration],[data-bubble],[data-me],[data-layout],[data-width],[data-align],[data-track],[data-para]');
     if (!b) return;
-    const k = ['size', 'font', 'dialogue', 'narration', 'layout', 'width', 'align', 'track', 'para'].find((x) => b.dataset[x] != null);
+    const k = ['size', 'font', 'dialogue', 'narration', 'bubble', 'me', 'layout', 'width', 'align', 'track', 'para'].find((x) => b.dataset[x] != null);
     await setPref(k, b.dataset[k]);
     b.parentElement.querySelectorAll('[role=radio]').forEach((x) => x.setAttribute('aria-checked', x === b));
     after();
@@ -69,11 +78,13 @@ export function textView() {
         <div class="scn-b" style="--c:#B8ACFE;--ink:#0A0A0A"><span class="scn-tag">Lumi</span><div class="scn-t">${formatMessage('“They’ll search me first. Hide this.”')}</div></div></div>
       <p class="tx-cap tx-cap-bubble">One-on-one chats</p>
       <div class="msg ai tx-prev-bubble" style="--accent:#2EAA67"><div class="bubble">${formatMessage(SAMPLE_BUBBLE)}</div></div>
+      <div class="msg user tx-prev-me"><div class="bubble">${formatMessage('*sits down* “Same seat, please.”')}</div></div>
     </div>
     <p class="tx-lbl">Chat layout <span>one-on-one chats; group chats are always Story</span></p>${layoutRow(t)}
     <p class="tx-lbl">Size</p>${sizeRow(t)}
     <p class="tx-lbl">Font</p>${fontGrid(t)}
     ${shapeRows(t)}
+    ${bubbleRows(t)}
     <p class="tx-lbl">Speech colour</p>${swatches('dialogue', DIALOGUE, t.dialogue)}
     <p class="tx-lbl">Narration colour <span>on black; cream bubbles keep dark text</span></p>${swatches('narration', NARRATION, t.narration)}
     <button type="button" class="tx-reset press" id="txReset">${icon('restart', 16)}Reset to Signboard</button>
@@ -98,7 +109,7 @@ export function textSheet() {
   const t = textPrefs();
   openSheet({
     label: 'Text size',
-    html: `<h2 class="sheet-title">Text</h2><p class="tx-lbl" style="margin-top:0">Chat layout</p>${layoutRow(t)}<p class="tx-lbl">Size</p>${sizeRow(t)}<p class="tx-lbl">Font</p>${fontGrid(t)}${shapeRows(t, false)}
+    html: `<h2 class="sheet-title">Text</h2><p class="tx-lbl" style="margin-top:0">Chat layout</p>${layoutRow(t)}<p class="tx-lbl">Size</p>${sizeRow(t)}<p class="tx-lbl">Font</p>${fontGrid(t)}${bubbleRows(t)}<p class="tx-lbl">Speech colour</p>${swatches('dialogue', DIALOGUE, t.dialogue)}${shapeRows(t, false)}
       <a class="dashed press" href="#/text" data-close style="margin-top:14px">${icon('sliders', 20)}More text options</a>`,
     onMount(s, close) {
       // Switching layout redraws the chat underneath.

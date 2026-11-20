@@ -1645,3 +1645,23 @@ button.chr-row { width: 100%; }
 /* When the story was last read (Bonds, Route map, Quests and items, World map) and when a bond last changed */
 .cr-read { margin: -6px 0 14px; text-align: center; font: 600 12.5px/1.35 var(--font); color: var(--muted); text-wrap: balance; }
 .bd-when { display: block; margin-top: 4px; font: 600 12px/1.3 var(--font); color: var(--muted); }
+
+/* ---------- Bubble colours (Reading text) ---------- */
+.msg.ai:not(.scene) .bubble, .tx-prev-bubble .bubble { background: var(--bub-bg, var(--cream)); color: var(--bub-ink, var(--bg)); }
+.msg.ai:not(.scene) .bubble .act, .tx-prev-bubble .bubble .act { color: var(--bub-act, var(--inkm)); }
+:root.bub-line .msg.ai:not(.scene) .bubble, :root.bub-line .tx-prev-bubble .bubble { background: color-mix(in srgb, var(--accent, #2EAA67) 24%, #F4F4F4); }
+/* A dark bubble keeps a hairline so it never melts into the black ground. */
+:root.bub-dark .msg.ai:not(.scene) .bubble, :root.bub-dark .tx-prev-bubble .bubble { box-shadow: inset 0 0 0 2px #3A3A3A; }
+:root.bub-dark.dlg-line :is(.msg.ai:not(.scene), .tx-prev-bubble) .bubble :is(.say, .dlg, .shout) { color: color-mix(in srgb, var(--accent, #2EAA67) 55%, #FFFFFF); }
+.msg.user .bubble { background: var(--me-bg, var(--yellow)); color: var(--me-ink, var(--bg)); }
+.msg.user .bubble .act { color: var(--me-act, rgba(10, 10, 10, .7)); }
+:root.me-dark .msg.user .bubble { box-shadow: inset 0 0 0 2px #3A3A3A; }
+.tx-prev-me { margin-top: 10px; justify-content: flex-end; display: flex; }
+.tx-sw { display: grid; grid-template-columns: 1fr 1fr; }
+.tx-bub { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px 8px; }
+.tx-bub button { display: flex; flex-direction: column; align-items: center; gap: 6px; min-height: 44px; padding: 4px 0; color: var(--white); font: 700 12px/1.2 var(--font); text-align: center; }
+.tx-bub i { display: grid; place-items: center; width: 100%; max-width: 72px; height: 44px; border-radius: 6px 18px 18px 18px; background: var(--b); color: #0A0A0A; font: 800 15px/1 var(--font); font-style: normal; box-shadow: inset 0 0 0 1.5px rgba(10, 10, 10, .18); }
+.tx-bub .dark i { color: #ECECEC; box-shadow: inset 0 0 0 2px #3A3A3A; }
+.tx-bub .line i { background: conic-gradient(from 200deg, color-mix(in srgb, #2EAA67 24%, #F4F4F4), color-mix(in srgb, #FB4DAA 24%, #F4F4F4), color-mix(in srgb, #065BFE 24%, #F4F4F4), color-mix(in srgb, #2EAA67 24%, #F4F4F4)); }
+.tx-bub [aria-checked='true'] i { box-shadow: 0 0 0 3px var(--bg), 0 0 0 6px var(--yellow); }
+.tx-bub [aria-checked='true'] span { color: var(--yellow); }

@@ -448,8 +448,12 @@ export const textOf = (m) => (m ? m.alts[m.alt] ?? '' : '');
 
 // Fill {{char}} and {{user}} (any case, spaces allowed) with real names, for showing a message.
 // Messages keep the placeholders, so renaming yourself later still shows the new name.
-export const named = (text, ch, userFallback = 'you', persona = S.persona) =>
-  (text || '').replace(/\{\{\s*char\s*\}\}/gi, ch?.name || 'Character').replace(/\{\{\s*user\s*\}\}/gi, persona?.name?.trim() || userFallback);
+// {{char}} and {{user}}, and the spellings older cards use: {char}, {user}, <BOT>, <USER>.
+export const named = (text, ch, userFallback = 'you', persona = S.persona) => {
+  const c = ch?.name || 'Character';
+  const u = persona?.name?.trim() || userFallback;
+  return (text || '').replace(/\{\{?\s*char\s*\}?\}|<\s*bot\s*>/gi, c).replace(/\{\{?\s*user\s*\}?\}|<\s*user\s*>/gi, u);
+};
 // The shown text of a message.
 export const shownText = (m, ch) => named(textOf(m), ch);
 
