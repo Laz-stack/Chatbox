@@ -177,6 +177,28 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
+// New versions: an open tab keeps running the code it loaded. GitHub Pages stamps every file with the
+// deploy time, so when that stamp changes (checked on coming back to the app, and every few minutes)
+// offer a reload. Busy screens are never reloaded on their own.
+let builtAt = null;
+const deployStamp = () =>
+  fetch('index.html', { method: 'HEAD', cache: 'no-store' })
+    .then((r) => (r.ok ? r.headers.get('last-modified') : null))
+    .catch(() => null);
+let offered = false;
+async function checkForUpdate() {
+  if (offered || !location.protocol.startsWith('http')) return;
+  const now = await deployStamp();
+  if (!now) return;
+  if (!builtAt) return void (builtAt = now);
+  if (now === builtAt) return;
+  offered = true;
+  toast('A new version of Chatbox is ready.', { action: 'Reload', ms: 15000, onAction: () => location.reload() });
+}
+checkForUpdate();
+document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && checkForUpdate());
+setInterval(checkForUpdate, 5 * 60 * 1000);
+
 window.addEventListener('unhandledrejection', (e) => {
   console.error(e.reason);
   toast(e.reason?.message || 'Something went wrong.', { kind: 'err' });
