@@ -82,6 +82,11 @@ export function splitTurn(text, name) {
   }
   return blocks;
 }
+// True when a reply already uses scene format for at least one of the cast ("Mika: …").
+export const hasCastLines = (text, people) => {
+  const names = people.flatMap((p) => [p.name.trim().toLowerCase(), firstName(p.name)]);
+  return parseScene(text).some((b) => b.kind === 'say' && names.includes(b.name.trim().toLowerCase()));
+};
 // The same reply rewritten in scene format ("Name: …"), for a scene's history.
 export const turnAsScene = (text, name) => splitTurn(text, name).map((b) => (b.kind === 'say' ? `${name}: ${b.text.replace(/\n\s*\n/g, ' ')}` : b.text)).join('\n\n');
 
