@@ -132,6 +132,8 @@ export async function chatView(id, focusId = null) {
       const lore = used.length ? `<button type="button" class="mini lore-used press" data-lore aria-label="${used.length} Lorebook entr${used.length === 1 ? 'y' : 'ies'} used">${icon('book', 16)}<span class="num">${used.length}</span></button>` : '';
       return pager || read || lore ? `<div class="msg-tools">${pager}${read}${lore}</div>` : '';
     }
+    // Names a paragraph can open with to show who is speaking: the cast, plus side characters met so far.
+    const castNames = () => (ix ? [...ix.people.map((p) => p.name), ...(chat.passengers || []).map((p) => p.name)] : []);
     // ---------- Carriage: the story layout ----------
     // AI text with unmarked prose shown as actions (Reply style › Formatting: Asterisks, the default).
     const proseOn = () => (S.settings.replyStyle?.format || 'asterisks') === 'asterisks';
@@ -150,7 +152,7 @@ export async function chatView(id, focusId = null) {
       const shown = new Set();
       // A Take-turns reply has one known speaker: split it into narration and that speaker's lines.
       // Unless the text itself names the cast ("Sina: …"), e.g. a reply first written in Take turns and regenerated as a scene.
-      const blocks = m?.speaker && !hasCastLines(text, ix.people) ? splitTurn(text, speakerOf(m).name) : parseScene(text);
+      const blocks = m?.speaker && !hasCastLines(text, ix.people) ? splitTurn(text, speakerOf(m).name) : parseScene(text, castNames());
       return blocks.map((b) => {
         if (b.kind === 'narr') return blockHTML({ kind: 'narr' }, b.text);
         const r = resolveSpeaker(b.name, ix.people, me().name);
@@ -531,7 +533,7 @@ export async function chatView(id, focusId = null) {
       const key = name.toLowerCase();
       const said = chat.messages
         .filter((m) => m.role === 'assistant')
-        .flatMap((m) => parseScene(textOf(m)).filter((b) => b.kind === 'say' && b.name.toLowerCase() === key).map((b) => b.text));
+        .flatMap((m) => parseScene(textOf(m), castNames()).filter((b) => b.kind === 'say' && b.name.toLowerCase() === key).map((b) => b.text));
       const room = ix.people.length < 5;
       openSheet({
         label: name,
@@ -642,7 +644,7 @@ export async function chatView(id, focusId = null) {
       if (m.role === 'user') parts = [m.as ? { who: speakerOf({ speaker: m.as }) } : { you: true }];
       if (m.role === 'user') parts[0].text = text;
       else if (ix) {
-        const blocks = m.speaker && !hasCastLines(text, ix.people) ? splitTurn(text, speakerOf(m).name) : parseScene(text);
+        const blocks = m.speaker && !hasCastLines(text, ix.people) ? splitTurn(text, speakerOf(m).name) : parseScene(text, castNames());
         parts = blocks
           .filter((b) => b.kind === 'say')
           .map((b) => {
@@ -865,7 +867,7 @@ export async function chatView(id, focusId = null) {
         const t = named(textOf(m), who, 'you', me()).trim();
         if (!t) continue;
         if (m.role === 'user') out.push(`**${m.as ? speakerOf({ speaker: m.as }).name : you}:** ${t}`, '');
-        else if (scene) for (const b of parseScene(t)) out.push(b.kind === 'narr' ? b.text.trim() : `**${b.name}:** ${b.text.trim()}`, '');
+        else if (scene) for (const b of parseScene(t, castNames())) out.push(b.kind === 'narr' ? b.text.trim() : `**${b.name}:** ${b.text.trim()}`, '');
         else out.push(`**${who.name}:** ${t}`, '');
       }
       download(new Blob([out.join('\n')], { type: 'text/markdown' }), `${slug(title) || 'chat'}.story.md`);
