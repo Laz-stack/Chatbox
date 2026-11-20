@@ -1,5 +1,6 @@
 import { S, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, named, resetChat, recordFare, interchange, isInterchangeId, chatsFor, startNewChat, deleteChat, blankCharacter, saveInterchange, personaFor, personaById, newChat } from '../store.js';
 import { textSheet } from './text.js';
+import { textPrefs } from '../textstyle.js';
 import { STEER, parseScene, splitTurn, hasCastLines, resolveSpeaker, passengersIn, demoScene } from '../scene.js';
 import { complete, PROVIDERS } from '../providers.js';
 import { buildPrompt } from '../prompt.js';
@@ -70,6 +71,8 @@ export async function chatView(id, focusId = null) {
   const owner = ix ? id : character(id) ? id : S.chats.get(id)?.characterId || id;
   // A Carriage is an Interchange in "One scene" mode: one reply narrates the scene and voices everyone.
   const scene = ix?.mode === 'scene';
+  // Story layout: always for group chats; for one-on-one chats when Reading text › Chat layout is Story.
+  const story = !!ix || textPrefs().layout === 'story';
   const ch = ix ? { ...ix.people[0], id: ix.id, name: ix.title, tagline: scene ? `Carriage · ${ix.people.length} aboard` : `Interchange · ${ix.people.length} lines`, connectionId: null } : character(owner);
   if (!ch) return null;
   const speakerOf = (m) => (ix ? ix.people.find((p) => p.id === m?.speaker) || ix.people[0] : ch);
@@ -94,7 +97,7 @@ export async function chatView(id, focusId = null) {
       <button type="button" class="chat-who press" id="whoBtn" aria-haspopup="dialog" aria-label="${esc(ch.name)}: chat details">${ix ? groupAvatar(ix, 36) : avatarBullet(ch, 36, '', `head:${ch.id}`)}<span class="who-tx"><span class="who-n">${esc(ch.name)}</span><span class="who-s"><span class="who-meta" id="meta"><span class="dot${conn0?.provider === 'demo' ? ' demo' : ''}" id="connDot"></span><span class="ell" id="connName">${esc(connText(conn0))}</span><span id="tokPill" ${S.settings.showCounter ? '' : 'hidden'}>· <span class="num" id="tokN">…</span></span><span id="noteWrap" ${!ix && chat.notes.length ? '' : 'hidden'}>· ${icon('pin', 12)}<span id="noteN">${chat.notes.length}</span></span></span><span id="status" hidden></span></span></span></button>
       ${ibtn('more', 'Chat options', { id: 'moreBtn' })}
     </header>
-    <div class="log${ix ? ' story' : ''}" id="log" role="log" aria-live="polite" aria-relevant="additions" aria-label="Chat with ${esc(ch.name)}"></div>
+    <div class="log${story ? ' story' : ''}" id="log" role="log" aria-live="polite" aria-relevant="additions" aria-label="Chat with ${esc(ch.name)}"></div>
     <div class="chips${scene ? ' steer' : ''}" id="chips"></div>
     ${ix && !scene ? '<div class="nextbar" id="nextbar" role="radiogroup" aria-label="Who answers next"></div>' : ''}
     <form class="composer" id="composer">
@@ -138,7 +141,7 @@ export async function chatView(id, focusId = null) {
     // AI text with unmarked prose shown as actions (Reply style › Formatting: Asterisks, the default).
     const proseOn = () => (S.settings.replyStyle?.format || 'asterisks') === 'asterisks';
     const showAi = (t) => (proseOn() ? markProse(t) : t);
-    const fillS = (t, who) => named(t, who || ix.people[0], 'you', me());
+    const fillS = (t, who) => named(t, who || (ix ? ix.people[0] : ch), 'you', me());
     // One block's markup; data-k lets the streamer update a block in place instead of rebuilding it.
     function blockHTML(r, text, { by = false, save = false } = {}) {
       if (r.kind === 'narr') return `<p class="scn-narr" data-k="narr">${formatMessage(showAi(fillS(text)))}</p>`;
@@ -152,10 +155,11 @@ export async function chatView(id, focusId = null) {
       const shown = new Set();
       // A Take-turns reply has one known speaker: split it into narration and that speaker's lines.
       // Unless the text itself names the cast ("Sina: …"), e.g. a reply first written in Take turns and regenerated as a scene.
-      const blocks = m?.speaker && !hasCastLines(text, ix.people) ? splitTurn(text, speakerOf(m).name) : parseScene(text, castNames());
+      // One-on-one: everything with speech is the character's; plain prose is narration.
+      const blocks = !ix ? splitTurn(text, ch.name) : m?.speaker && !hasCastLines(text, ix.people) ? splitTurn(text, speakerOf(m).name) : parseScene(text, castNames());
       return blocks.map((b) => {
         if (b.kind === 'narr') return blockHTML({ kind: 'narr' }, b.text);
-        const r = resolveSpeaker(b.name, ix.people, me().name);
+        const r = ix ? resolveSpeaker(b.name, ix.people, me().name) : { kind: 'line', who: ch };
         let save = false;
         if (r.kind === 'passenger' && m && !streaming) {
           const key = r.name.toLowerCase();
@@ -212,7 +216,7 @@ export async function chatView(id, focusId = null) {
         (chat.passengers || []).filter((p) => !p.line).map((p) => `<button type="button" class="ab pass press" data-pass="${esc(p.name)}" aria-label="${esc(p.name)}, a passenger. Tap to save as a line.">${esc(p.name)}</button>`).join('');
     }
     function msgHTML(m, i, enter = false) {
-      if (ix) return sceneMsgHTML(m, i, enter);
+      if (story) return sceneMsgHTML(m, i, enter);
       const cls = `msg ${m.role === 'user' ? 'user' : 'ai'}${enter ? ' enter' : ''}`;
       const star = m.star || m.quotes?.length ? `<span class="star-b" title="In your Logbook">${icon('star', 13)}</span>` : '';
       if (m.role === 'user') return `<div class="${cls}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="bubble">${formatMessage(named(textOf(m), ch, 'you', me()))}${star}</div></div>`;
@@ -370,11 +374,11 @@ export async function chatView(id, focusId = null) {
       caret.setAttribute('aria-hidden', 'true');
       bubble.appendChild(caret);
       let raf = 0;
-      const rd = ix
+      const rd = story
         ? { push: () => raf || (raf = requestAnimationFrame(() => ((raf = 0), !destroyed && paintScene(bubble, text, caret, target)))) }
         : new StreamRenderer(bubble, caret, proseOn());
-      if (ix && prev) paintScene(bubble, prev, caret, target);
-      if (!ix && mode === 'continue' && /\*/.test(prev) && (prev.match(/\*/g) || []).length % 2) rd.inAct = !rd.inAct, rd.open();
+      if (story && prev) paintScene(bubble, prev, caret, target);
+      if (!story && mode === 'continue' && /\*/.test(prev) && (prev.match(/\*/g) || []).length % 2) rd.inAct = !rd.inAct, rd.open();
       toBottom();
 
       setBusy(true);

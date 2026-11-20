@@ -24,7 +24,8 @@ export const NARRATION = {
   soft: { label: 'Soft grey', dark: '#BDBDBD' },
   warm: { label: 'Warm grey', dark: '#D9D6CC' },
 };
-export const DEFAULT_TEXT = { size: 'm', font: 'archivo', dialogue: 'white', narration: 'soft' };
+export const LAYOUTS = { bubbles: { label: 'Bubbles', note: 'Messages in bubbles' }, story: { label: 'Story', note: 'Narration as text, speech on a line' } };
+export const DEFAULT_TEXT = { size: 'm', font: 'archivo', dialogue: 'white', narration: 'soft', layout: 'bubbles' };
 export const textPrefs = () => ({ ...DEFAULT_TEXT, ...(S.settings.text || {}) });
 
 const loaded = new Set();
