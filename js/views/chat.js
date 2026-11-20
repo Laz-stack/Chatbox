@@ -65,6 +65,15 @@ class StreamRenderer {
   }
 }
 
+// While you were away: a gap this long counts as being away; how it reads ("14 hours", "2 days").
+const AWAY_MS = 6 * 3600e3;
+const awaySpan = (ms) => {
+  const h = Math.round(ms / 3600e3);
+  if (h < 24) return `${Math.max(1, h)} hour${h === 1 ? '' : 's'}`;
+  const d = Math.round(h / 24);
+  return d < 7 ? `${d} day${d === 1 ? '' : 's'}` : d < 14 ? 'a week' : `${Math.round(d / 7)} weeks`;
+};
+
 export async function chatView(id, focusId = null) {
   const ix = isInterchangeId(id) ? interchange(id) : null;
   // In an Interchange `ch` stands for the room (title, first member's scene and colour);
@@ -203,7 +212,7 @@ export async function chatView(id, focusId = null) {
       const star = m.star || m.quotes?.length ? `<span class="star-b" title="In your Logbook">${icon('star', 13)}</span>` : '';
       let inner;
       if (m.role === 'user') {
-        if (m.dir) inner = `<p class="scn-dir">${icon(STEER[m.dir]?.icon || 'chev', 14)}${esc(STEER[m.dir]?.label || 'Direction')}</p>`;
+        if (m.dir) inner = dirSign(m);
         else if (m.as) inner = blockHTML({ kind: 'line', who: speakerOf({ speaker: m.as }) }, textOf(m), { by: true });
         else inner = blockHTML({ kind: 'you' }, textOf(m));
       } else inner = sceneParts(textOf(m), m).join('');
@@ -217,8 +226,14 @@ export async function chatView(id, focusId = null) {
         ix.people.map((p) => `<span class="ab" style="--c:${p.line?.color || '#2EAA67'}">${avatarBullet(p, 24)}${esc(p.name)}</span>`).join('') +
         (chat.passengers || []).filter((p) => !p.line).map((p) => `<button type="button" class="ab pass press" data-pass="${esc(p.name)}" aria-label="${esc(p.name)}, a passenger. Tap to save as a line.">${esc(p.name)}</button>`).join('');
     }
+    // A stage direction in the log: Steering bar choices and "While you were away".
+    function dirSign(m) {
+      const label = m.dir === 'away' ? `While you were away · ${awaySpan(m.away?.ms || 0)}` : STEER[m.dir]?.label || 'Direction';
+      return `<p class="scn-dir">${icon(m.dir === 'away' ? 'bell' : STEER[m.dir]?.icon || 'chev', 14)}${esc(label)}</p>`;
+    }
     function msgHTML(m, i, enter = false) {
       if (story) return sceneMsgHTML(m, i, enter);
+      if (m.dir) return `<div class="msg dirline${enter ? ' enter' : ''}" data-i="${i}" data-id="${m.id}">${dirSign(m)}</div>`;
       const cls = `msg ${m.role === 'user' ? 'user' : 'ai'}${enter ? ' enter' : ''}`;
       const star = m.star || m.quotes?.length ? `<span class="star-b" title="In your Logbook">${icon('star', 13)}</span>` : '';
       if (m.role === 'user') return `<div class="${cls}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="bubble">${formatMessage(named(textOf(m), ch, 'you', me()))}${star}</div></div>`;
@@ -576,6 +591,32 @@ export async function chatView(id, focusId = null) {
       await save();
       generate('reply');
     }
+    // While you were away: after a long gap, the character sometimes leaves you a message first.
+    // Checked once per absence; about three times in five it happens.
+    async function maybeAway() {
+      if (S.settings.awayNotes === false || busy || destroyed || input.value.trim() || !connectionFor(ch)) return;
+      const last = chat.messages[chat.messages.length - 1];
+      if (!last || chat.messages.length < 2 || last.error || chat.messages.slice(-2).some((x) => x.dir === 'away')) return;
+      const lastAt = last.at || chat.updatedAt || 0;
+      const gone = Date.now() - lastAt;
+      if (gone < AWAY_MS || (chat.awayAt || 0) > lastAt) return;
+      chat.awayAt = Date.now();
+      if (Math.random() > 0.6) return saveChat(chat, false);
+      const you = me().name?.trim() || 'the user';
+      const span = awaySpan(gone);
+      const note = scene
+        ? `${you} has been away for ${span} and has just come back. Write a short scene of what the characters did meanwhile, ending with one of them leaving ${you} a short message. Time has passed: do not carry on the earlier moment as if no time had gone by.`
+        : `${you} has been away for ${span} and has just come back. Send ${you} a short message now that they're back: one to three sentences, in character, about what you did meanwhile or how the wait felt. Time has passed: do not carry on the earlier moment as if no time had gone by.`;
+      const m = { id: uid(), role: 'user', dir: 'away', away: { ms: gone }, alts: [note], alt: 0, at: Date.now() };
+      chat.messages.push(m);
+      log.querySelector('.empty')?.remove();
+      log.querySelectorAll('.msg-tools').forEach((x) => x.remove());
+      log.insertAdjacentHTML('beforeend', msgHTML(m, chat.messages.length - 1, true));
+      toBottom(true);
+      await saveChat(chat, false);
+      generate('reply');
+    }
+
     // Speak as: your next line is written for one of the cast instead of yourself.
     let speakAs = null;
     function setSpeakAs(id) {
@@ -655,7 +696,8 @@ export async function chatView(id, focusId = null) {
       const i = +el.dataset.i;
       const m = chat.messages[i];
       // A long press fires both our hold timer and the browser's contextmenu: open one menu only.
-      if (!m || busy || menuOpen) return;
+      // Stage directions (Steering, While you were away) hold a note for the AI, not a message: no menu.
+      if (!m || m.dir || busy || menuOpen) return;
       menuOpen = true;
       el.classList.add('lifted');
       const lines = quoteLines(m);
@@ -921,7 +963,7 @@ export async function chatView(id, focusId = null) {
       for (const m of chat.messages) {
         if (m.error) continue;
         if (m.dir) {
-          if (m.dir === 'skip') out.push('* * *', '');
+          if (m.dir === 'skip' || m.dir === 'away') out.push('* * *', '');
           continue;
         }
         const who = m.role === 'assistant' ? speakerOf(m) : ix ? ix.people[0] : ch;
@@ -1227,7 +1269,10 @@ export async function chatView(id, focusId = null) {
       focusEl.scrollIntoView({ block: 'center' });
       focusEl.classList.add('found');
       setTimeout(() => focusEl.classList.remove('found'), 2200);
-    } else if (!matchMedia('(pointer: coarse)').matches) input.focus({ preventScroll: true });
+    } else {
+      if (!matchMedia('(pointer: coarse)').matches) input.focus({ preventScroll: true });
+      setTimeout(() => maybeAway(), 700);
+    }
   }
 
   return {
