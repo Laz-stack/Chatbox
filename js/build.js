@@ -16,7 +16,7 @@ export function openBuildSheet() {
       <a class="bopt red press" href="#/edit/new" data-close><span class="bo-ic">${icon('track', 30)}</span><span class="bo-tx"><b>New line</b><span>Create a character</span></span>${arrow(28, 'currentColor')}</a>
       ${
         canMeet
-          ? `<a class="bopt yel press" href="#/interchange/new" data-close>${meet}<span class="bo-tx"><b>Interchange</b><span>A group chat where 2–3 lines meet</span></span>${arrow(28, 'currentColor')}</a>`
+          ? `<a class="bopt yel press" href="#/interchange/new" data-close>${meet}<span class="bo-tx"><b>Interchange</b><span>A group chat where 2–5 lines meet</span></span>${arrow(28, 'currentColor')}</a>`
           : `<div class="bopt off">${meet}<span class="bo-tx"><b>Interchange</b><span>Make at least two lines first, then let them meet.</span></span></div>`
       }
       <label class="bopt imp press"><span class="bo-ic">${icon('upload', 28)}</span><span class="bo-tx"><b>Import</b><span>A card, a ZIP of cards and lorebooks, or a lorebook</span></span>${arrow(28, 'currentColor')}<input type="file" class="vh" id="buildImport" multiple accept=".zip,.png,.json,application/zip,image/png,application/json"></label>`,

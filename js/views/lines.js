@@ -2,14 +2,20 @@
 // and a search across names, taglines and every message in every chat.
 import { S, textOf, named, departures, logbook, character, lastMessage, interchange, latestChat, chatsFor } from '../store.js';
 import { esc, ago, agoLong, plain, inkOn, debounce, formatMessage } from '../util.js';
-import { title2, avatarBullet, tabbar, icon } from '../ui.js';
+import { title2, avatarBullet, tabbar, icon, groupAvatar } from '../ui.js';
+import { startImport } from './import.js';
 
 const FILTERS = [
   ['all', 'All'],
   ['recent', 'Recent'],
   ['starred', 'Starred'],
+  ['narrators', 'One narrator'],
   ['interchanges', 'Interchanges'],
 ];
+
+// A character imported as one narrator for a multi-character card.
+export const isNarrator = (c) => !!(c.narrator || (c.source?.story && c.name === c.source.story));
+const section = (title, n, rows) => (n ? `<h2 class="ln-sec">${title}<span class="num">${n}</span></h2><div class="index">${rows}</div>` : '');
 
 const colorVars = (c) => {
   const col = c.line?.color || '#2EAA67';
@@ -26,7 +32,7 @@ function lineRow(c) {
 function ixRow(ix) {
   const chat = latestChat(ix.id);
   const when = chat && chat.messages.some((m) => m.role === 'user') ? ago(chat.updatedAt) : 'new';
-  return `<a class="ix ixg press" href="#/chat/${ix.id}" aria-label="Open ${esc(ix.title)}"><span class="meet">${ix.people.map((p, i) => avatarBullet(p, 40, i ? 'margin-left:-14px' : '')).join('')}</span><span class="row-tx"><span class="row-t">${esc(ix.title)}</span><span class="row-s">${ix.mode === 'scene' ? 'Carriage' : 'Interchange'} · ${ix.people.map((p) => esc(p.name)).join(', ')}</span></span><span class="ix-t num">${when}</span></a>`;
+  return `<a class="ix ixg press" href="#/chat/${ix.id}" aria-label="Open ${esc(ix.title)}">${groupAvatar(ix, 44)}<span class="row-tx"><span class="row-t">${esc(ix.title)}</span><span class="row-s">${ix.mode === 'scene' ? 'Carriage' : 'Interchange'} · ${ix.people.map((p) => esc(p.name)).join(', ')}</span></span><span class="ix-t num">${when}</span></a>`;
 }
 
 function departureRow({ c, chat, ix }) {
@@ -93,20 +99,26 @@ export function linesView(filter = 'all') {
     }
     if (filter === 'interchanges') {
       const all = S.interchanges.map((x) => interchange(x.id)).filter(Boolean);
-      return `<div class="index">${all.map(ixRow).join('')}<a class="ix ix-new press" href="#/interchange/new"><span class="bullet ix-new-b" style="width:44px;height:44px">${icon('track', 22)}</span><span class="row-tx"><span class="row-t">New interchange</span><span class="row-s">Let 2–3 lines meet in one chat</span></span></a></div>`;
+      return `<div class="index">${all.map(ixRow).join('')}<a class="ix ix-new press" href="#/interchange/new"><span class="bullet ix-new-b" style="width:44px;height:44px">${icon('track', 22)}</span><span class="row-tx"><span class="row-t">New interchange</span><span class="row-s">Let 2–5 lines meet in one chat</span></span></a></div>`;
+    }
+    if (filter === 'narrators') {
+      const list = sorted.filter(isNarrator);
+      return list.length ? `<div class="index">${list.map(lineRow).join('')}</div>` : `<p class="search-none">No narrators yet. Import a card with several characters and choose One narrator.</p>`;
     }
     if (filter === 'starred') {
       const log = logbook();
       return log.length ? `<div class="roll">${log.map(starRow).join('')}</div>` : `<p class="search-none">Nothing starred yet. Long-press a message in a chat and tap Star.</p>`;
     }
     const groups = S.interchanges.map((x) => interchange(x.id)).filter(Boolean);
-    return `<div class="index">${sorted.map(lineRow).join('')}${groups.map(ixRow).join('')}<a class="ix ix-new press" href="#/edit/new">${`<span class="bullet ix-new-b" style="width:44px;height:44px">${icon('track', 22)}</span>`}<span class="row-tx"><span class="row-t">New line</span><span class="row-s">Create a character</span></span></a></div>`;
+    const chars = sorted.filter((c) => !isNarrator(c));
+    const narr = sorted.filter(isNarrator);
+    return section('Characters', chars.length, chars.map(lineRow).join('')) + section('One narrator', narr.length, narr.map(lineRow).join('')) + section('Interchanges', groups.length, groups.map(ixRow).join('')) + `<div class="index" style="margin-top:12px"><a class="ix ix-new press" href="#/edit/new">${`<span class="bullet ix-new-b" style="width:44px;height:44px">${icon('track', 22)}</span>`}<span class="row-tx"><span class="row-t">New line</span><span class="row-s">Create a character</span></span></a></div>`;
   };
 
   const html = `<div class="screen">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
       ${title2('Lines', 'Where to?')}
-      <label class="ibtn press" title="Import a character card" style="cursor:pointer">${icon('upload')}<span class="vh">Import a character card</span><input type="file" accept=".png,.json,image/png,application/json" id="linesCardIn" class="vh" multiple></label>
+      <label class="ibtn press" title="Import a character card" style="cursor:pointer">${icon('upload')}<span class="vh">Import a character card</span><input type="file" accept=".zip,.png,.json,application/zip,image/png,application/json" id="linesCardIn" class="vh" multiple></label>
     </div>
     <label class="search">${icon('search', 20)}<input id="q" type="search" placeholder="Name, line or something they said" aria-label="Search lines and messages" autocomplete="off" enterkeyhint="search"></label>
     <div class="chips-f" role="tablist" aria-label="Show">${FILTERS.map(([k, l]) => `<a class="press${k === filter ? ' on' : ''}" role="tab" aria-selected="${k === filter}" href="#/lines${k === 'all' ? '' : '/' + k}">${l}</a>`).join('')}</div>
@@ -128,8 +140,8 @@ export function linesView(filter = 'all') {
       }, 120);
       input.addEventListener('input', run);
       root.querySelector('#linesCardIn').addEventListener('change', async (e) => {
-        const { importCardFiles } = await import('./settings.js');
-        importCardFiles(e.target);
+        startImport([...e.target.files]);
+        e.target.value = '';
       });
     },
   };

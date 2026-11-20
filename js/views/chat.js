@@ -10,7 +10,7 @@ import { sceneSVG } from '../scenes.js';
 import { sceneSheet as openSceneSheet } from '../scenepicker.js';
 import { speak, stopSpeaking, ttsSupported } from '../tts.js';
 import { exportCardPng } from '../cards.js';
-import { ibtn, avatarBullet, icon, arrow, openMenu, openSheet, toast, confirmSheet, autosize, reel } from '../ui.js';
+import { ibtn, avatarBullet, icon, arrow, openMenu, openSheet, toast, confirmSheet, autosize, reel, groupAvatar } from '../ui.js';
 
 // Streams text into a bubble word by word, keeping *actions* italic as they arrive.
 class StreamRenderer {
@@ -91,7 +91,7 @@ export async function chatView(id, focusId = null) {
     <div class="chat-scene" id="scene" aria-hidden="true">${ch.scene && ch.scene !== 'none' ? sceneSVG(ch.scene) : ''}</div>
     <header class="chat-head">
       ${ibtn('back', 'Back to home', { href: '#/' })}
-      <button type="button" class="chat-who press" id="whoBtn" aria-haspopup="dialog" aria-label="${esc(ch.name)}: chat details">${ix ? `<span class="meet">${ix.people.slice(0, 4).map((p, i) => avatarBullet(p, 32, i ? 'margin-left:-10px' : '')).join('')}</span>` : avatarBullet(ch, 36, '', `head:${ch.id}`)}<span class="who-tx"><span class="who-n">${esc(ch.name)}</span><span class="who-s"><span class="who-meta" id="meta"><span class="dot${conn0?.provider === 'demo' ? ' demo' : ''}" id="connDot"></span><span class="ell" id="connName">${esc(connText(conn0))}</span><span id="tokPill" ${S.settings.showCounter ? '' : 'hidden'}>· <span class="num" id="tokN">…</span></span><span id="noteWrap" ${!ix && chat.notes.length ? '' : 'hidden'}>· ${icon('pin', 12)}<span id="noteN">${chat.notes.length}</span></span></span><span id="status" hidden></span></span></span></button>
+      <button type="button" class="chat-who press" id="whoBtn" aria-haspopup="dialog" aria-label="${esc(ch.name)}: chat details">${ix ? groupAvatar(ix, 36) : avatarBullet(ch, 36, '', `head:${ch.id}`)}<span class="who-tx"><span class="who-n">${esc(ch.name)}</span><span class="who-s"><span class="who-meta" id="meta"><span class="dot${conn0?.provider === 'demo' ? ' demo' : ''}" id="connDot"></span><span class="ell" id="connName">${esc(connText(conn0))}</span><span id="tokPill" ${S.settings.showCounter ? '' : 'hidden'}>· <span class="num" id="tokN">…</span></span><span id="noteWrap" ${!ix && chat.notes.length ? '' : 'hidden'}>· ${icon('pin', 12)}<span id="noteN">${chat.notes.length}</span></span></span><span id="status" hidden></span></span></span></button>
       ${ibtn('more', 'Chat options', { id: 'moreBtn' })}
     </header>
     <div class="log${ix ? ' story' : ''}" id="log" role="log" aria-live="polite" aria-relevant="additions" aria-label="Chat with ${esc(ch.name)}"></div>
@@ -1033,7 +1033,7 @@ export async function chatView(id, focusId = null) {
         html: `<h2 class="sheet-title">${esc(ch.name)}</h2>
           ${ix ? `<p class="info-lbl">${scene ? 'On board' : 'In this interchange'}</p><div class="aboard" id="aboard" role="group" aria-label="On board"></div>` : ''}
           <div class="info-list">
-            ${linkRow(ix ? `#/interchange/${ix.id}` : `#/edit/${ch.id}`, 'card', ix ? (scene ? 'Edit carriage' : 'Edit interchange') : 'Edit character', ix ? 'Cast, world and scene' : 'Sheet, picture and first message')}
+            ${linkRow(ix ? `#/interchange/${ix.id}` : `#/edit/${ch.id}`, 'card', ix ? (scene ? 'Edit carriage' : 'Edit interchange') : 'Edit character', ix ? 'Picture, cast, world and scene' : 'Sheet, picture and first message')}
             ${linkRow('#/connections', 'link', esc(connText(c)), 'Connection · tap to switch')}
             ${linkRow(`#/final/${chat.id}`, 'layers', `${root.querySelector('#tokN').textContent} tokens`, 'Sent with the next reply · see the final prompt')}
             ${ix ? '' : linkRow(`#/memory/${chat.id}`, 'pin', `${nt} note${nt === 1 ? '' : 's'}`, 'Memory and pinned notes')}
