@@ -798,7 +798,7 @@ textarea.bp-ta.tall { min-height: 96px; }
 .msg.scene.ai + .msg.scene.mine, .msg.scene.mine + .msg.scene.ai { margin-top: 16px; }
 .scn p { margin: 0; }
 .scn-narr { margin: 8px 0 !important; color: #BDBDBD; font: 400 16px/1.6 var(--font); }
-.scn-narr .act { font-style: italic; }
+.scn-narr .act { font-style: italic; color: #BDBDBD; }
 .scn-b { position: relative; padding-left: 14px; }
 .scn-b::before { content: ''; position: absolute; left: 0; top: 0; bottom: 2px; width: 4px; border-radius: 2px; background: var(--c); }
 .scn-b.pass::before { width: 0; background: none; border-left: 2px dashed rgba(236, 236, 236, .55); }

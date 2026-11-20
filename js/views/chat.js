@@ -3,7 +3,7 @@ import { STEER, parseScene, splitTurn, resolveSpeaker, passengersIn, demoScene }
 import { complete, PROVIDERS } from '../providers.js';
 import { buildPrompt } from '../prompt.js';
 import { shouldSummarize, summarize } from '../memory.js';
-import { esc, uid, formatMessage, fmtNum, estimateTokens, inkOn, ago, plain, detectMood, copyText, download, slug, reducedMotion, motion, lineAccent, EASE_OUT } from '../util.js';
+import { esc, uid, formatMessage, markProse, fmtNum, estimateTokens, inkOn, ago, plain, detectMood, copyText, download, slug, reducedMotion, motion, lineAccent, EASE_OUT } from '../util.js';
 import { avatarTile } from '../avatar.js';
 import { sceneSVG } from '../scenes.js';
 import { sceneSheet as openSceneSheet } from '../scenepicker.js';
@@ -13,25 +13,41 @@ import { ibtn, avatarBullet, icon, arrow, openMenu, openSheet, toast, confirmShe
 
 // Streams text into a bubble word by word, keeping *actions* italic as they arrive.
 class StreamRenderer {
-  constructor(el, caret) {
+  // prose: text outside "quotes" shows as an action while it streams, matching markProse().
+  constructor(el, caret, prose = false) {
     this.el = el;
     this.caret = caret;
     this.inAct = false;
+    this.prose = prose;
+    this.inQuote = null;
     this.open();
   }
   open() {
     this.cur = document.createElement('span');
-    if (this.inAct) this.cur.className = 'act';
+    if (this.inAct || (this.prose && !this.inQuote)) this.cur.className = 'act';
     this.el.insertBefore(this.cur, this.caret);
   }
+  tok(t) {
+    const s = document.createElement('span');
+    s.className = 'tok';
+    s.textContent = t;
+    this.cur.appendChild(s);
+  }
   push(text) {
-    for (const part of text.split(/(\*|\n|\s+)/)) {
+    for (const part of text.split(/(\*|\n|\s+|["“”])/)) {
       if (!part) continue;
+      if (this.prose && !this.inAct && /^["“”]$/.test(part)) {
+        if (!this.inQuote) (this.inQuote = part === '“' ? '”' : '"'), this.open(), this.tok(part);
+        else if (part === this.inQuote || part === '”') this.tok(part), (this.inQuote = null), this.open();
+        else this.tok(part);
+        continue;
+      }
       if (part === '*') {
         this.inAct = !this.inAct;
         this.open();
       } else if (part === '\n') {
         this.el.insertBefore(document.createElement('br'), this.caret);
+        this.inQuote = null;
         this.open();
       } else if (/^\s+$/.test(part)) {
         this.cur.appendChild(document.createTextNode(part.replace(/\n/g, ' ')));
@@ -120,15 +136,18 @@ export async function chatView(id, focusId = null) {
       return pager || read || lore ? `<div class="msg-tools">${pager}${read}${lore}</div>` : '';
     }
     // ---------- Carriage: the story layout ----------
+    // AI text with unmarked prose shown as actions (Reply style › Formatting: Asterisks, the default).
+    const proseOn = () => (S.settings.replyStyle?.format || 'asterisks') === 'asterisks';
+    const showAi = (t) => (proseOn() ? markProse(t) : t);
     const fillS = (t, who) => named(t, who || ix.people[0], 'you', me());
     // One block's markup; data-k lets the streamer update a block in place instead of rebuilding it.
     function blockHTML(r, text, { by = false, save = false } = {}) {
-      if (r.kind === 'narr') return `<p class="scn-narr" data-k="narr">${formatMessage(fillS(text))}</p>`;
+      if (r.kind === 'narr') return `<p class="scn-narr" data-k="narr">${formatMessage(showAi(fillS(text)))}</p>`;
       if (r.kind === 'passenger')
-        return `<div class="scn-b pass" data-k="p:${esc(r.name.toLowerCase())}"><span class="scn-tag">${esc(r.name)}</span><div class="scn-t">${formatMessage(fillS(text))}</div>${save ? `<button type="button" class="scn-save press" data-pass="${esc(r.name)}">${icon('plus', 14)}Save as a line</button>` : ''}</div>`;
+        return `<div class="scn-b pass" data-k="p:${esc(r.name.toLowerCase())}"><span class="scn-tag">${esc(r.name)}</span><div class="scn-t">${formatMessage(showAi(fillS(text)))}</div>${save ? `<button type="button" class="scn-save press" data-pass="${esc(r.name)}">${icon('plus', 14)}Save as a line</button>` : ''}</div>`;
       const who = r.kind === 'you' ? youWho() : r.who;
       const col = who.line?.color || '#2EAA67';
-      return `<div class="scn-b${r.kind === 'you' ? ' you' : ''}" data-k="${r.kind === 'you' ? 'you' : 'l:' + who.id}" style="--c:${col};--ink:${inkOn(col)}"><span class="scn-tag">${avatarBullet(who, 20)}${esc(r.kind === 'you' ? 'You' : who.name)}${by ? '<small>· you wrote</small>' : ''}</span><div class="scn-t">${formatMessage(fillS(text, r.who))}</div></div>`;
+      return `<div class="scn-b${r.kind === 'you' ? ' you' : ''}" data-k="${r.kind === 'you' ? 'you' : 'l:' + who.id}" style="--c:${col};--ink:${inkOn(col)}"><span class="scn-tag">${avatarBullet(who, 20)}${esc(r.kind === 'you' ? 'You' : who.name)}${by ? '<small>· you wrote</small>' : ''}</span><div class="scn-t">${formatMessage(r.kind === 'you' || by ? fillS(text, r.who) : showAi(fillS(text, r.who)))}</div></div>`;
     }
     function sceneParts(text, m, streaming = false) {
       const shown = new Set();
@@ -199,7 +218,7 @@ export async function chatView(id, focusId = null) {
       if (m.role === 'user') return `<div class="${cls}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="bubble">${formatMessage(named(textOf(m), ch, 'you', me()))}${star}</div></div>`;
       const sp = speakerOf(m);
       const tag = ix ? `<span class="spk-tag" style="--c:${sp.line?.color || '#2EAA67'};--ink:${inkOn(sp.line?.color || '#2EAA67')}">${esc(sp.name)}</span>` : '';
-      return `<div class="${cls}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}">${avatarTile(sp, 30, { expr: m.mood || 'happy', radius: 10, cls: 'msg-av' })}<div class="msg-col"><div class="bubble">${tag}${formatMessage(named(textOf(m), sp, 'you', me()))}${star}</div>${toolsHTML(m, i)}</div></div>`;
+      return `<div class="${cls}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}">${avatarTile(sp, 30, { expr: m.mood || 'happy', radius: 10, cls: 'msg-av' })}<div class="msg-col"><div class="bubble">${tag}${formatMessage(showAi(named(textOf(m), sp, 'you', me())))}${star}</div>${toolsHTML(m, i)}</div></div>`;
     }
     function renderAll() {
       const cut = chat.summary?.upto || 0;
@@ -342,7 +361,7 @@ export async function chatView(id, focusId = null) {
         bubble.style.minHeight = bubble.offsetHeight + 'px';
         await motion(bubble, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateX(-24px)' }], { duration: 160, easing: 'ease-in' }).finished.catch(() => {});
       }
-      bubble.innerHTML = mode === 'continue' ? formatMessage(prev) : '';
+      bubble.innerHTML = mode === 'continue' ? formatMessage(showAi(prev)) : '';
       const caret = document.createElement('span');
       caret.className = 'caret';
       caret.setAttribute('aria-hidden', 'true');
@@ -350,7 +369,7 @@ export async function chatView(id, focusId = null) {
       let raf = 0;
       const rd = ix
         ? { push: () => raf || (raf = requestAnimationFrame(() => ((raf = 0), !destroyed && paintScene(bubble, text, caret, target)))) }
-        : new StreamRenderer(bubble, caret);
+        : new StreamRenderer(bubble, caret, proseOn());
       if (ix && prev) paintScene(bubble, prev, caret, target);
       if (!ix && mode === 'continue' && /\*/.test(prev) && (prev.match(/\*/g) || []).length % 2) rd.inAct = !rd.inAct, rd.open();
       toBottom();
@@ -516,7 +535,7 @@ export async function chatView(id, focusId = null) {
       openSheet({
         label: name,
         html: `<h2 class="sheet-title">${esc(name)}</h2><p class="sheet-p">A passenger in this scene. Save them as a line to give them a colour, a Blueprint and chats of their own.${room ? ' They also join this carriage.' : ''}</p>${
-          said.length ? `<div class="pass-said">${said.slice(-3).map((t) => `<p>${formatMessage(fillS(t))}</p>`).join('')}</div>` : ''
+          said.length ? `<div class="pass-said">${said.slice(-3).map((t) => `<p>${formatMessage(showAi(fillS(t)))}</p>`).join('')}</div>` : ''
         }<button type="button" class="btn-primary press" data-save><span>Save as a line</span>${icon('plus', 24)}</button>`,
         onMount(s, close) {
           s.querySelector('[data-save]').onclick = () => (close(), savePassenger(name, said));
