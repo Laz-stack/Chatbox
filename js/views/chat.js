@@ -1,5 +1,5 @@
 import { S, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, named, resetChat, recordFare, interchange, isInterchangeId, chatsFor, startNewChat, deleteChat, blankCharacter, saveInterchange, personaFor, personaById, newChat } from '../store.js';
-import { STEER, parseScene, resolveSpeaker, passengersIn, demoScene } from '../scene.js';
+import { STEER, parseScene, splitTurn, resolveSpeaker, passengersIn, demoScene } from '../scene.js';
 import { complete, PROVIDERS } from '../providers.js';
 import { buildPrompt } from '../prompt.js';
 import { shouldSummarize, summarize } from '../memory.js';
@@ -83,7 +83,7 @@ export async function chatView(id, focusId = null) {
       <a class="pill y press end" href="#/memory/${chat.id}" ${ix ? 'hidden' : ''}>${icon('pin', 15)}<span id="noteN">${chat.notes.length}</span>&nbsp;note${chat.notes.length === 1 ? '' : 's'}</a>
     </div>
     ${scene ? '<div class="aboard" id="aboard" role="group" aria-label="On board"></div>' : ''}
-    <div class="log${scene ? ' story' : ''}" id="log" role="log" aria-live="polite" aria-relevant="additions" aria-label="Chat with ${esc(ch.name)}"></div>
+    <div class="log${ix ? ' story' : ''}" id="log" role="log" aria-live="polite" aria-relevant="additions" aria-label="Chat with ${esc(ch.name)}"></div>
     <div class="chips${scene ? ' steer' : ''}" id="chips"></div>
     ${ix && !scene ? '<div class="nextbar" id="nextbar" role="radiogroup" aria-label="Who answers next"></div>' : ''}
     <form class="composer" id="composer">
@@ -130,13 +130,15 @@ export async function chatView(id, focusId = null) {
       const col = who.line?.color || '#2EAA67';
       return `<div class="scn-b${r.kind === 'you' ? ' you' : ''}" data-k="${r.kind === 'you' ? 'you' : 'l:' + who.id}" style="--c:${col};--ink:${inkOn(col)}"><span class="scn-tag">${avatarBullet(who, 20)}${esc(r.kind === 'you' ? 'You' : who.name)}${by ? '<small>· you wrote</small>' : ''}</span><div class="scn-t">${formatMessage(fillS(text, r.who))}</div></div>`;
     }
-    function sceneParts(text, m) {
+    function sceneParts(text, m, streaming = false) {
       const shown = new Set();
-      return parseScene(text).map((b) => {
+      // A Take-turns reply has one known speaker: split it into narration and that speaker's lines.
+      const blocks = m?.speaker ? splitTurn(text, speakerOf(m).name) : parseScene(text);
+      return blocks.map((b) => {
         if (b.kind === 'narr') return blockHTML({ kind: 'narr' }, b.text);
         const r = resolveSpeaker(b.name, ix.people, me().name);
         let save = false;
-        if (r.kind === 'passenger' && m) {
+        if (r.kind === 'passenger' && m && !streaming) {
           const key = r.name.toLowerCase();
           const pe = (chat.passengers || []).find((x) => x.name.toLowerCase() === key);
           save = !!pe && !pe.line && pe.first === m.id && !shown.has(key);
@@ -146,9 +148,9 @@ export async function chatView(id, focusId = null) {
       });
     }
     // While streaming: keep finished blocks, update the growing one, append new ones (their tags fade in).
-    function paintScene(box, text, caret) {
+    function paintScene(box, text, caret, m = null) {
       caret.remove();
-      const parts = sceneParts(text, null);
+      const parts = sceneParts(text, m, true);
       const tpl = document.createElement('template');
       parts.forEach((h, j) => {
         tpl.innerHTML = h;
@@ -191,7 +193,7 @@ export async function chatView(id, focusId = null) {
         (chat.passengers || []).filter((p) => !p.line).map((p) => `<button type="button" class="ab pass press" data-pass="${esc(p.name)}" aria-label="${esc(p.name)}, a passenger. Tap to save as a line.">${esc(p.name)}</button>`).join('');
     }
     function msgHTML(m, i, enter = false) {
-      if (scene) return sceneMsgHTML(m, i, enter);
+      if (ix) return sceneMsgHTML(m, i, enter);
       const cls = `msg ${m.role === 'user' ? 'user' : 'ai'}${enter ? ' enter' : ''}`;
       const star = m.star ? `<span class="star-b" title="In your Logbook">${icon('star', 13)}</span>` : '';
       if (m.role === 'user') return `<div class="${cls}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="bubble">${formatMessage(named(textOf(m), ch, 'you', me()))}${star}</div></div>`;
@@ -346,11 +348,11 @@ export async function chatView(id, focusId = null) {
       caret.setAttribute('aria-hidden', 'true');
       bubble.appendChild(caret);
       let raf = 0;
-      const rd = scene
-        ? { push: () => raf || (raf = requestAnimationFrame(() => ((raf = 0), !destroyed && paintScene(bubble, text, caret)))) }
+      const rd = ix
+        ? { push: () => raf || (raf = requestAnimationFrame(() => ((raf = 0), !destroyed && paintScene(bubble, text, caret, target)))) }
         : new StreamRenderer(bubble, caret);
-      if (scene && prev) paintScene(bubble, prev, caret);
-      if (!scene && mode === 'continue' && /\*/.test(prev) && (prev.match(/\*/g) || []).length % 2) rd.inAct = !rd.inAct, rd.open();
+      if (ix && prev) paintScene(bubble, prev, caret, target);
+      if (!ix && mode === 'continue' && /\*/.test(prev) && (prev.match(/\*/g) || []).length % 2) rd.inAct = !rd.inAct, rd.open();
       toBottom();
 
       setBusy(true);
@@ -647,7 +649,10 @@ export async function chatView(id, focusId = null) {
     root.querySelector('#moreBtn').addEventListener('click', (e) =>
       openMenu(e.currentTarget, [
         ...(ix
-          ? [{ icon: 'card', label: scene ? 'Edit carriage' : 'Edit interchange', on: () => (location.hash = `#/interchange/${ix.id}`) }]
+          ? [
+              { icon: 'card', label: scene ? 'Edit carriage' : 'Edit interchange', on: () => (location.hash = `#/interchange/${ix.id}`) },
+              { icon: 'talk', label: scene ? 'Switch to Take turns' : 'Switch to One scene', on: switchMode },
+            ]
           : [{ icon: 'card', label: 'Edit character', on: () => (location.hash = `#/edit/${ch.id}`) }]),
         ...(ix
           ? []
@@ -788,6 +793,17 @@ export async function chatView(id, focusId = null) {
       }
       download(new Blob([out.join('\n')], { type: 'text/markdown' }), `${slug(title) || 'chat'}.story.md`);
       toast('Story saved as a Markdown file');
+    }
+
+    // ---------- Interchange: Take turns <-> One scene, keeping the chat ----------
+    async function switchMode() {
+      const raw = S.interchanges.find((x) => x.id === ix.id);
+      if (!raw || busy) return;
+      if (scene && raw.members.length > 3) return toast('Take turns fits three lines. Remove some in Edit carriage first.');
+      raw.mode = scene ? 'turns' : 'scene';
+      await saveInterchange(raw);
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+      setTimeout(() => toast(raw.mode === 'scene' ? 'One scene: everyone can talk at once, with narration.' : 'Take turns: one speaker per reply. Pick who answers next.'), 450);
     }
 
     // ---------- who you are in this chat ----------

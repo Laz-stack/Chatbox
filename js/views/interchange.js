@@ -9,7 +9,7 @@ export function interchangeView(id) {
   if (!isNew && !existing) return null;
   const d = existing
     ? { id: existing.id, name: existing.name || '', members: existing.people.map((p) => p.id), scene: existing.scene || '', mode: existing.mode || 'turns', passengers: existing.passengers !== false }
-    : { id: 'ix-' + uid(), name: '', members: [], scene: '', mode: 'turns', passengers: true };
+    : { id: 'ix-' + uid(), name: '', members: [], scene: '', mode: 'scene', passengers: true };
   const max = () => (d.mode === 'scene' ? 5 : 3);
   const hint = () => (d.mode === 'scene' ? `Pick 2 to 5 lines. One scene: the AI narrates and voices everyone at once.` : `Pick 2 or 3 lines. They take turns, and you choose who answers next.`);
 
