@@ -478,6 +478,7 @@ export async function branchChat(chat, i) {
   if (chat.summary && chat.summary.upto <= i + 1) c.summary = structuredClone(chat.summary);
   const ids = new Set(c.messages.map((m) => m.id));
   if (chat.route) c.route = structuredClone(chat.route.filter((s) => ids.has(s.msgId)));
+  if (chat.chapters) c.chapters = structuredClone(chat.chapters.filter((x) => ids.has(x.msgId)));
   if (chat.bonds) c.bonds = bondsAt(chat.bonds, ids);
   if (chat.ties) c.ties = tiesAt(chat.ties, ids);
   if (chat.diary) c.diary = structuredClone(chat.diary.filter((e) => ids.has(e.msgId)));

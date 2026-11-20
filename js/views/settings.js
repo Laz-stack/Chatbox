@@ -87,6 +87,7 @@ export function settingsView() {
       row({ id: 'styleRow', ic: 'sliders', bc: 'var(--pink)', fc: '#0A0A0A', title: 'Reply style', sub: `<span id="styleSub">${styleSummary()}</span>` }),
       `<div class="row">${'<span class="row-ic" style="background:var(--green2);color:#0A0A0A">' + icon('spark', 19) + '</span>'}<span class="row-tx"><span class="row-t">Auto-summary</span><span class="row-s">Condense long chats so they keep fitting</span></span>${sw('tAuto', S.settings.autoSummary, 'Auto-summary')}</div>`,
       `<div class="row"><span class="row-ic" style="background:var(--orange);color:#0A0A0A">${icon('bell', 19)}</span><span class="row-tx"><span class="row-t">While you were away</span><span class="row-s">After a long gap, characters sometimes leave you a message (uses one reply)</span></span>${sw('tAway', S.settings.awayNotes !== false, 'While you were away')}</div>`,
+      `<div class="row"><span class="row-ic" style="background:var(--orange);color:#0A0A0A">${icon('restart', 19)}</span><span class="row-tx"><span class="row-t">Recap when you come back</span><span class="row-s">After six hours or more away, a short “Previously” at the end of the chat (uses one small Helper request)</span></span>${sw('tRecap', S.settings.recaps !== false, 'Recap when you come back')}</div>`,
       `<div class="row"><span class="row-ic" style="background:var(--lilac);color:#0A0A0A">${icon('layers', 19)}</span><span class="row-tx"><span class="row-t">Token counter</span><span class="row-s">Show the estimate in the chat header</span></span>${sw('tCounter', S.settings.showCounter, 'Token counter')}</div>`,
       ttsSupported
         ? `<div class="row"><span class="row-ic" style="background:var(--pink);color:#0A0A0A">${icon('speaker', 19)}</span><span class="row-tx"><span class="row-t">Read replies aloud</span><span class="row-s">Uses your browser’s voices</span></span>${sw('tRead', S.settings.readAloud, 'Read replies aloud')}</div>` +
@@ -124,6 +125,7 @@ export function settingsView() {
       });
       bindSwitch(root.querySelector('#tAuto'), (x) => ((S.settings.autoSummary = x), saveSettings()));
       bindSwitch(root.querySelector('#tAway'), (x) => ((S.settings.awayNotes = x), saveSettings()));
+      bindSwitch(root.querySelector('#tRecap'), (x) => ((S.settings.recaps = x), saveSettings()));
       bindSwitch(root.querySelector('#tCounter'), (x) => ((S.settings.showCounter = x), saveSettings()));
       bindSwitch(root.querySelector('#tRead'), (x) => ((S.settings.readAloud = x), saveSettings()));
       root.querySelector('#voiceRow')?.addEventListener('click', (e) => {
