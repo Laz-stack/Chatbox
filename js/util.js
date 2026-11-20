@@ -84,6 +84,8 @@ const unesc = (s) => s.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&
 
 export function formatMessage(text) {
   return esc(text || '')
+    .replace(/&quot;([^\n]+?)&quot;/g, '<span class="say">&quot;$1&quot;</span>')
+    .replace(/“([^”\n]+)”/g, '<span class="say">“$1”</span>')
     .replace(/!\[([^\]\n]*)\]\((https?:\/\/[^)\s]+)\)/g, (_, alt, url) => `<img class="msg-img" src="${esc(imageFor(unesc(url)))}" alt="${alt}" loading="lazy" decoding="async">`)
     .replace(/(^|\n)\s*(?:-{3,}|\*{3,}|_{3,})\s*(?=\n|$)/g, '$1<hr class="msg-brk" aria-label="Scene break">')
     .replace(/\*\*([^*\n]+)\*\*/g, '<b class="dlg">$1</b>')

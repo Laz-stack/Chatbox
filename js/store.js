@@ -215,6 +215,7 @@ export function matchLore(text, lineIds) {
   const t = (text || '').toLowerCase();
   return S.lore.filter((e) => {
     if (!e.on || !e.text?.trim()) return false;
+    if ((S.settings.booksOff || []).includes(e.book || '')) return false;
     if (e.scope === 'lines' && !e.lines.some((id) => lineIds.includes(id))) return false;
     if (e.always) return true;
     return e.keys.some((k) => k.trim() && new RegExp(`(^|[^\\p{L}\\p{N}])${escRe(k.trim().toLowerCase())}($|[^\\p{L}\\p{N}])`, 'u').test(t));
