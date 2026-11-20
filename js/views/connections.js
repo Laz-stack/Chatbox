@@ -3,6 +3,9 @@ import { PROVIDERS, testConnection, proxyAvailable } from '../providers.js';
 import { esc, motion, uid } from '../util.js';
 import { topbar, title2, ibtn, bullet, field, area, toggleRow, bindSwitch, icon, arrow, dial, bindDial, toast, confirmSheet, openSheet, row } from '../ui.js';
 import { helper } from '../helper.js';
+import { picPrefs, picConn, picModel, MODEL_HINTS, STYLES, isDemoPics, picStats, clearPictures } from '../pictures.js';
+import { saveChat } from '../store.js';
+import { PROVIDERS as P2, generateImage } from '../providers.js';
 
 const LETTER_BG = { anthropic: '#FDCD15', openai: '#ECECEC', openrouter: '#B8ACFE', custom: '#2EAA67', demo: '#333333' };
 
@@ -26,6 +29,9 @@ export function connectionsView() {
     <h2 class="sec" style="margin-top:26px">Helper</h2>
     <div class="group">${row({ id: 'helperRow', ic: 'spark', bc: 'var(--lilac)', fc: '#0A0A0A', title: 'Background jobs', sub: `<span id="helperSub">${helperSub()}</span>` })}</div>
     <p class="fhint">Runs Route map and Bonds, summaries, diaries, Lorebook Enhance, the character builder and card import. A cheaper, faster model here saves money; chats still reply with their own connection.</p>
+    <h2 class="sec" style="margin-top:22px">Pictures</h2>
+    <div class="group">${row({ id: 'picRow', ic: 'image', bc: 'var(--pink)', fc: '#0A0A0A', title: 'Scene pictures', sub: `<span id="picSub">${picSub()}</span>` })}</div>
+    <p class="fhint">Paints moments from your chats (long-press a reply › Picture this). Needs an image model: OpenAI (gpt-image-1) or OpenRouter (an image model). Each picture is billed by that provider.</p>
     <div class="note" style="margin-top:18px">${icon('shield', 18)}<span>The active connection answers every chat unless a character picks its own. Keys stay in this browser and go only to the provider you choose.</span></div>
   </div>`;
   return {
@@ -42,6 +48,7 @@ export function connectionsView() {
       // Listen on this page only: the app container is shared by every screen.
       root.querySelector('.screen').addEventListener('click', async (e) => {
         if (e.target.closest('#helperRow')) return helperSheet(helperChanged);
+        if (e.target.closest('#picRow')) return picturesSheet(() => (root.querySelector('#picSub').innerHTML = picSub()));
         const b = e.target.closest('[data-use]');
         if (!b) return;
         S.settings.activeConnectionId = b.dataset.use;
@@ -60,6 +67,73 @@ const helperSub = () => {
   const h = helper();
   return h ? `${esc(connName(h))} · ${esc(h.model || 'no model')}` : 'Same connection as each chat';
 };
+
+// ---------- Pictures: which connection paints, with which model ----------
+const picSub = () => {
+  const c = picConn();
+  return c ? `${esc(connName(c))} · ${esc(picModel(c) || 'demo pictures')}` : 'Off · set up an image model';
+};
+function picturesSheet(onChange) {
+  const list = S.connections.filter((c) => P2[c.provider]?.format !== 'anthropic' && (c.provider === 'demo' || c.apiKey?.trim() || c.provider === 'custom'));
+  const p0 = picPrefs();
+  const opt = (id, t, s) => `<button type="button" class="hp-opt press" role="radio" aria-checked="${(p0.connId || '') === id}" tabindex="${(p0.connId || '') === id ? 0 : -1}" data-pc="${id}"><span class="hp-dot" aria-hidden="true"></span><span class="row-tx"><span class="row-t">${t}</span><span class="row-s">${s}</span></span></button>`;
+  openSheet({
+    label: 'Scene pictures',
+    html: `<h2 class="sheet-title">Scene pictures</h2><p class="sheet-p">Pick the connection that paints. Its key and address are used; the image model is set below.</p>
+      <div class="hp-list" role="radiogroup" aria-label="Pictures connection">${opt('', 'Off', 'No pictures')}${list.map((c) => opt(c.id, esc(connName(c)), c.provider === 'demo' ? 'Placeholder pictures, to try it' : esc(P2[c.provider]?.label || ''))).join('')}</div>
+      <div class="field" style="margin-top:14px" id="pmWrap"><div class="flabel"><label for="pmModel">Image model</label></div><input class="input" id="pmModel" value="${esc(p0.model || '')}" placeholder="${esc(MODEL_HINTS[picConn()?.provider] || 'gpt-image-1')}" autocomplete="off" spellcheck="false"></div>
+      <p class="tx-lbl">Default style</p><div class="ck-chips" role="radiogroup" aria-label="Default style">${Object.entries(STYLES).map(([k, s]) => `<button type="button" class="press" role="radio" aria-checked="${p0.style === k}" data-ps="${k}">${s.label}</button>`).join('')}</div>
+      <button type="button" class="btn-primary plate press" id="pmTest" style="margin-top:16px;justify-content:center"><span>${isDemoPics() ? 'Paint a test' : 'Paint a test (billed)'}</span></button>
+      <div id="pmOut" class="pm-out" aria-live="polite"></div>
+      ${(() => {
+        const st = picStats();
+        return st.n ? `<p class="fhint" style="margin-top:14px">${st.n} picture${st.n === 1 ? '' : 's'} saved · ${(st.bytes / 1048576).toFixed(1)} MB (they sync too). <button type="button" class="btn-text press" id="pmClear" style="display:inline-flex;height:auto;padding:4px 0;color:var(--cream);text-decoration:underline">Delete all pictures</button></p>` : '';
+      })()}`,
+    onMount(s) {
+      const save = async (patch) => {
+        S.settings.pictures = { ...picPrefs(), ...patch };
+        await saveSettings();
+        onChange();
+      };
+      s.querySelector('.hp-list').addEventListener('click', async (e) => {
+        const b = e.target.closest('[data-pc]');
+        if (!b) return;
+        s.querySelectorAll('[data-pc]').forEach((x) => (x.setAttribute('aria-checked', x === b), (x.tabIndex = x === b ? 0 : -1)));
+        await save({ connId: b.dataset.pc || null });
+        s.querySelector('#pmModel').placeholder = MODEL_HINTS[picConn()?.provider] || 'gpt-image-1';
+      });
+      s.querySelector('#pmModel').addEventListener('change', (e) => save({ model: e.target.value.trim() }));
+      s.querySelector('.ck-chips').addEventListener('click', async (e) => {
+        const b = e.target.closest('[data-ps]');
+        if (!b) return;
+        s.querySelectorAll('[data-ps]').forEach((x) => x.setAttribute('aria-checked', x === b));
+        await save({ style: b.dataset.ps });
+      });
+      s.querySelector('#pmClear')?.addEventListener('click', async (e) => {
+        if (!(await confirmSheet({ title: 'Delete all scene pictures?', body: 'Every painted picture is removed from your chats and from the app. Portraits you set stay.', ok: 'Delete all', danger: true }))) return;
+        const n = await clearPictures(saveChat);
+        e.target.closest('p').textContent = `${n} picture${n === 1 ? '' : 's'} deleted.`;
+      });
+      s.querySelector('#pmTest').addEventListener('click', async (e) => {
+        const c = picConn();
+        const out = s.querySelector('#pmOut');
+        if (!c) return (out.textContent = 'Pick a connection first.');
+        const btn = e.currentTarget;
+        btn.classList.add('busy');
+        btn.disabled = true;
+        out.textContent = 'Painting a test picture…';
+        try {
+          const url = await generateImage(c, { model: picModel(c), prompt: `${STYLES[picPrefs().style].words}. A quiet train platform at dusk, warm lamps, light rain. No text.` });
+          out.innerHTML = `<img src="${esc(url)}" alt="Test picture: a train platform at dusk"><span>It works.</span>`;
+        } catch (err) {
+          out.textContent = `${err.message || 'It didn’t work.'} ${err.hint || ''}`;
+        }
+        btn.classList.remove('busy');
+        btn.disabled = false;
+      });
+    },
+  });
+}
 
 // Pick the Helper connection: a cheaper model for the work behind the scenes.
 // Only connections that can actually answer: a model set, and a key unless it's a custom address.

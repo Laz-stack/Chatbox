@@ -246,6 +246,8 @@ window.addEventListener('unhandledrejection', (e) => {
   // list screens (never a chat you might be typing in). With sign-in expired and changes waiting,
   // offer to sign in again once per session.
   startAutoSync();
+  // Tidy scene pictures nothing points to any more (deleted messages and chats).
+  import('./pictures.js').then((m) => m.gcPictures()).catch(() => {});
   addEventListener('chatbox-synced', () => /^#\/(lines|settings|sync)?(\/|$)|^#?\/?$/.test(location.hash) && render());
   if (syncOn()) {
     setTimeout(async () => {

@@ -176,6 +176,38 @@ export async function complete(conn, { system, messages, signal, onDelta = () =>
   return text;
 }
 
+// ---------- Pictures ----------
+// OpenAI-compatible /images/generations, or an OpenRouter model that returns images in chat.
+// Returns a data: URL (or a plain URL when the provider only gives one).
+export async function generateImage(conn, { model, prompt, signal }) {
+  const p = PROVIDERS[conn.provider] || PROVIDERS.openai;
+  if (p.format === 'demo') return demoPicture(prompt);
+  if (p.format === 'anthropic') throw new ProviderError('Anthropic models can’t paint pictures.', 0, 'Pick an OpenAI or OpenRouter connection for Pictures.');
+  const m = model || conn.model;
+  if (conn.provider === 'openrouter') {
+    const res = await send(conn, baseOf(conn) + '/chat/completions', { method: 'POST', headers: headers(conn), body: JSON.stringify({ model: m, messages: [{ role: 'user', content: prompt }], modalities: ['image', 'text'] }), signal });
+    if (!res.ok) throw await readError(res);
+    const j = await res.json();
+    const url = j.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    if (!url) throw new ProviderError('That model didn’t return a picture.', 0, 'Pick an image model, for example google/gemini-2.5-flash-image.');
+    return url;
+  }
+  // gpt-image models always answer with base64; others are asked for it too (a plain link may not load here).
+  const size = /^gpt-image/.test(m) ? { size: '1536x1024' } : /dall-e-3/.test(m) ? { size: '1792x1024', response_format: 'b64_json' } : { response_format: 'b64_json' };
+  const res = await send(conn, baseOf(conn) + '/images/generations', { method: 'POST', headers: headers(conn), body: JSON.stringify({ model: m, prompt, n: 1, ...size }), signal });
+  if (!res.ok) throw await readError(res);
+  const d = (await res.json()).data?.[0];
+  if (d?.b64_json) return 'data:image/png;base64,' + d.b64_json;
+  if (d?.url) return d.url;
+  throw new ProviderError('The provider didn’t return a picture.');
+}
+// Demo mode: a painted-looking placeholder, so the feature can be tried without a key.
+function demoPicture(prompt) {
+  const words = String(prompt || '').replace(/[^\p{L}\p{N} ,.'’-]/gu, '').split(/\s+/).slice(0, 7).join(' ');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1536" height="1024" viewBox="0 0 1536 1024"><defs><linearGradient id="g" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stop-color="#1b2a4a"/><stop offset=".45" stop-color="#3a2a5a"/><stop offset=".8" stop-color="#c46a3a"/><stop offset="1" stop-color="#f2c46a"/></linearGradient></defs><rect width="1536" height="1024" fill="url(#g)"/><circle cx="1150" cy="300" r="90" fill="#f8e7b0" opacity=".85"/><path d="M0 760 Q300 620 620 720 T1536 700 V1024 H0Z" fill="#0d0d18"/><rect x="980" y="520" width="160" height="320" rx="60" fill="#141424"/><text x="64" y="980" font-family="Arial" font-size="44" fill="#ECECEC" opacity=".8">Demo picture · ${words.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</text></svg>`;
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+}
+
 export async function testConnection(conn) {
   const t0 = performance.now();
   const text = await complete(conn, {
