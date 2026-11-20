@@ -155,6 +155,12 @@ export async function chatView(id, focusId = null) {
       for (let i = chat.messages.length - 1; i >= 0; i--) if (chat.messages[i].role === 'assistant') return i;
       return -1;
     };
+    // The model's thinking for this version of the reply, folded into a pill.
+    function thinkHTML(m) {
+      const t = m.think?.[m.alt];
+      if (!t?.text) return '';
+      return `<details class="think"><summary><i aria-hidden="true"></i><span>Thought for ${Math.max(1, Math.round(t.ms / 1000))}s</span></summary><div class="think-tx">${esc(t.text.slice(-4000))}</div></details>`;
+    }
     function toolsHTML(m, i) {
       const isLast = i === chat.messages.length - 1;
       if (!isLast || m.role !== 'assistant') return '';
@@ -162,7 +168,7 @@ export async function chatView(id, focusId = null) {
         m.alts.length > 1
           ? m.first
             ? `<div class="pager opening"><button type="button" data-alt="-1" aria-label="Previous opening" ${m.alt === 0 ? 'disabled' : ''}>${icon('back', 18)}</button><span class="num" aria-live="polite">Opening ${m.alt + 1} of ${m.alts.length}</span><button type="button" data-alt="1" aria-label="Next opening" ${m.alt === m.alts.length - 1 ? 'disabled' : ''}>${icon('chev', 18)}</button></div>`
-            : `<div class="pager"><button type="button" data-alt="-1" aria-label="Previous reply" ${m.alt === 0 ? 'disabled' : ''}>${icon('back', 18)}</button><span class="num" aria-live="polite">${m.alt + 1} / ${m.alts.length}</span><button type="button" data-alt="1" aria-label="Next reply">${icon('chev', 18)}</button></div>`
+            : `<div class="pager"><button type="button" data-alt="-1" aria-label="Previous reply" ${m.alt === 0 ? 'disabled' : ''}>${icon('back', 18)}</button><button type="button" class="num pg-n press" data-compare aria-label="Version ${m.alt + 1} of ${m.alts.length}. Compare versions">${m.alt + 1} / ${m.alts.length}</button><button type="button" data-alt="1" aria-label="Next reply">${icon('chev', 18)}</button></div>`
           : '';
       const read = ttsSupported ? `<button type="button" class="mini press" data-read aria-label="Read aloud">${icon('speaker', 18)}</button>` : '';
       const used = (m.lore?.[m.alt] || []).filter((id) => S.lore.some((e) => e.id === id));
@@ -239,7 +245,7 @@ export async function chatView(id, focusId = null) {
         else if (m.as) inner = blockHTML({ kind: 'line', who: speakerOf({ speaker: m.as }) }, textOf(m), { by: true });
         else inner = blockHTML({ kind: 'you' }, textOf(m));
       } else inner = sceneParts(textOf(m), m).join('');
-      return `<div class="msg scene ${m.role === 'user' ? 'mine' : 'ai'}${m.dir ? ' dir' : ''}${enter ? ' enter' : ''}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="msg-col"><div class="bubble scn">${inner}${star}</div>${m.role === 'assistant' ? picsHTML(m) + chronHTML(m) + toolsHTML(m, i) : ''}</div></div>${m.role === 'user' ? rollHTML(m, enter) : movesHTML(m, i)}`;
+      return `<div class="msg scene ${m.role === 'user' ? 'mine' : 'ai'}${m.dir ? ' dir' : ''}${enter ? ' enter' : ''}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="msg-col">${m.role === 'assistant' ? thinkHTML(m) : ''}<div class="bubble scn">${inner}${star}</div>${m.role === 'assistant' ? picsHTML(m) + chronHTML(m) + toolsHTML(m, i) : ''}</div></div>${m.role === 'user' ? rollHTML(m, enter) : movesHTML(m, i)}`;
     }
     function renderAboard() {
       const bar = document.querySelector('#aboard');
@@ -264,7 +270,7 @@ export async function chatView(id, focusId = null) {
       if (m.role === 'user') return `<div class="${cls}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="bubble">${formatMessage(named(textOf(m), ch, 'you', me()))}${star}</div></div>${rollHTML(m, enter)}`;
       const sp = speakerOf(m);
       const tag = ix ? `<span class="spk-tag" style="--c:${sp.line?.color || '#2EAA67'};--ink:${inkOn(sp.line?.color || '#2EAA67')}">${esc(sp.name)}</span>` : '';
-      return `<div class="${cls}${m.star || m.quotes?.length ? ' starred' : ''}" data-i="${i}" data-id="${m.id}">${avatarTile(sp, 30, { expr: m.mood || 'happy', radius: 10, cls: 'msg-av' })}<div class="msg-col"><div class="bubble">${tag}${formatMessage(showAi(named(textOf(m), sp, 'you', me())))}${star}</div>${picsHTML(m)}${chronHTML(m)}${toolsHTML(m, i)}</div></div>${movesHTML(m, i)}`;
+      return `<div class="${cls}${m.star || m.quotes?.length ? ' starred' : ''}" data-i="${i}" data-id="${m.id}">${avatarTile(sp, 30, { expr: m.mood || 'happy', radius: 10, cls: 'msg-av' })}<div class="msg-col">${thinkHTML(m)}<div class="bubble">${tag}${formatMessage(showAi(named(textOf(m), sp, 'you', me())))}${star}</div>${picsHTML(m)}${chronHTML(m)}${toolsHTML(m, i)}</div></div>${movesHTML(m, i)}`;
     }
     function renderAll() {
       const cut = chat.summary?.upto || 0;
@@ -599,6 +605,24 @@ export async function chatView(id, focusId = null) {
       let first = true;
       let error = null;
       const mt = meter();
+      // What the model thinks before answering: a pill above the reply ("Thinking… 4s", then
+      // "Thought for 12s"), its text inside.
+      const think = { text: '', start: Date.now(), end: 0, el: null, last: 0 };
+      const thinkPill = (done = false) => {
+        if (!think.el) {
+          think.el = document.createElement('details');
+          think.el.className = 'think live';
+          think.el.innerHTML = '<summary><i aria-hidden="true"></i><span></span></summary><div class="think-tx"></div>';
+          bubble.before(think.el);
+        }
+        const now = Date.now();
+        if (!done && now - think.last < 250) return;
+        think.last = now;
+        const secs = Math.max(1, Math.round(((think.end || now) - think.start) / 1000));
+        think.el.classList.toggle('live', !done && !think.end);
+        think.el.querySelector('span').textContent = think.end || done ? `Thought for ${secs}s` : `Thinking… ${secs}s`;
+        think.el.querySelector('.think-tx').textContent = think.text.slice(-4000);
+      };
       try {
         await complete(conn, {
           system: built.system,
@@ -609,8 +633,14 @@ export async function chatView(id, focusId = null) {
           temperature: conn.temperature,
           character: asked,
           onUsage: mt.onUsage,
+          onReasoning(d) {
+            if (destroyed) return;
+            think.text += d;
+            thinkPill();
+          },
           onDelta(d) {
             if (destroyed) return;
+            if (think.text && !think.end) (think.end = Date.now()), thinkPill(true);
             if (first && mode === 'continue') d = (prev && !/\s$/.test(prev) && !/^[\s.,!?;:)]/.test(d) ? ' ' : '') + d;
             first = false;
             const stick = nearBottom();
@@ -639,6 +669,8 @@ export async function chatView(id, focusId = null) {
         } else rerenderMsg(idx);
       } else {
         target.alts[target.alt] = text;
+        if (think.text) (target.think ||= {})[target.alt] = { text: think.text.slice(-20000), ms: (think.end || Date.now()) - think.start };
+        else if (target.think?.[target.alt] && mode !== 'continue') delete target.think[target.alt];
         // Which Lorebook entries this reply was written with (per alternate).
         target.lore ||= {};
         if (built.loreIds?.length) target.lore[target.alt] = built.loreIds;
@@ -1388,6 +1420,8 @@ export async function chatView(id, focusId = null) {
           ...(lines.length ? [{ icon: 'star', label: m.quotes?.length ? `Star a line (${m.quotes.length} starred)` : 'Star a line', on: () => starLineSheet(m, i, lines) }] : []),
           { icon: 'star', label: m.star ? 'Remove star from reply' : lines.length ? 'Star whole reply' : 'Star to Logbook', on: () => toggleStar(m, i) },
           { icon: 'pin', label: 'Pin to notes', on: () => pin(m) },
+          ...(m.role === 'assistant' ? [{ icon: 'refresh', label: 'Rewrite…', on: () => rewriteSheet(i) }] : []),
+          ...(m.role === 'assistant' && m.alts.length > 1 && !m.first ? [{ icon: 'layers', label: `Compare versions (${m.alts.length})`, on: () => compareSheet(i) }] : []),
           ...(m.role === 'assistant' ? [{ icon: 'image', label: 'Picture this', on: () => pictureSheet(m) }] : []),
           { icon: 'route', label: (chat.route || []).some((s) => s.msgId === m.id) ? 'On the route map' : 'Mark on route map', on: () => ((chat.route || []).some((s) => s.msgId === m.id) ? (location.hash = `#/route/${encodeURIComponent(chat.id)}`) : markSheet(m)) },
           ...((chat.chapters || []).some((c) => c.msgId === m.id) ? [] : [{ icon: 'book', label: 'Start a chapter here', on: () => chapterNameSheet({ m }) }]),
@@ -1582,6 +1616,173 @@ export async function chatView(id, focusId = null) {
       const c = await branchChat(chat, i);
       location.hash = `#/chat/${c.id}`;
       toast('Branched here. The original is under Chats.', { action: 'Back', ms: 5000, onAction: () => (location.hash = `#/chat/${chat.id}`) });
+    }
+
+    // ---------- Rewrite a reply: a new version made from it, the original one swipe away ----------
+    const REWRITE = {
+      shorter: { label: 'Shorter', note: 'Same moment, fewer words', ask: 'Make it noticeably shorter (about half), keeping the key action and the best lines.' },
+      longer: { label: 'Longer', note: 'More detail and feeling', ask: 'Make it longer and richer: more detail, inner feeling and texture, without moving the story further than the original does.' },
+      vivid: { label: 'More vivid', note: 'Sharper senses and images', ask: 'Make it more vivid: concrete sensory details, sharper verbs and images. Keep about the same length.' },
+      dialogue: { label: 'More dialogue', note: 'Let them talk more', ask: 'Shift the balance toward dialogue: more spoken lines, less narration, the same events.' },
+      format: { label: 'Fix formatting', note: 'Actions and speech marked right', ask: '' },
+      own: { label: 'Your own', note: 'Say how to rewrite it' },
+    };
+    function rewriteSheet(i) {
+      openSheet({
+        label: 'Rewrite',
+        html: `<h2 class="sheet-title">Rewrite</h2><p class="sheet-p">Makes a new version; the original stays a swipe away.</p>
+          <div class="rw-grid">${Object.entries(REWRITE).map(([k, r]) => `<button type="button" class="rw-t press" data-rw="${k}"${k === 'own' ? ' aria-expanded="false"' : ''}><b>${r.label}</b><small>${r.note}</small></button>`).join('')}</div>
+          <form id="rwOwn" class="rw-own" hidden><textarea class="input area" id="rwIn" rows="2" maxlength="400" placeholder="e.g. Make her colder and more guarded" aria-label="How to rewrite it"></textarea><button type="submit" class="btn-primary press"><span>Rewrite</span></button></form>`,
+        onMount(s, close) {
+          const form = s.querySelector('#rwOwn');
+          const inp = s.querySelector('#rwIn');
+          autosize(inp, 160);
+          s.addEventListener('click', (e) => {
+            const t = e.target.closest('[data-rw]');
+            if (!t) return;
+            if (t.dataset.rw === 'own') {
+              form.hidden = !form.hidden;
+              t.setAttribute('aria-expanded', String(!form.hidden));
+              t.classList.toggle('on', !form.hidden);
+              if (!form.hidden) setTimeout(() => inp.focus(), 60);
+              return;
+            }
+            close();
+            rewriteReply(i, t.dataset.rw);
+          });
+          form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const v = inp.value.trim();
+            if (!v) return inp.focus();
+            close();
+            rewriteReply(i, 'own', v);
+          });
+        },
+      });
+    }
+    async function rewriteReply(i, key, custom = '') {
+      if (busy) return toast('Wait for the reply to finish first.');
+      const m = chat.messages[i];
+      if (!m || m.role !== 'assistant') return;
+      const conn = connectionFor(ch);
+      if (!conn) return toast('Add a connection first.', { action: 'Add', onAction: () => (location.hash = '#/connection/new') });
+      const sp = speakerOf(m);
+      const orig = textOf(m);
+      const before = [...chat.messages.slice(0, i)].reverse().find((x) => x.role === 'user' && !x.dir);
+      const fmt = proseOn() ? 'Actions and narration go in *asterisks*; spoken words in "double quotes".' : 'Narration is plain text; spoken words go in "double quotes".';
+      const how =
+        key === 'own'
+          ? custom
+          : key === 'format'
+          ? `Fix only the formatting: ${fmt} Close any unpaired marks and break walls of text into short paragraphs. Do not change the wording.`
+          : REWRITE[key].ask;
+      const label = key === 'own' ? (custom.length > 22 ? custom.slice(0, 21) + '…' : custom) : REWRITE[key].label;
+      const system = `You rewrite one reply in an ongoing roleplay story, written as ${scene ? 'the narrator voicing the whole cast' : sp.name}. Keep the same events, facts, names, voice and point of view unless the instruction says otherwise. ${fmt} Every character is an adult. Reply with the rewritten message only: no notes, no name in front.`;
+      const content = (before ? `For context, the user's last message was:\n${named(textOf(before), sp, 'you', me()).slice(0, 1500)}\n\n` : '') + `The reply to rewrite:\n${named(orig, sp, 'you', me())}\n\nInstruction: ${how}`;
+      const keepAlt = m.alt;
+      m.alts.push('');
+      m.alt = m.alts.length - 1;
+      const at = m.alt;
+      (m.altNote ||= {})[at] = label;
+      rerenderMsg(i);
+      setBusy(true);
+      setStatus('typing');
+      ctl = new AbortController();
+      const mt = meter();
+      let out = '';
+      let raf = 0;
+      try {
+        await complete(conn, {
+          system,
+          messages: [{ role: 'user', content }],
+          signal: ctl.signal,
+          stream: true,
+          maxTokens: Math.max(conn.maxTokens || 600, Math.ceil(estimateTokens(orig) * (key === 'longer' ? 2.2 : 1.4)) + 60),
+          temperature: key === 'format' ? 0.2 : conn.temperature,
+          character: { ...sp, demoText: () => orig },
+          onUsage: mt.onUsage,
+          onDelta(d) {
+            out += d;
+            m.alts[at] = out.replace(/^\s*\**[^*:\n]{1,30}\**:\s*/, '');
+            if (!raf) raf = requestAnimationFrame(() => ((raf = 0), !destroyed && rerenderMsg(i)));
+          },
+        });
+      } catch (e) {
+        if (e.name !== 'AbortError') toast(e.message || 'Couldn’t rewrite it.', { kind: 'err' });
+      }
+      ctl = null;
+      cancelAnimationFrame(raf);
+      setBusy(false);
+      setStatus('idle');
+      const ok = !!out.trim();
+      if (!ok) {
+        m.alts.splice(at, 1);
+        delete m.altNote[at];
+        m.alt = keepAlt;
+      } else mt.commit(estimateTokens(system + content), estimateTokens(out), (a, o, c) => recordFare(conn, sp.id, a, o, c)).catch(() => {});
+      if (!destroyed) rerenderMsg(i);
+      await saveChat(chat, false);
+      if (ok && !destroyed)
+        toast(`${label} version added`, {
+          action: 'Undo',
+          ms: 6000,
+          onAction: async () => {
+            if (m.alts.length - 1 !== at) return;
+            m.alts.pop();
+            delete m.altNote[at];
+            m.alt = keepAlt;
+            rerenderMsg(i);
+            await saveChat(chat, false);
+          },
+        });
+    }
+
+    // ---------- Compare versions: a deck of every version of a reply ----------
+    function compareSheet(i) {
+      const m = chat.messages[i];
+      if (!m || m.alts.length < 2) return;
+      const sp = speakerOf(m);
+      let cur = m.alt;
+      const n = m.alts.length;
+      const tag = (k) => `${k + 1}${m.altNote?.[k] ? ` · ${esc(m.altNote[k])}` : k === 0 ? ' · First' : ''}`;
+      openSheet({
+        label: 'Versions',
+        html: `<h2 class="sheet-title">Versions</h2><p class="sheet-p" id="cvSay" aria-live="polite"></p>
+          <div class="cv-deck" id="cvDeck" tabindex="0" aria-label="Versions, swipe to compare">${m.alts
+            .map((t, k) => `<article class="cv-card" data-k="${k}" aria-label="Version ${k + 1}"><span class="cv-tag">${tag(k)}${k === m.alt ? '<em>In the chat</em>' : ''}</span><div class="cv-body">${formatMessage(showAi(named(t, sp, 'you', me())))}</div></article>`)
+            .join('')}</div>
+          <div class="cv-dots" aria-hidden="true">${m.alts.map((_, k) => `<i data-d="${k}"></i>`).join('')}</div>
+          <button type="button" class="btn-primary press" id="cvUse"><span>Use this version</span></button>`,
+        onMount(s, close) {
+          const deck = s.querySelector('#cvDeck');
+          const cards = [...deck.children];
+          const mark = () => {
+            s.querySelector('#cvSay').textContent = `Swipe to compare · ${cur + 1} of ${n}${cur === m.alt ? ' · in the chat' : ''}`;
+            s.querySelectorAll('[data-d]').forEach((d, k) => d.classList.toggle('on', k === cur));
+            s.querySelector('#cvUse').disabled = cur === m.alt;
+          };
+          requestAnimationFrame(() => (deck.scrollLeft = cards[cur].offsetLeft - deck.offsetLeft - 4));
+          deck.addEventListener('scroll', () => {
+            const mid = deck.scrollLeft + deck.clientWidth / 2;
+            const k = cards.reduce((b, c, j) => (Math.abs(c.offsetLeft - deck.offsetLeft + c.offsetWidth / 2 - mid) < Math.abs(cards[b].offsetLeft - deck.offsetLeft + cards[b].offsetWidth / 2 - mid) ? j : b), 0);
+            if (k !== cur) (cur = k), mark();
+          }, { passive: true });
+          deck.addEventListener('keydown', (e) => {
+            if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+            e.preventDefault();
+            const k = Math.max(0, Math.min(n - 1, cur + (e.key === 'ArrowRight' ? 1 : -1)));
+            cards[k].scrollIntoView({ inline: 'center', block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' });
+          });
+          s.querySelector('#cvUse').addEventListener('click', async () => {
+            m.alt = cur;
+            rerenderMsg(i);
+            await saveChat(chat, false);
+            close();
+            toast(`Version ${cur + 1} is in the chat`);
+          });
+          mark();
+        },
+      });
     }
 
     // ---------- write for me: the AI drafts your next line into the composer ----------
@@ -1897,6 +2098,8 @@ export async function chatView(id, focusId = null) {
       if (ps) return passengerSheet(ps.dataset.pass);
       const a = e.target.closest('[data-alt]');
       if (a) return switchAlt(+a.dataset.alt);
+      const cmp = e.target.closest('[data-compare]');
+      if (cmp) return compareSheet(+cmp.closest('.msg').dataset.i);
       if (e.target.closest('[data-lore]')) {
         const m = chat.messages[lastAiIndex()];
         const used = (m?.lore?.[m.alt] || []).map((id) => S.lore.find((x) => x.id === id)).filter(Boolean);
