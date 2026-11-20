@@ -1,4 +1,6 @@
 import { S, character, blankCharacter, takeDraft, saveCharacter, deleteCharacter, getChat, connection, LINE_COLORS, newChat, saveChat } from '../store.js';
+import { ttsSupported, voices } from '../tts.js';
+import { voiceSheet } from './voicesheet.js';
 import { esc, resizeImage, download, slug, motion } from '../util.js';
 import { avatarTile, avatarSVG, PRESETS, PRESET_KEYS, EXPRESSIONS } from '../avatar.js';
 import { sceneSVG, SCENES } from '../scenes.js';
@@ -24,6 +26,11 @@ export function editorView(id) {
           (x, i) => `<span style="display:flex;flex-direction:column;align-items:center;gap:8px;animation:popIn .4s var(--out) ${0.04 * i}s both">${avatarTile(d, 74, { expr: x, radius: 20 })}<span class="small" style="text-transform:capitalize">${x}</span></span>`
         ).join('')}</div>`;
 
+  const voiceLabel = () => {
+    const v = d.voice;
+    const name = v?.uri ? voices().find((x) => x.voiceURI === v.uri)?.name || (voices().length ? 'Not on this device (default used)' : 'Saved voice') : 'Default (narrator)';
+    return v && (v.pitch !== 1 || v.rate !== 1) ? `${name} · pitch ${(+v.pitch).toFixed(1)} · speed ${(+v.rate).toFixed(1)}` : name;
+  };
   const connLabel = () => {
     const c = d.connectionId && connection(d.connectionId);
     return c ? `${esc(c.name || c.provider)} · ${esc(c.model)}` : 'Use the active connection';
@@ -60,7 +67,8 @@ export function editorView(id) {
       <div><div class="hrow"><h2 class="h">Expressions</h2><span class="small">Swap with the reply's mood</span></div><div id="exprRow">${exprRow()}</div></div>
       ${group(
         row({ id: 'sceneRow', lead: `<span class="row-ic" style="overflow:hidden;background:var(--plate2)" id="sceneThumb">${d.scene !== 'none' ? `<span style="width:100%;height:100%;filter:grayscale(1)">${sceneSVG(d.scene)}</span>` : icon('image', 19)}</span>`, title: 'Scene', sub: `<span id="sceneName">${SCENES.find((s) => s.key === d.scene)?.name || 'None'}</span>` }),
-        row({ id: 'connRow', ic: 'link', bc: 'var(--cream)', title: 'Connection', sub: `<span id="connName">${connLabel()}</span>` })
+        row({ id: 'connRow', ic: 'link', bc: 'var(--cream)', title: 'Connection', sub: `<span id="connName">${connLabel()}</span>` }),
+        ...(ttsSupported ? [row({ id: 'voiceRowE', ic: 'speaker', bc: 'var(--plate2)', fc: 'var(--cream)', title: 'Voice', sub: `<span id="voiceNameE">${esc(voiceLabel())}</span>` })] : [])
       )}
       <div>${toggleRow('tGlobal', 'Use global prompt', 'Turn off to send only this card', d.useGlobal !== false)}${toggleRow('tStream', 'Stream replies', 'Words appear as they are written', d.stream !== false)}</div>
       ${isNew ? '' : `<div style="display:flex;justify-content:center"><button type="button" class="btn-text danger press" id="delBtn">${icon('trash', 18)}Delete character</button></div>`}
@@ -68,7 +76,19 @@ export function editorView(id) {
     <div class="sticky-cta">${`<button type="button" class="btn-primary press" id="saveBtn"><span>${isNew ? 'Create character' : 'Save character'}</span>${arrow(30)}</button>`}</div>
   </div>`;
 
+  // Voice: which of the phone's voices reads this character, at what pitch and speed.
+  function $voiceHook(root) {
+    root.querySelector('#voiceRowE')?.addEventListener('click', () =>
+      voiceSheet(d, {
+        onSave: (v) => {
+          d.voice = v;
+          root.querySelector('#voiceNameE').textContent = voiceLabel();
+        },
+      })
+    );
+  }
   function mount(root) {
+    $voiceHook(root);
     // Arriving with a character written from a picture: start at the name.
     if (fromDraft) setTimeout(() => root.querySelector('#fName')?.focus(), 350);
     const $ = (s) => root.querySelector(s);

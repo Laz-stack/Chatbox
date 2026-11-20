@@ -1,5 +1,6 @@
 // One stroke icon set (24px grid, 1.9 stroke) plus the transit-sign arrow.
 const P = {
+  mic: "<rect x='9' y='3.5' width='6' height='11' rx='3'/><path d='M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5'/>",
   clock: "<circle cx='12' cy='12' r='8.5'/><path d='M12 7.5V12l3 2'/>",
   route: "<circle cx='6' cy='19' r='2.6'/><circle cx='18' cy='5' r='2.6'/><path d='M8.6 19h8.4a3.5 3.5 0 0 0 0-7H7a3.5 3.5 0 0 1 0-7h8.4'/>",
   heart: "<path d='M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7a4.3 4.3 0 0 1 7.5 2.8C19.5 15.4 12 20 12 20Z'/>",

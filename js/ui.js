@@ -200,6 +200,12 @@ export function openMenu(anchor, items, { onClose, spotlight } = {}) {
     y = Math.max(12, r.top - mh - 8);
     origin = 'bottom right';
   }
+  // A long menu never runs off the screen: it fits what's left and scrolls.
+  const room = innerHeight - 12 - y;
+  if (mh > room) {
+    if (room < 320) y = Math.max(12, innerHeight - 12 - Math.min(mh, innerHeight - 24));
+    menu.style.maxHeight = innerHeight - 12 - y + 'px';
+  }
   Object.assign(menu.style, { left: x + 'px', top: y + 'px', width: mw + 'px', transformOrigin: origin });
   if (spotlight) {
     // Rounded cut-out in the scrim around the element, slightly larger than it (it lifts a little).

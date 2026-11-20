@@ -10,6 +10,8 @@ import { chronicle, chronicleDue, trackingOn, changeText, markStation, undoReply
 import { clockOn, chipText, longText, partOfDay, clockSheet } from '../clock.js';
 import { advOn, roll, RESULT, suggestMoves, advRowText } from '../adventure.js';
 import { hereOf, untravel } from '../worldmap.js';
+import { sttSupported, listen, speakParts, stopParts } from '../voice.js';
+import { voiceSheet } from './voicesheet.js';
 import { STYLES, picConn, picPrefs, providerName, paint, picSrc, altOf, squareOf, isDemoPics, gcPictures } from '../pictures.js';
 import { esc, uid, formatMessage, markProse, fmtNum, estimateTokens, inkOn, ago, plain, detectMood, copyText, download, slug, reducedMotion, motion, lineAccent, EASE_OUT } from '../util.js';
 import { avatarTile } from '../avatar.js';
@@ -102,6 +104,7 @@ export async function chatView(id, focusId = null) {
   const chat = await getChat(id);
   if (!chat) return null;
   let ctl = null;
+  let vmStopAll = null; // set by the voice mode in mount(); unmount stops it
   let busy = false;
   let destroyed = false;
 
@@ -125,8 +128,10 @@ export async function chatView(id, focusId = null) {
       ${ibtn('asterisk', 'Add an *action*', { id: 'actBtn', attrs: 'title="Add an *action*: wraps the selection in asterisks"' })}
       <button type="button" class="dice-btn press" id="diceBtn" aria-pressed="false" aria-label="Roll a d20 with your next line" ${advOn(chat) ? '' : 'hidden'}>d20</button>
       <textarea id="input" rows="1" placeholder="${scene ? 'What you do or say…' : `Message ${esc(callName)}…`}" aria-label="Message ${esc(ch.name)}" enterkeyhint="send"></textarea>
+      ${sttSupported ? `<button type="button" class="mic-btn press" id="micBtn" aria-pressed="false" aria-label="Talk instead of typing">${icon('mic', 20)}</button>` : ''}
       <button type="submit" class="send press" id="sendBtn" aria-label="Send" disabled>${arrow(22, 'currentColor')}</button>
     </form>
+    <section class="vbar" id="vbar" hidden aria-label="Voice mode"></section>
   </div>`;
 
   async function mount(root) {
@@ -480,7 +485,7 @@ export async function chatView(id, focusId = null) {
         target.mood = mood;
         rerenderMsg(idx);
         if (moodChanged && !reducedMotion()) log.querySelector(`.msg[data-i="${idx}"] .msg-av`)?.classList.add('bump');
-        if (S.settings.readAloud) speak(text);
+        if (S.settings.readAloud && !vm.on) speakReply(target);
         // Fares: what this journey cost, as an estimate (about four characters per token).
         recordFare(conn, sp.id, built.total, estimateTokens(text.slice(prev.length)));
       }
@@ -512,6 +517,7 @@ export async function chatView(id, focusId = null) {
       // Route map and Bonds: a short background read every couple of replies.
       if (!error && text.trim() && (trackingOn(S.settings) || advOn(chat)) && chronicleDue(chat)) runChronicle(conn);
       if (!error && text.trim() && advOn(chat)) runMoves(conn, target);
+      if (vm.on) vmAfterReply(error ? null : target);
     }
 
     async function runChronicle(conn) {
@@ -585,6 +591,7 @@ export async function chatView(id, focusId = null) {
     async function send(risky = false, text = null) {
       const t = (text ?? input.value).trim();
       if (!t || busy) return;
+      stopParts();
       stopSpeaking();
       const m = { id: uid(), role: 'user', alts: [t], alt: 0, at: Date.now() };
       // Adventure mode: a d20 check rides along (the d20 toggle, or a risky suggested move).
@@ -619,6 +626,163 @@ export async function chatView(id, focusId = null) {
       await save();
       generate('reply');
     }
+    // ---------- voice ----------
+    // A reply as spoken parts: narration in the default voice, each speaker in their own.
+    function partsOf(m) {
+      const text = named(textOf(m), speakerOf(m), 'you', me());
+      const blocks = scene ? parseScene(text, castNames()) : splitTurn(text, speakerOf(m).name);
+      return blocks.map((b) => {
+        if (b.kind !== 'say') return { text: b.text, narr: true, who: null };
+        const r = scene ? resolveSpeaker(b.name, ix.people, me().name) : { kind: 'line', who: speakerOf(m) };
+        return { text: b.text, narr: false, who: r.kind === 'line' ? r.who : null, name: b.name };
+      });
+    }
+    function speakReply(m, onEnd) {
+      return speakParts(partsOf(m), { onEnd, onPart: (p) => vm.on && vmSet('speaking', p) });
+    }
+    function voicesMenu() {
+      const save = (who) => async (v) => {
+        who.voice = v;
+        await saveCharacter(who);
+      };
+      if (!ix) return voiceSheet(ch, { onSave: save(ch) });
+      openMenu(root.querySelector('#moreBtn'), ix.people.map((p) => ({ icon: 'speaker', label: `${p.name}’s voice`, on: () => voiceSheet(p, { onSave: save(p) }) })));
+    }
+
+    // Composer mic: talk instead of typing; the words land in the box for you to send.
+    let dict = null;
+    root.querySelector('#micBtn')?.addEventListener('click', (e) => {
+      const b = e.currentTarget;
+      if (dict) return dict.stop();
+      stopParts();
+      const before = input.value.trim();
+      b.setAttribute('aria-pressed', 'true');
+      dict = listen({
+        onInterim: (t) => ((input.value = (before ? before + ' ' : '') + t), fit(), (sendBtn.disabled = !input.value.trim())),
+        onFinal: () => input.focus(),
+        onEnd: () => ((dict = null), b.setAttribute('aria-pressed', 'false')),
+        onError: (k) => {
+          dict = null;
+          b.setAttribute('aria-pressed', 'false');
+          toast(k === 'blocked' ? 'Microphone blocked. Allow it for this site in the browser settings.' : 'Couldn’t listen just now.', { kind: 'err' });
+        },
+      });
+    });
+
+    // Hands-free voice mode: Listening → Thinking → Speaking, then listening again.
+    const vm = { on: false, state: 'listening', rec: null, said: '', who: null, heard: false };
+    const vbar = root.querySelector('#vbar');
+    const STOPS = [['listening', 'Listening'], ['thinking', 'Thinking'], ['speaking', 'Speaking']];
+    // The bar is built once; each state change updates it in place (so the yellow plate slides
+    // between stops and keyboard focus stays on the same control).
+    function vmRender() {
+      const st = vm.state;
+      if (!vbar.querySelector('.vb-h')) vbar.innerHTML = `<div class="vb-h"><span>Voice mode</span><span>hands-free</span></div><div class="vb-mid"></div><p class="vb-tx"></p><div class="vb-acts"></div>`;
+      const mid = vbar.querySelector('.vb-mid');
+      if (['paused', 'blocked', 'tap'].includes(st)) {
+        mid.innerHTML = `<p class="vb-state${st === 'blocked' ? ' cream' : ''}">${st === 'blocked' ? '<b>Microphone blocked.</b> Allow it for this site in the browser settings, or type instead.' : st === 'tap' ? 'Tap Talk when you’re ready.' : '<b>Paused.</b> Nothing was sent.'}</p>`;
+      } else {
+        if (!mid.querySelector('.vb-stops')) mid.innerHTML = `<div class="vb-stops">${STOPS.map(() => '<span></span>').join('')}</div>`;
+        const box = mid.querySelector('.vb-stops');
+        box.style.setProperty('--i', STOPS.findIndex(([k]) => k === st));
+        box.querySelectorAll('span').forEach((s, k) => {
+          const [key, label] = STOPS[k];
+          s.className = key === st ? 'on' : '';
+          s.innerHTML = key === 'speaking' && st === 'speaking' ? (vm.who ? `<i style="background:${vm.who.line?.color || '#2EAA67'}"></i>${esc(vm.who.name.split(' ')[0])}` : 'Narrator') : label;
+        });
+      }
+      vbar.querySelector('.vb-tx').innerHTML = vm.said ? `“${esc(vm.said)}”` : st === 'listening' ? 'Say something…' : '&nbsp;';
+      const had = vbar.contains(document.activeElement) ? document.activeElement.dataset.vb : null;
+      const fwd = st === 'listening' ? `<button type="button" class="vb-go press" data-vb="send">Send now</button>` : ['speaking', 'tap', 'paused'].includes(st) ? `<button type="button" class="vb-go press" data-vb="talk">${st === 'paused' ? 'Resume' : 'Talk'}</button>` : '';
+      vbar.querySelector('.vb-acts').innerHTML = `${['paused', 'tap', 'blocked'].includes(st) ? '' : `<button type="button" class="press" data-vb="pause">Pause</button>`}<button type="button" class="press" data-vb="type">Type instead</button><button type="button" class="press" data-vb="end">End</button>${fwd}`;
+      if (had) (vbar.querySelector(`[data-vb="${had}"]`) || vbar.querySelector('.vb-go') || vbar.querySelector('[data-vb]'))?.focus();
+    }
+    const say = (t) => {
+      const lv = root.querySelector('#vbSay');
+      if (lv) lv.textContent = t;
+    };
+    function vmSet(state, part) {
+      vm.state = state;
+      if (part !== undefined) vm.who = part?.narr ? null : part?.who || null;
+      vmRender();
+      say({ listening: 'Listening', thinking: 'Thinking', speaking: vm.who ? `${vm.who.name} speaking` : 'Speaking', paused: 'Paused', blocked: 'Microphone blocked', tap: 'Tap Talk to speak' }[state] || '');
+    }
+    function vmListen() {
+      if (!vm.on || destroyed) return;
+      vm.said = '';
+      vmSet('listening');
+      vm.rec = listen({
+        onInterim: (t) => {
+          vm.heard = true;
+          vm.said = t;
+          const tx = vbar.querySelector('.vb-tx');
+          if (tx) tx.textContent = `“${t}”`;
+        },
+        onFinal: (t) => {
+          vm.rec = null;
+          if (!vm.on) return;
+          if (!t.trim()) return vmSet('paused'); // silence: pause, never send an empty line
+          if (busy) return vmSet('thinking'); // a reply is still coming: it continues the loop
+          vmSet('thinking');
+          say(`You said: ${t}. Thinking`);
+          input.value = t;
+          send();
+        },
+        onError: (k) => {
+          vm.rec = null;
+          // iOS refuses to start listening again without a tap: that's "Tap to talk", not a blocked mic.
+          vmSet(k === 'blocked' && !vm.heard ? 'blocked' : 'tap');
+        },
+      });
+    }
+    function vmAfterReply(m) {
+      if (!vm.on || destroyed || vm.state === 'paused') return;
+      if (!m) return vmSet('tap');
+      vmSet('speaking');
+      const ok = speakReply(m, () => vm.on && vm.state === 'speaking' && vmListen());
+      if (!ok) vmListen();
+    }
+    function vmStart() {
+      vm.on = true;
+      root.querySelector('#composer').hidden = true;
+      chips.hidden = true;
+      vbar.hidden = false;
+      if (!root.querySelector('#vbSay')) vbar.insertAdjacentHTML('afterend', '<p class="vh" aria-live="polite" id="vbSay"></p>');
+      vmListen();
+      vbar.querySelector('[data-vb]')?.focus();
+    }
+    vmStopAll = () => {
+      vm.rec?.abort();
+      vm.rec = null;
+      stopParts();
+    };
+    function vmEnd(type = false) {
+      vm.on = false;
+      vmStopAll();
+      vbar.hidden = true;
+      root.querySelector('#composer').hidden = false;
+      chips.hidden = false;
+      renderChips();
+      (type ? input : root.querySelector('#micBtn') || input).focus();
+    }
+    vbar.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-vb]');
+      if (!b) return;
+      const k = b.dataset.vb;
+      if (k === 'end') return vmEnd();
+      if (k === 'type') return vmEnd(true);
+      if (k === 'pause') return vmStopAll(), vmSet('paused');
+      if (k === 'send') return vm.rec?.stop();
+      if (k === 'talk') return busy ? vmSet('thinking') : (stopParts(), vmListen());
+    });
+    root.addEventListener('keydown', (e) => {
+      if (!vm.on || e.target.closest('input, textarea, select')) return;
+      if (e.key === 'Escape') vmEnd();
+      // Space on a focused button presses that button instead.
+      else if (e.key === ' ' && !e.target.closest('button')) e.preventDefault(), vm.state === 'paused' ? vmListen() : (vmStopAll(), vmSet('paused'));
+      else if (e.key.toLowerCase() === 't') vmEnd(true);
+    });
+
     // ---------- scene pictures ----------
     function picsHTML(m) {
       if (!m.pics?.length) return '';
@@ -1035,7 +1199,7 @@ export async function chatView(id, focusId = null) {
         [
           { icon: 'edit', label: 'Edit message', on: () => editMessage(i) },
           { icon: 'copy', label: 'Copy', on: () => copyText(textOf(m)).then(() => toast('Copied')) },
-          ...(ttsSupported ? [{ icon: 'speaker', label: 'Read aloud', on: () => speak(textOf(m)) }] : []),
+          ...(ttsSupported ? [{ icon: 'speaker', label: 'Read aloud', on: () => (m.role === 'assistant' ? speakReply(m) : speak(textOf(m))) }] : []),
           ...(lines.length ? [{ icon: 'star', label: m.quotes?.length ? `Star a line (${m.quotes.length} starred)` : 'Star a line', on: () => starLineSheet(m, i, lines) }] : []),
           { icon: 'star', label: m.star ? 'Remove star from reply' : lines.length ? 'Star whole reply' : 'Star to Logbook', on: () => toggleStar(m, i) },
           { icon: 'pin', label: 'Pin to notes', on: () => pin(m) },
@@ -1177,6 +1341,8 @@ export async function chatView(id, focusId = null) {
               { icon: 'download', label: 'Export card (PNG)', on: async () => download(await exportCardPng(ch), slug(ch.name) + '.card.png') },
             ]),
         { icon: 'clock', label: clockOn(chat) ? `Story time: ${longText(chat.clock)}` : 'Story time', on: openClock },
+        ...(sttSupported && ttsSupported ? [{ icon: 'mic', label: 'Voice mode (hands-free)', on: () => vmStart() }] : []),
+        ...(ttsSupported ? [{ icon: 'speaker', label: ix ? 'Voices' : `${ch.name}’s voice`, on: voicesMenu }] : []),
         { icon: 'route', label: hereOf(chat) ? `World map: ${hereOf(chat).name}` : 'World map', on: () => (location.hash = `#/map/${encodeURIComponent(chat.id)}`) },
         { icon: 'dice', label: advOn(chat) ? 'Quests and items' : 'Adventure mode', on: () => (location.hash = `#/adventure/${encodeURIComponent(chat.id)}`) },
         { icon: 'route', label: 'Route map', on: () => (location.hash = `#/route/${encodeURIComponent(chat.id)}`) },
@@ -1619,6 +1785,8 @@ export async function chatView(id, focusId = null) {
     unmount() {
       destroyed = true;
       ctl?.abort();
+      vmStopAll?.();
+      stopParts();
       stopSpeaking();
     },
   };
