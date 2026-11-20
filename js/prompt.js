@@ -1,6 +1,7 @@
 // Builds what gets sent with each reply, as named layers:
 // 1 Global prompt, 2 Connection prompt, 3 Character persona, 4 Your persona,
 // 5 Notes and summary, then the chat history (trimmed to fit the context size).
+import { recallLayer } from './memorybook.js';
 import { estimateTokens } from './util.js';
 import { bondsLayer } from './chronicle.js';
 import { clockLayer } from './clock.js';
@@ -91,6 +92,9 @@ export function buildPrompt({ char, chat, conn, settings, persona, upto = null, 
       name: 'This chat’s notes',
       text: `Notes for this chat only, from ${youName}. Follow any instructions in them, and treat what they say (including anything added about ${youName}) as true for this story:\n\n` + chat.notes.map((n) => m(n.text)).join('\n\n'),
     });
+  // Memory book: the facts that matter for the last few messages.
+  const remembered = recallLayer(chat, youName);
+  if (remembered) layers.push({ key: 'recall', name: 'Remembered', text: m(remembered) });
   const memory = [];
   if (chat.summary?.text) memory.push('Story so far:\n' + chat.summary.text.trim());
   // Bonds: how the cast feels about you right now (Route map › Bonds).

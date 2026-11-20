@@ -19,7 +19,7 @@ export function shouldSummarize(chat, conn) {
   return n > KEEP + 4 && historyTokens(chat) > (conn?.context || 16000) * 0.55;
 }
 
-export async function summarize({ chat, char, conn, persona, force = false, signal }) {
+export async function summarize({ chat, char, conn, persona, cast = null, force = false, signal }) {
   const from = chat.summary?.upto || 0;
   const cut = chat.messages.length - KEEP;
   if (cut <= from && !force) return false;
@@ -37,7 +37,9 @@ export async function summarize({ chat, char, conn, persona, force = false, sign
   const lines = [];
   let used = 0;
   for (const m of chunk) {
-    const l = `${m.role === 'user' ? user : char.name}: ${textOf(m)}`;
+    // Group chats: each reply under its own speaker's name; stage directions skipped.
+    if (m.dir) continue;
+    const l = `${m.role === 'user' ? user : cast?.find((p) => p.id === m.speaker)?.name || char.name}: ${textOf(m)}`;
     const t = estimateTokens(l);
     if (lines.length && used + t > room) break;
     lines.push(l);

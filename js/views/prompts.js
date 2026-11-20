@@ -1,15 +1,16 @@
-import { S, character, getChat, saveChat, saveSettings, connectionFor, hasStarted, latestChat, personaFor } from '../store.js';
+import { S, character, getChat, saveChat, saveSettings, connectionFor, hasStarted, latestChat, personaFor, interchange, isInterchangeId } from '../store.js';
 import { buildPrompt, promptAsText } from '../prompt.js';
 import { summarize, historyTokens } from '../memory.js';
 import { esc, debounce, uid, fmtNum, copyText, reducedMotion } from '../util.js';
+import { recall, factGroups, addFact, editFact, removeFact, togglePin } from '../memorybook.js';
 import { topbar, title2, ibtn, bullet, avatarBullet, area, toggleRow, bindSwitch, icon, primary, reel, toast, openSheet, autosize } from '../ui.js';
 
 const NOTE_MAX = 10000; // characters per pinned note (about 2,500 tokens, sent with every reply)
 
 // Every layer keeps one number and one colour everywhere (Prompts and Final prompt), even when some are empty.
-const LAYER_ORDER = ['global', 'connection', 'world', 'persona', 'user', 'lore', 'style', 'content', 'pinned', 'notes', 'chat'];
+const LAYER_ORDER = ['global', 'connection', 'world', 'persona', 'user', 'lore', 'style', 'content', 'pinned', 'recall', 'notes', 'chat'];
 const layerNo = (k) => String(LAYER_ORDER.indexOf(k) + 1);
-const LAYER_COLORS = { global: ['#FDCD15', '#0A0A0A'], connection: ['#E70404', '#FFFFFF'], persona: ['#ECECEC', '#0A0A0A'], user: ['#065BFE', '#FFFFFF'], lore: ['#FE6500', '#0A0A0A'], world: ['#FE6500', '#0A0A0A'], style: ['#FB4DAA', '#0A0A0A'], content: ['#2EAA67', '#0A0A0A'], pinned: ['#065BFE', '#FFFFFF'], notes: ['#B8ACFE', '#0A0A0A'], chat: ['#333333', '#ECECEC'] };
+const LAYER_COLORS = { global: ['#FDCD15', '#0A0A0A'], connection: ['#E70404', '#FFFFFF'], persona: ['#ECECEC', '#0A0A0A'], user: ['#065BFE', '#FFFFFF'], lore: ['#FE6500', '#0A0A0A'], world: ['#FE6500', '#0A0A0A'], style: ['#FB4DAA', '#0A0A0A'], content: ['#2EAA67', '#0A0A0A'], pinned: ['#065BFE', '#FFFFFF'], recall: ['#FE6500', '#0A0A0A'], notes: ['#B8ACFE', '#0A0A0A'], chat: ['#333333', '#ECECEC'] };
 
 function recentCharacter() {
   const started = S.characters.filter((c) => hasStarted(latestChat(c.id))).sort((a, b) => latestChat(b.id).updatedAt - latestChat(a.id).updatedAt);
@@ -29,6 +30,7 @@ export function promptsView() {
     ['Reply style', 'Length and point of view, from Depot.', 'style'],
     ['Content rules', 'What is allowed, from 18+ content in Depot.', 'content'],
     ['This chat’s notes', 'Pinned notes: instructions and facts for one chat (Memory).', 'pinned'],
+    ['Remembered', 'Memory book facts that matter right now (up to 8 per reply).', 'recall'],
     ['Notes and summary', 'The story so far, Bonds, places, quests and story time.', 'notes'],
     ['The chat', 'Recent messages, newest last.', 'chat'],
   ];
@@ -75,10 +77,11 @@ export function promptsView() {
 // ---------- Final prompt preview ----------
 export async function finalView(id) {
   const chat = await getChat(id);
-  const ch = chat && character(chat.characterId);
-  if (!ch) return null;
+  const room = roomOf(chat);
+  if (!room) return null;
+  const { ch, who, group } = room;
   const conn = connectionFor(ch);
-  const built = buildPrompt({ char: ch, chat, conn, settings: S.settings, persona: personaFor(chat) });
+  const built = buildPrompt({ char: who, chat, conn, settings: S.settings, persona: personaFor(chat), group });
   const parts = [...built.layers, { key: 'chat', name: 'The chat', tokens: built.histTokens, text: built.messages.map((m) => `${m.role === 'user' ? S.persona.name || 'You' : ch.name}: ${m.content}`).join('\n\n') }];
   const total = built.total;
   const html = `<div class="screen no-tab">
@@ -117,16 +120,28 @@ export async function finalView(id) {
   };
 }
 
-// ---------- Memory and notes (per character) ----------
+// A chat's room: the character, or for an Interchange the room (title, first member) and its cast.
+function roomOf(chat) {
+  const ix = chat && isInterchangeId(chat.characterId) ? interchange(chat.characterId) : null;
+  if (ix) {
+    const ch = { ...ix.people[0], id: ix.id, name: ix.title, connectionId: null };
+    return { ix, ch, cast: ix.people, who: ix.people[0], group: { people: ix.people, scene: ix.scene, world: ix.world || '', mode: ix.mode || 'turns', passengers: ix.passengers !== false } };
+  }
+  const ch = chat && character(chat.characterId);
+  return ch ? { ix: null, ch, cast: [ch], who: ch, group: null } : null;
+}
+
+// ---------- Memory and notes (per chat; Interchanges too) ----------
 export async function memoryView(id) {
   const chat = await getChat(id);
-  const ch = chat && character(chat.characterId);
-  if (!ch) return null;
+  const room = roomOf(chat);
+  if (!room) return null;
+  const { ch, ix, cast, who, group } = room;
   const conn = connectionFor(ch);
   const ctx = conn?.context || 16000;
 
   const deck = () => {
-    const used = buildPrompt({ char: ch, chat, conn, settings: S.settings, persona: personaFor(chat) }).total;
+    const used = buildPrompt({ char: who, chat, conn, settings: S.settings, persona: personaFor(chat), group }).total;
     const frac = Math.min(1, used / ctx);
     const spd = Math.max(1.5, 9 - frac * 7).toFixed(1);
     return `<div class="deck"><div class="reels">${reel(118, { spd, pack: 40 - Math.round(frac * 12), cls: 'r1' })}${reel(118, { spd: (spd * 0.75).toFixed(1), pack: 26 + Math.round(frac * 12), cls: 'r2' })}<span class="tape"></span></div>
@@ -140,6 +155,35 @@ export async function memoryView(id) {
           `<div class="note-row" data-id="${n.id}">${bullet(icon('pin', 15), '#FDCD15', '#0A0A0A', 30)}<button type="button" class="tx press" data-edit="${n.id}" aria-label="Edit note">${esc(n.text)}</button><button type="button" class="ibtn ghost press" data-del="${n.id}" aria-label="Delete note">${icon('trash', 18)}</button></div>`
       )
       .join('');
+  // ---------- Memory book ----------
+  const you = personaFor(chat);
+  const youName = you?.name?.trim() || 'You';
+  const colorOfAbout = (about) => {
+    const a = (about || '').toLowerCase();
+    if (!a) return '#ECECEC';
+    if (a === youName.toLowerCase().split(/\s+/)[0] || a === youName.toLowerCase()) return '#FDCD15';
+    const p = cast.find((x) => x.name.toLowerCase() === a || x.name.toLowerCase().split(/\s+/)[0] === a.split(/\s+/)[0]);
+    return p?.line?.color || '#9B9B9B';
+  };
+  let mbFilter = 'all';
+  const mbCount = () => `${(chat.facts || []).length} fact${(chat.facts || []).length === 1 ? '' : 's'}`;
+  const mbHTML = () => {
+    const facts = chat.facts || [];
+    const add = `<button type="button" class="mb-add press" id="mbAdd">${icon('plus', 16)}Add something to remember</button>`;
+    if (!facts.length)
+      return `<div class="group mb-empty"><p>Nothing yet. As the story goes on, lasting facts (names, promises, secrets, who owes whom) are written down here and remembered when they come up again${S.settings.chronicle === false ? '. Story tracking is off (Route map › Track the story), so only facts you add are kept' : ''}.</p>${add}</div>`;
+    const rec = recall(chat);
+    const groups = factGroups(chat);
+    const chips = [['all', `All ${facts.length}`], ...groups.map(([k, v]) => [k || '~world', `${k || 'World'} ${v.length}`])];
+    const shown = mbFilter === 'all' ? facts : facts.filter((f) => (f.about || '~world') === mbFilter);
+    const row = (f) =>
+      `<div class="mb-row" data-id="${esc(f.id)}"><span class="mb-dot" style="--d:${colorOfAbout(f.about)}" aria-hidden="true"></span><button type="button" class="mb-tx press" data-mbedit="${esc(f.id)}" aria-label="Edit: ${esc(f.text)}">${esc(f.text)}${f.about ? `<small>${esc(f.about)}</small>` : ''}</button><button type="button" class="mb-pin press${f.pinned ? ' on' : ''}" data-mbpin="${esc(f.id)}" aria-pressed="${!!f.pinned}" aria-label="Always remember">${icon('pin', 15)}</button></div>`;
+    return (
+      `<div class="mb-now" style="--c:${ix ? '#ECECEC' : ch.line?.color || '#2EAA67'}"><h3>Recalled for the next reply</h3><p class="mb-sub">The facts that match the last few messages; pinned ones always.</p><ol class="mb-rail">${rec.map((f) => `<li>${esc(f.text)}</li>`).join('')}</ol></div>` +
+      `<div class="mb-chips" role="radiogroup" aria-label="Whose facts">${chips.map(([k, l]) => `<button type="button" class="press" role="radio" aria-checked="${mbFilter === k}" data-mbf="${esc(k)}">${esc(l)}</button>`).join('')}</div>` +
+      `<div class="group mb-list">${[...shown].reverse().map(row).join('')}${add}</div>`
+    );
+  };
   const summaryHTML = () =>
     chat.summary?.text
       ? `<p class="sum-tx">${esc(chat.summary.text)}</p>`
@@ -147,7 +191,7 @@ export async function memoryView(id) {
 
   const html = `<div class="screen no-tab">
     ${topbar({ back: `#/chat/${chat.id}` })}
-    ${title2('Memory', `What ${esc(ch.name)} keeps`, { tag: 'h1' })}
+    ${title2('Memory', ix ? `What ${esc(ch.name)} keeps` : `What ${esc(ch.name)} keeps`, { tag: 'h1' })}
     <div class="stack" style="margin-top:16px">
       <div id="deck">${deck()}</div>
       ${toggleRow('tAuto', 'Auto-summary', 'Condense older messages as a chat grows', S.settings.autoSummary)}
@@ -159,6 +203,7 @@ export async function memoryView(id) {
           <button type="button" class="btn-primary plate press" style="height:46px;background:var(--plate2);justify-content:center;gap:8px" id="redoSum">${icon('refresh', 16)}<span>${chat.summary ? 'Redo' : 'Summarize'}</span></button>
         </div>
       </div>
+      <div><div class="hrow"><h2 class="h">Memory book</h2><span class="small" id="mbCount">${mbCount()}</span></div><div id="mb">${mbHTML()}</div></div>
       <div><div class="hrow"><h2 class="h">Pinned notes</h2><span class="small" id="pinCount">${chat.notes.length} pinned</span></div>
         <div class="group notes" id="notes">${notesHTML()}<form class="add-row" id="addNote"><textarea id="noteIn" rows="1" placeholder="Add a note: an instruction, a fact, or something about you for this chat" aria-label="Add a note" maxlength="${NOTE_MAX}"></textarea>${ibtn('plus', 'Add note', { cls: 'yellow', attrs: 'type="submit"' }).replace('type="button"', '')}</form></div>
         <p class="fhint">For this chat only, sent with every reply: instructions the AI should follow, facts, and additions to your persona. Tap a note to edit it. Long-press a message in the chat to pin it.</p>
@@ -243,6 +288,59 @@ export async function memoryView(id) {
           },
         });
       }
+      // ---------- Memory book: filter, pin, edit, add ----------
+      const mbRedraw = () => (($('#mb').innerHTML = mbHTML()), ($('#mbCount').textContent = mbCount()), refresh());
+      function factSheet(f = null) {
+        const people = [...new Set([youName, ...cast.map((p) => p.name)])];
+        let about = f ? f.about || '' : '';
+        openSheet({
+          label: f ? 'Edit memory' : 'Add a memory',
+          html: `<h2 class="sheet-title">${f ? 'Edit memory' : 'Something to remember'}</h2><textarea class="input area note-ta" id="mbTa" rows="3" maxlength="400" data-autofocus aria-label="The fact" placeholder="e.g. Sona is left-handed and hides a scar on her wrist">${esc(f?.text || '')}</textarea>
+            <p class="tx-lbl" style="margin-top:12px">About</p><div class="mb-chips" id="mbAbout" role="radiogroup" aria-label="About">${[...people, ''].map((n) => `<button type="button" class="press" role="radio" aria-checked="${about === n}" data-ab="${esc(n)}">${esc(n || 'The world')}</button>`).join('')}</div>
+            <div class="sheet-actions">${f ? `<button type="button" class="btn-primary plate press" data-del><span>Forget</span></button>` : `<button type="button" class="btn-primary plate press" data-x><span>Cancel</span></button>`}<button type="button" class="btn-primary press" data-ok><span>${f ? 'Save' : 'Remember'}</span></button></div>`,
+          onMount(s, close) {
+            const ta = s.querySelector('#mbTa');
+            autosize(ta, 260);
+            s.querySelector('#mbAbout').addEventListener('click', (e) => {
+              const b = e.target.closest('[data-ab]');
+              if (!b) return;
+              about = b.dataset.ab;
+              s.querySelectorAll('[data-ab]').forEach((x) => x.setAttribute('aria-checked', x === b));
+            });
+            s.querySelector('[data-x]')?.addEventListener('click', () => close());
+            s.querySelector('[data-del]')?.addEventListener('click', async () => {
+              removeFact(chat, f.id);
+              await saveChat(chat, false);
+              close();
+              mbRedraw();
+              toast('Forgotten');
+            });
+            s.querySelector('[data-ok]').addEventListener('click', async () => {
+              const v = ta.value.trim();
+              if (!v) return ta.focus();
+              if (f) editFact(chat, f.id, v), (f.about = about);
+              else addFact(chat, v, about);
+              await saveChat(chat, false);
+              close();
+              mbRedraw();
+            });
+          },
+        });
+      }
+      $('#mb').addEventListener('click', async (e) => {
+        const fb = e.target.closest('[data-mbf]');
+        if (fb) return (mbFilter = fb.dataset.mbf), mbRedraw();
+        const pin = e.target.closest('[data-mbpin]');
+        if (pin) {
+          const f = togglePin(chat, pin.dataset.mbpin);
+          await saveChat(chat, false);
+          mbRedraw();
+          return toast(f?.pinned ? 'Always remembered' : 'Remembered when it comes up');
+        }
+        const ed = e.target.closest('[data-mbedit]');
+        if (ed) return factSheet((chat.facts || []).find((x) => x.id === ed.dataset.mbedit));
+        if (e.target.closest('#mbAdd')) factSheet();
+      });
       $('#editSum').addEventListener('click', () =>
         openSheet({
           label: 'Edit summary',
@@ -269,7 +367,7 @@ export async function memoryView(id) {
         btn.disabled = true;
         root.querySelectorAll('.reel').forEach((r) => r.classList.add('fast'));
         try {
-          await summarize({ chat, char: ch, conn, persona: personaFor(chat), force: true });
+          await summarize({ chat, char: ch, conn, persona: personaFor(chat), cast: ix ? cast : null, force: true });
           $('#sumText').innerHTML = summaryHTML();
           $('#covers').textContent = `Covers ${chat.summary.covers} messages`;
           btn.querySelector('span').textContent = 'Redo';

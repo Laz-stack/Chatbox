@@ -1701,3 +1701,28 @@ button.chr-row { width: 100%; }
 /* Text weight (Reading text › Weight): the character's and narrator's text only */
 .chat .msg.ai:not(.scene) .bubble, .tx-prev-bubble .bubble { font-weight: var(--read-wb, 500); }
 .chat .scn .scn-narr, .chat .msg.scene .bubble.scn, .tx-prev .scn-narr, .tx-prev .scn-t { font-weight: var(--read-ws, 400); }
+
+/* ---------- Memory book (Memory screen) ---------- */
+.mb-now { padding: 16px; border-radius: 22px; background: var(--plate); }
+.mb-now h3 { margin: 0; font: 800 16px/1.15 var(--font); }
+.mb-sub { margin: 4px 0 0 !important; font: 600 12.5px/1.35 var(--font); color: var(--muted); }
+.mb-rail { position: relative; list-style: none; margin: 12px 0 0; padding: 0 0 0 26px; display: flex; flex-direction: column; gap: 10px; }
+.mb-rail::before { content: ''; position: absolute; left: 6px; top: 6px; bottom: 8px; width: 4px; border-radius: 2px; background: var(--c); }
+.mb-rail li { position: relative; font: 600 14px/1.4 var(--font); }
+.mb-rail li::before { content: ''; position: absolute; left: -24px; top: 4px; width: 12px; height: 12px; border-radius: 50%; background: var(--plate); box-shadow: 0 0 0 3px var(--cream); }
+.mb-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 10px; }
+.mb-chips button { min-height: 38px; padding: 0 14px; border-radius: 19px; box-shadow: inset 0 0 0 2px var(--plate2); font: 800 13px/1 var(--font); color: var(--white); }
+.mb-chips button[aria-checked='true'] { background: var(--yellow); color: var(--black); box-shadow: none; }
+.mb-list { padding: 4px 4px 4px 14px; }
+.mb-row { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; }
+.mb-row + .mb-row { box-shadow: 0 -1px 0 var(--hair); }
+.mb-dot { flex: none; width: 10px; height: 10px; margin-top: 7px; border-radius: 50%; background: var(--d); }
+.mb-tx { flex: 1; min-width: 0; padding: 2px 0; text-align: left; color: var(--white); font: 500 15px/1.4 var(--font); overflow-wrap: anywhere; border-radius: 8px; }
+.mb-tx small { display: block; margin-top: 3px; font: 700 12px/1.2 var(--font); color: var(--muted); }
+.mb-pin { flex: none; display: grid; place-items: center; width: 40px; height: 40px; margin: -4px 4px -4px 0; border-radius: 50%; color: var(--muted); box-shadow: inset 0 0 0 2px var(--plate2); }
+.mb-pin.on { background: var(--yellow); color: var(--black); box-shadow: none; }
+.mb-add { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 48px; padding: 0 2px; color: var(--muted); font: 700 14px/1 var(--font); box-shadow: 0 -1px 0 var(--hair); }
+.mb-empty { padding: 16px; }
+.mb-empty p { margin: 0 0 8px !important; font: 500 14px/1.5 var(--font); color: var(--muted); }
+.mb-empty .mb-add { box-shadow: none; color: var(--white); }
+.chr-mem { display: inline-flex; color: var(--muted); }

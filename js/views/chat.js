@@ -675,10 +675,10 @@ export async function chatView(id, focusId = null) {
       toBottom(true);
 
       // Long chats: condense older messages in the background.
-      if (!ix && !error && S.settings.autoSummary && shouldSummarize(chat, conn)) {
+      if (!error && S.settings.autoSummary && shouldSummarize(chat, conn)) {
         setStatus('summary');
         try {
-          await summarize({ chat, char: ch, conn, persona: me() });
+          await summarize({ chat, char: ch, conn, persona: me(), cast: ix ? ix.people : null });
           if (!destroyed) renderAll(), toBottom();
         } catch (e) {
           console.warn('summary failed', e);
@@ -696,7 +696,7 @@ export async function chatView(id, focusId = null) {
       const target = chat.messages[chat.messages.length - 1];
       try {
         const res = await chronicle({ chat, cast: ix ? ix.people : [ch], persona: me(), conn, settings: S.settings });
-        if (res.changes.length || res.stations.length || res.time || res.ties || res.adv || res.place || res.chapter) target.chron = { bonds: res.changes, stations: res.stations.map((s) => s.title), ...(res.chapter ? { chapter: res.chapter } : {}), ...(res.time ? { time: res.time } : {}), ...(res.ties ? { ties: res.ties } : {}), ...(res.adv ? { adv: res.adv } : {}), ...(res.place ? { place: res.place } : {}) };
+        if (res.changes.length || res.stations.length || res.time || res.ties || res.adv || res.place || res.chapter || res.facts) target.chron = { bonds: res.changes, stations: res.stations.map((s) => s.title), ...(res.chapter ? { chapter: res.chapter } : {}), ...(res.facts ? { facts: res.facts } : {}), ...(res.time ? { time: res.time } : {}), ...(res.ties ? { ties: res.ties } : {}), ...(res.adv ? { adv: res.adv } : {}), ...(res.place ? { place: res.place } : {}) };
         if (res.place) setScene();
         if (res.stations.length && chat.picAuto && picConn() && !destroyed) runPaint(target, chat.picStyle || picPrefs().style);
         await saveChat(chat, false);
@@ -727,6 +727,7 @@ export async function chatView(id, focusId = null) {
       if (c.place) rows.push(`<a class="chr-row press" href="#/map/${encodeURIComponent(chat.id)}">${icon('route', 13)}<span>${c.place.created ? 'New place' : 'Now at'} · ${esc(c.place.name)}</span></a>`);
       if (c.adv?.length) rows.push(`<a class="chr-row press" href="#/adventure/${encodeURIComponent(chat.id)}">${icon('dice', 13)}<span>${esc(advRowText(c.adv))}</span></a>`);
       if (c.chapter && chapterById(c.chapter.id)) rows.push(`<button type="button" class="chr-row press" data-chapgo="${esc(c.chapter.id)}"><span class="chr-seg" aria-hidden="true"></span><span>New chapter · ${esc(chapterById(c.chapter.id).title)}</span></button>`);
+      if (c.facts?.length) rows.push(`<a class="chr-row press" href="#/memory/${encodeURIComponent(chat.id)}"><span class="chr-mem" aria-hidden="true">${icon('book', 13)}</span><span>${c.facts.length === 1 ? `Remembered · ${esc(c.facts[0].text)}` : `Remembered ${c.facts.length} things · Memory`}</span></a>`);
       for (const s of c.stations || []) rows.push(`<a class="chr-row press" href="#/route/${encodeURIComponent(chat.id)}"><span class="chr-seg" aria-hidden="true"></span><span>New station · ${esc(s)}</span></a>`);
       return rows.filter(Boolean).length ? `<div class="chr">${rows.join('')}</div>` : '';
     }
@@ -1518,14 +1519,10 @@ export async function chatView(id, focusId = null) {
               { icon: 'talk', label: scene ? 'Switch to Take turns' : 'Switch to One scene', on: switchMode },
             ]
           : [{ icon: 'card', label: 'Edit character', on: () => (location.hash = `#/edit/${ch.id}`) }]),
-        ...(ix
-          ? []
-          : [
-              { icon: 'image', label: 'Scene', on: sceneSheet },
-              { icon: 'spark', label: 'Memory and notes', on: () => (location.hash = `#/memory/${chat.id}`) },
-              { icon: 'layers', label: 'Final prompt', on: () => (location.hash = `#/final/${chat.id}`) },
-              { icon: 'download', label: 'Export card (PNG)', on: async () => download(await exportCardPng(ch), slug(ch.name) + '.card.png') },
-            ]),
+        ...(ix ? [] : [{ icon: 'image', label: 'Scene', on: sceneSheet }]),
+        { icon: 'spark', label: 'Memory and notes', on: () => (location.hash = `#/memory/${encodeURIComponent(chat.id)}`) },
+        { icon: 'layers', label: 'Final prompt', on: () => (location.hash = `#/final/${encodeURIComponent(chat.id)}`) },
+        ...(ix ? [] : [{ icon: 'download', label: 'Export card (PNG)', on: async () => download(await exportCardPng(ch), slug(ch.name) + '.card.png') }]),
         { icon: 'clock', label: clockOn(chat) ? `Story time: ${longText(chat.clock)}` : 'Story time', on: openClock },
         ...(sttSupported && ttsSupported ? [{ icon: 'mic', label: 'Voice mode (hands-free)', on: () => vmStart() }] : []),
         ...(ttsSupported ? [{ icon: 'speaker', label: ix ? 'Voices' : `${ch.name}’s voice`, on: voicesMenu }] : []),
