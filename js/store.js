@@ -294,6 +294,40 @@ export async function recordFare(conn, lineId, inTok, outTok) {
   await saveFares();
 }
 
+// Background jobs (the Helper receipt): tokens per connection and how many of each job.
+export async function recordJob(conn, job, inTok, outTok) {
+  if (!conn) return;
+  const mo = (S.fares.months[monthKey()] ||= { conns: {}, lines: {} });
+  const h = (mo.helper ||= { conns: {} });
+  const c = (h.conns[conn.id] ||= { name: '', model: '', in: 0, out: 0, calls: 0, jobs: {} });
+  c.name = conn.name || conn.provider;
+  c.model = conn.provider === 'demo' ? 'Demo' : conn.model;
+  c.in += inTok;
+  c.out += outTok;
+  c.calls++;
+  c.jobs[job] = (c.jobs[job] || 0) + 1;
+  await saveFares();
+}
+// Pictures (the Scenes receipt): count per connection and model; `cost` is what the provider
+// reported (OpenRouter), else null and Pictures › price per picture is used.
+export async function recordPicture(conn, model, cost, lineId, price = null) {
+  if (!conn) return;
+  const mo = (S.fares.months[monthKey()] ||= { conns: {}, lines: {} });
+  const p = (mo.pics ||= { conns: {}, lines: {} });
+  const key = conn.id + '|' + model;
+  // `known`: pictures whose cost the provider reported; `est`/`estN`: priced with your price per picture at the time.
+  const add = (o) => {
+    o.n++;
+    if (cost != null) (o.cost += cost), o.known++;
+    else if (price != null) (o.est = (o.est || 0) + price), (o.estN = (o.estN || 0) + 1);
+  };
+  const c = (p.conns[key] ||= { name: '', model, n: 0, cost: 0, known: 0 });
+  c.name = conn.name || conn.provider;
+  add(c);
+  if (lineId) add((p.lines[lineId] ||= { n: 0, cost: 0, known: 0 }));
+  await saveFares();
+}
+
 // Dollars for a token count on a connection, or null when that connection has no prices set.
 export function fareCost(connId, inTok, outTok) {
   const c = connection(connId);

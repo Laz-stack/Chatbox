@@ -9,7 +9,7 @@ import { PROVIDERS as P2, generateImage } from '../providers.js';
 
 const LETTER_BG = { anthropic: '#FDCD15', openai: '#ECECEC', openrouter: '#B8ACFE', custom: '#2EAA67', demo: '#333333' };
 
-export function connectionsView() {
+export function connectionsView(open = null) {
   const active = activeConnection();
   const card = (c, i) => {
     const on = c.id === active?.id;
@@ -38,6 +38,8 @@ export function connectionsView() {
     html,
     depth: 1,
     mount(root) {
+      // Fares › Set price opens the Pictures sheet straight away.
+      if (open === 'pictures') setTimeout(() => picturesSheet(() => (root.querySelector('#picSub').innerHTML = picSub())), 150);
       // After picking a Helper: update the row and the card tags in place (no re-render behind the sheet).
       const helperChanged = () => {
         root.querySelector('#helperSub').innerHTML = helperSub();
@@ -82,6 +84,7 @@ function picturesSheet(onChange) {
     html: `<h2 class="sheet-title">Scene pictures</h2><p class="sheet-p">Pick the connection that paints. Its key and address are used; the image model is set below.</p>
       <div class="hp-list" role="radiogroup" aria-label="Pictures connection">${opt('', 'Off', 'No pictures')}${list.map((c) => opt(c.id, esc(connName(c)), c.provider === 'demo' ? 'Placeholder pictures, to try it' : esc(P2[c.provider]?.label || ''))).join('')}</div>
       <div class="field" style="margin-top:14px" id="pmWrap"><div class="flabel"><label for="pmModel">Image model</label></div><input class="input" id="pmModel" value="${esc(p0.model || '')}" placeholder="${esc(MODEL_HINTS[picConn()?.provider] || 'gpt-image-1')}" autocomplete="off" spellcheck="false"></div>
+      <div class="field" style="margin-top:12px"><div class="flabel"><label for="pmPrice">Price per picture ($)</label><span class="small">For Fares, when the provider doesn’t say</span></div><input class="input" id="pmPrice" type="number" min="0" step="0.001" inputmode="decimal" value="${p0.price ?? ''}" placeholder="e.g. 0.01"></div>
       <p class="tx-lbl">Default style</p><div class="ck-chips" role="radiogroup" aria-label="Default style">${Object.entries(STYLES).map(([k, s]) => `<button type="button" class="press" role="radio" aria-checked="${p0.style === k}" data-ps="${k}">${s.label}</button>`).join('')}</div>
       <button type="button" class="btn-primary plate press" id="pmTest" style="margin-top:16px;justify-content:center"><span>${isDemoPics() ? 'Paint a test' : 'Paint a test (billed)'}</span></button>
       <div id="pmOut" class="pm-out" aria-live="polite"></div>
@@ -103,6 +106,7 @@ function picturesSheet(onChange) {
         s.querySelector('#pmModel').placeholder = MODEL_HINTS[picConn()?.provider] || 'gpt-image-1';
       });
       s.querySelector('#pmModel').addEventListener('change', (e) => save({ model: e.target.value.trim() }));
+      s.querySelector('#pmPrice').addEventListener('change', (e) => save({ price: e.target.value === '' ? null : Math.max(0, +e.target.value) }));
       s.querySelector('.ck-chips').addEventListener('click', async (e) => {
         const b = e.target.closest('[data-ps]');
         if (!b) return;
@@ -123,7 +127,7 @@ function picturesSheet(onChange) {
         btn.disabled = true;
         out.textContent = 'Painting a test picture…';
         try {
-          const url = await generateImage(c, { model: picModel(c), prompt: `${STYLES[picPrefs().style].words}. A quiet train platform at dusk, warm lamps, light rain. No text.` });
+          const { url } = await generateImage(c, { model: picModel(c), prompt: `${STYLES[picPrefs().style].words}. A quiet train platform at dusk, warm lamps, light rain. No text.` });
           out.innerHTML = `<img src="${esc(url)}" alt="Test picture: a train platform at dusk"><span>It works.</span>`;
         } catch (err) {
           out.textContent = `${err.message || 'It didn’t work.'} ${err.hint || ''}`;

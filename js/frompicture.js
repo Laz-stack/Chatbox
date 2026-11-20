@@ -1,6 +1,7 @@
 // Make a character from a picture: a model that can see pictures writes the character sheet
 // (the look precisely from the picture, the rest made up to fit); the editor opens filled in.
-import { S, blankCharacter, connection, activeConnection } from './store.js';
+import { S, blankCharacter, connection, activeConnection, recordJob } from './store.js';
+import { estimateTokens } from './util.js';
 import { PROVIDERS, complete } from './providers.js';
 import { FIELDS, extractJson, generate } from './blueprint.js';
 
@@ -78,6 +79,8 @@ export async function writeFromPicture({ conn, dataUrl, hint = '', signal }) {
         ? [{ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: dataUrl.split(',')[1] } }, { type: 'text', text: ask }]
         : [{ type: 'text', text: ask }, { type: 'image_url', image_url: { url: dataUrl } }];
     const text = await complete(conn, { system: 'You write character sheets for a roleplay chat app. Reply with ONE JSON object and nothing else. Every character is a fictional adult.', messages: [{ role: 'user', content: parts }], stream: false, maxTokens: Math.max(conn.maxTokens || 600, 1800), temperature: 0.9, signal });
+    // Counted on the Helper receipt (a picture is about a thousand tokens to read).
+    recordJob(conn, 'picread', estimateTokens(ask) + 1000, estimateTokens(text || '')).catch(() => {});
     let out;
     try {
       out = extractJson(text);

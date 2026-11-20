@@ -1,7 +1,7 @@
 // Scene pictures: the AI writes what the moment looks like (the characters' looks, the place, the
 // time of day) and an image model paints it. Pictures are saved in the app (S.images) and
 // attached to the message they show.
-import { S, connection, saveImages } from './store.js';
+import { S, connection, saveImages, recordPicture } from './store.js';
 import { PROVIDERS, generateImage } from './providers.js';
 import { extractJson, compileSheet } from './blueprint.js';
 import { helperComplete } from './helper.js';
@@ -18,7 +18,7 @@ export const STYLES = {
 };
 export const MODEL_HINTS = { openai: 'gpt-image-1', openrouter: 'google/gemini-2.5-flash-image', custom: 'your image model', demo: '' };
 
-export const picPrefs = () => ({ connId: null, model: '', style: 'painterly', ...(S.settings.pictures || {}) });
+export const picPrefs = () => ({ connId: null, model: '', style: 'painterly', price: null, ...(S.settings.pictures || {}) });
 // The connection that paints, if one is set up and able to.
 export function picConn() {
   const p = picPrefs();
@@ -42,7 +42,7 @@ export async function describe({ chat, cast, m, persona, conn, signal }) {
     'Write a prompt for an illustration of this exact moment. Return {"prompt":"...","caption":"..."}. ' +
     'prompt: 50 to 90 words, present tense, concrete and visual: who is in frame and what they look like (hair, clothes, build, from their sheets), what they are doing, the setting, light and mood. Landscape framing. ' +
     'No names of real artists, no text or lettering in the image. Everyone is an adult. caption: 1 to 4 words naming the place or moment.';
-  const out = await helperComplete(conn, 'track', { system: 'You write prompts for an illustrator. Reply with ONE JSON object and nothing else.', messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: 300, temperature: 0.6, signal });
+  const out = await helperComplete(conn, 'scene', { system: 'You write prompts for an illustrator. Reply with ONE JSON object and nothing else.', messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: 300, temperature: 0.6, signal });
   const j = extractJson(out);
   return String(j.prompt || '').trim() + (j.caption ? `\n§${String(j.caption).trim().slice(0, 40)}` : '');
 }
@@ -88,7 +88,8 @@ export async function paint({ chat, cast, m, persona, textConn, style, signal, o
   onPrompt?.(prompt);
   const st = STYLES[style] || STYLES.painterly;
   const full = `${st.words}. ${prompt}. Wide landscape composition. No text, captions, logos or watermarks.`;
-  const url = await generateImage(pc, { model: picModel(pc), prompt: full, signal });
+  const { url, cost } = await generateImage(pc, { model: picModel(pc), prompt: full, signal });
+  recordPicture(pc, picModel(pc) || 'demo pictures', cost ?? (pc.provider === 'demo' ? 0 : null), chat.characterId, picPrefs().price).catch(() => {});
   // Keep the picture even when it can't be shrunk here (a link without CORS): it was already paid for.
   const data = url.startsWith('data:image/svg') ? url : await shrink(url).catch(() => url);
   const key = 'pic:' + uid();
