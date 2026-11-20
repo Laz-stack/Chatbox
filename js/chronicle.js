@@ -92,7 +92,7 @@ async function read({ chat, cast, persona, conn, settings, whole = false, signal
     chat.chapters = before.chapters;
     // The map: take back only what this read did (a trip made meanwhile stays).
     if (out.place) undoMap(chat, out.place);
-    chat.chron = { ...(chat.chron || {}), failAt: chat.messages.length };
+    chat.chron = { ...(chat.chron || {}), failAt: chat.messages.length, failedAt: Date.now() };
     throw e;
   }
   chat.chron = { upto: len, at: Date.now(), whole: whole || chat.chron?.whole || from === 0 };
@@ -128,7 +128,7 @@ async function readPart({ chat, cast, persona, conn, signal, a, b }) {
     (advOn(chat) ? advAsk(you) : '') +
     (mapOn(chat) ? mapAsk() : '') +
     chaptersAsk(chat);
-  const text = await helperComplete(conn, 'track', { system, messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: (cast.length > 1 ? 1100 : 600) + (advOn(chat) ? 300 : 0) + (mapOn(chat) ? 80 : 0) + 60, temperature: 0.4, signal });
+  const text = await helperComplete(conn, 'track', { system, messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: (cast.length > 1 ? 2000 : 1400) + (advOn(chat) ? 300 : 0) + (mapOn(chat) ? 80 : 0) + 60, temperature: 0.4, signal });
   return extractJson(text);
 }
 
@@ -250,6 +250,17 @@ export function bondsAt(bonds, ids) {
   return out;
 }
 
+// "Story read 3 min ago · up to message 44 of 46": when the background read last ran (Bonds,
+// Route map, Quests and items, World map).
+export function readLine(chat, settings, ago) {
+  if (!trackingOn(settings)) return 'Story tracking is off, so nothing here updates by itself.';
+  const r = chat.chron || {};
+  if (r.failedAt && r.failedAt > (r.at || 0)) return `The last read didn’t work (${ago(r.failedAt)}). It tries again after a few more messages.`;
+  if (!r.at) return 'Not read yet. The first read comes after a couple of replies.';
+  const len = chat.messages.length;
+  return `Story read ${ago(r.at)} · up to message ${Math.min(r.upto || len, len)}${len > (r.upto || 0) ? ` of ${len}` : ''}`;
+}
+
 // Mark a message as a station by hand.
 export function markStation(chat, m, title) {
   chat.route ||= [];
@@ -286,9 +297,11 @@ export async function writeDiary({ chat, who, cast, persona, conn, settings, sig
     const ask =
       `Return {"title":"...","text":"..."}. text: first person, as ${who.name}, 90 to 180 words about the recent events from their point of view: what they noticed, what they felt, what they did not say out loud, and what they hope or fear next. ` +
       `Use their own voice and vocabulary. ${named_ ? `Call the user ${you}.` : 'Refer to the user as "you", as if writing to them.'} Plain paragraphs separated by a blank line: no asterisks, no quotation-style dialogue, no date line. Do not repeat the last entry. title: 2 to 4 words naming the moment, for example "The rain".`;
-    const text = await helperComplete(conn, 'diary', { system, messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: 700, temperature: 0.9, signal });
+    const text = await helperComplete(conn, 'diary', { system, messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: 2000, temperature: 0.9, signal });
+    if (!String(text || '').includes('{')) throw new Error(String(text || '').trim() ? 'The model answered without writing the entry (it may have declined). Try again, or pick another Helper model.' : 'The diary came back empty. Try again.');
     const j = extractJson(text);
-    entry = { title: str(j.title).replace(/^["“]|["”]$/g, '').slice(0, 50), text: str(j.text).replace(/\*/g, '').slice(0, 2400) };
+    const body = str(j.text || j.entry || Object.values(j).find((v) => typeof v === 'string' && v.length > 80));
+    entry = { title: str(j.title).replace(/^["“]|["”]$/g, '').slice(0, 50), text: body.replace(/\*/g, '').slice(0, 2400) };
     if (!entry.text) throw new Error('The diary came back empty. Try again.');
   }
   const e = { id: uid(), who: who.id, title: entry.title || 'Untitled', text: entry.text, msgId: chat.messages[end - 1]?.id || null, at: Date.now(), demo: !!entry.demo };

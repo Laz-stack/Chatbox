@@ -93,13 +93,57 @@ const ADULT = 'Every character is an adult. Age must be a whole number of 18 or 
 export function extractJson(text) {
   const t = String(text || '').replace(/```(?:json)?/gi, '');
   const a = t.indexOf('{');
+  if (a < 0) throw new Error("Couldn't read the reply. Nothing changed. Try again.");
   const b = t.lastIndexOf('}');
-  if (a < 0 || b <= a) throw new Error("Couldn't read the reply. Nothing changed. Try again.");
+  if (b > a) {
+    try {
+      return JSON.parse(t.slice(a, b + 1));
+    } catch {}
+  }
+  // Models often break JSON in two ways: raw line breaks inside a string (a diary with
+  // paragraphs), or an answer cut off part-way (it ran out of tokens). Repair both.
+  const fixed = repairJson(t.slice(a));
   try {
-    return JSON.parse(t.slice(a, b + 1));
+    return JSON.parse(fixed);
   } catch {
     throw new Error("Couldn't read the reply. Nothing changed. Try again.");
   }
+}
+// Escape control characters inside strings, drop anything after the object closes, and close
+// whatever was left open (a string, arrays, objects) if the text stops early.
+export function repairJson(src) {
+  let out = '';
+  const stack = [];
+  let inStr = false;
+  let esc = false;
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    if (inStr) {
+      if (esc) (esc = false), (out += ch);
+      else if (ch === '\\') (esc = true), (out += ch);
+      else if (ch === '"') (inStr = false), (out += ch);
+      else if (ch === '\n') out += '\\n';
+      else if (ch === '\r') out += '';
+      else if (ch === '\t') out += '\\t';
+      else if (ch < ' ') out += ' ';
+      else out += ch;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    else if (ch === '{' || ch === '[') stack.push(ch === '{' ? '}' : ']');
+    else if (ch === '}' || ch === ']') {
+      stack.pop();
+      out += ch;
+      if (!stack.length) return out;
+      continue;
+    }
+    out += ch;
+  }
+  if (inStr) out += '"';
+  // A dangling key or comma at the cut: trim back to the last complete value.
+  out = out.replace(/,\s*"[^"]*"\s*:?\s*$/, '').replace(/[,:]\s*$/, '');
+  while (stack.length) out += stack.pop();
+  return out;
 }
 
 const clean = (v) => (v == null ? '' : String(Array.isArray(v) ? v.join(', ') : v).trim().slice(0, 600));

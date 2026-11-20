@@ -1,7 +1,8 @@
 // ⋯ › Adventure: the Adventure mode switch for this chat, and its Quests and You carry boards.
-import { getChat, saveChat, character, interchange, isInterchangeId } from '../store.js';
+import { S, getChat, saveChat, character, interchange, isInterchangeId } from '../store.js';
+import { readLine } from '../chronicle.js';
 import { advOn } from '../adventure.js';
-import { esc, uid } from '../util.js';
+import { esc, uid, agoLong } from '../util.js';
 import { topbar, icon, toggleRow, bindSwitch, openSheet, confirmSheet } from '../ui.js';
 
 const STATES = [['open', 'Open'], ['done', 'Done'], ['failed', 'Failed']];
@@ -30,6 +31,7 @@ export async function adventureView(id) {
   const html = `<div class="screen no-tab cr-screen">
     ${topbar({ back: `#/chat/${encodeURIComponent(chat.id)}`, title: 'Quests and items' })}
     <p class="cr-sub">${esc(title || '')}</p>
+    <p class="cr-read">${esc(readLine(chat, S.settings, agoLong))}</p>
     <div class="ad-tog">${toggleRow('adOn', 'Adventure mode', 'Three suggested moves after each reply and a d20 for risky actions. Uses one short extra AI call per reply.', advOn(chat))}</div>
     <div id="adBoards">${boards()}</div>
     <p class="fhint">While Adventure mode is on, the story adds quests and items as you play (checked every couple of replies). Anything you edit stays the way you set it.</p>

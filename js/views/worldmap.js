@@ -4,7 +4,8 @@
 import { S, getChat, saveChat, character, interchange, isInterchangeId, connectionFor, personaFor } from '../store.js';
 import { MAX_PLACES, MAP_SCENES, mapOn, hereOf, loreFor, makeMap, addPlace, removePlace, travel, normName } from '../worldmap.js';
 import { SCENES } from '../scenes.js';
-import { esc, inkOn } from '../util.js';
+import { esc, inkOn, agoLong } from '../util.js';
+import { readLine } from '../chronicle.js';
 import { topbar, icon, toast, openSheet } from '../ui.js';
 
 const sceneName = (k) => SCENES.find((s) => s.key === k)?.name || 'Character’s own';
@@ -94,6 +95,7 @@ export async function worldMapView(id) {
   const html = `<div class="screen no-tab cr-screen">
     ${topbar({ back: `#/chat/${encodeURIComponent(chat.id)}`, title: 'World map', right: `<span id="wmEditSlot">${editBtn()}</span>` })}
     <p class="cr-sub">${esc(ix ? ix.title : ch.name)}${mapOn(chat) ? ` · ${chat.map.places.length} place${chat.map.places.length === 1 ? '' : 's'}` : ''}</p>
+    ${mapOn(chat) ? `<p class="cr-read">${esc(readLine(chat, S.settings, agoLong))}</p>` : ''}
     <div id="wmBody">${body()}</div>
     <p class="vh" aria-live="polite" id="wmSay"></p>
   </div>`;
