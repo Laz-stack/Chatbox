@@ -108,7 +108,11 @@ export async function chatView(id, focusId = null) {
   const winPics = () => {
     if (!ix && ch.win === 'sign') return [];
     if (chat.bgPic && S.images?.[chat.bgPic]) return [S.images[chat.bgPic]];
-    if (ix) return ix.people.map((p) => p.avatarImage).filter(Boolean).slice(0, 3);
+    if (ix) {
+      // A group's own picture (uploaded, or the cover from its imported card) first; else its members' pictures.
+      const own = ix.picture || (ix.useScene ? null : ix.cover);
+      return own ? [own] : ix.people.map((p) => p.avatarImage).filter(Boolean).slice(0, 3);
+    }
     return ch.win !== 'sign' && ch.avatarImage ? [ch.avatarImage] : [];
   };
   const winKey = () => winPics().join('|').length + ':' + (chat.bgPic || '') + ':' + (ch.win || '');
@@ -1500,7 +1504,8 @@ export async function chatView(id, focusId = null) {
       chat.winFold = !open;
       autoFold = false;
       foldNow();
-      if (!winPics().length && open) toast('No picture yet. Add one to the character, or set one from a painted scene.');
+      if (open && !winPics().length) toast(ix ? 'This group has no picture yet. Add one in Edit group, or tap ⋯ under a painted scene › Use as background.' : `${ch.name} has no picture yet. Add one in Edit, or tap ⋯ under a painted scene › Use as background.`);
+      else if (open && !winEl.classList.contains('has-pic')) toast('This picture was saved too small to show here. Upload it again in Edit, or re-import the card, to get a bigger copy.');
       await saveChat(chat, false);
     });
     foldNow();
