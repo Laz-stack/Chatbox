@@ -2,7 +2,6 @@
 import { esc, inkOn, clamp, reducedMotion, EASE_OUT } from './util.js';
 import { icon, arrow } from './icons.js';
 import { avatarSVG, faceSVG } from './avatar.js';
-import { sceneSVG } from './scenes.js';
 
 export { icon, arrow };
 
@@ -21,14 +20,23 @@ export const avatarBullet = (ch, s = 40, style = '', av = '') => {
   return `<span class="bullet bullet-av"${av ? ` data-av="${esc(av)}"` : ''} style="width:${s}px;height:${s}px;background:${bg};${style}">${inner}</span>`;
 };
 
-// A group chat's one picture: your uploaded image, else the imported cover, else its scene art.
-export const groupScene = (ix) => ix.sceneArt || (ix.people || []).map((p) => p.scene).find((k) => k && k !== 'none') || 'night';
+// A group chat's one picture: your uploaded image, else the imported cover, else its members' faces
+// side by side (two halves, or four quarters).
 export const groupAvatar = (ix, s = 40) => {
-  // Scene art chosen on purpose wins over an imported cover.
   const img = ix.picture || (ix.useScene ? null : ix.cover);
-  const inner = img ? `<img src="${esc(img)}" alt="" width="${s}" height="${s}">` : sceneSVG(groupScene(ix));
-  return `<span class="gav" style="width:${s}px;height:${s}px">${inner}</span>`;
+  if (img) return `<span class="gav" style="width:${s}px;height:${s}px"><img src="${esc(img)}" alt="" width="${s}" height="${s}"></span>`;
+  const ppl = (ix.people || []).slice(0, 4);
+  const cell = ppl.length > 2 ? Math.ceil(s / 2) : s;
+  const face = (p) => {
+    const bg = p.line?.color || p.color || '#2EAA67';
+    return `<span style="background:${bg}">${p.avatarImage ? `<img src="${esc(p.avatarImage)}" alt="">` : faceSVG(p, cell, 'happy', bg).replace('<svg ', '<svg preserveAspectRatio="xMidYMid slice" ')}</span>`;
+  };
+  return `<span class="gav mos n${Math.min(ppl.length, 4)}" style="width:${s}px;height:${s}px">${ppl.map(face).join('')}</span>`;
 };
+
+// An empty screen as a station sign: nothing departs from here yet, and what to do about it.
+export const emptySign = (title, sub, action = '', where = 'This platform') =>
+  `<div class="esign"><div class="sign"><span class="rnd" style="--c:#7A7A7A" aria-hidden="true">–<b>00</b></span><span class="sn"><b>${title}</b><small>${where}</small></span><i class="band" style="background:#7A7A7A"></i></div><p class="esign-p">${sub}</p>${action}</div>`;
 
 export const title2 = (a, b, { tag = 'h1', size = 30 } = {}) =>
   `<${tag} class="t2" style="font-size:${size}px"><span>${a}</span><span class="sub">${b}</span></${tag}>`;

@@ -2,7 +2,7 @@
 // and a search across names, taglines and every message in every chat.
 import { S, textOf, named, departures, logbook, character, lastMessage, interchange, latestChat, chatsFor } from '../store.js';
 import { esc, ago, agoLong, plain, inkOn, debounce, formatMessage, cleanTagline } from '../util.js';
-import { title2, avatarBullet, tabbar, icon, groupAvatar } from '../ui.js';
+import { title2, avatarBullet, tabbar, icon, groupAvatar, emptySign } from '../ui.js';
 import { startImport } from './import.js';
 
 const FILTERS = [
@@ -124,7 +124,7 @@ export function linesView(filter) {
       const deps = departures();
       return deps.length
         ? section('Recent', deps.length, deps.map(departureRow).join('')) + (deps.length < 4 ? `<a class="ln-all press" href="#/lines/all">All lines${icon('chev', 16)}</a>` : '')
-        : `<p class="search-none">No departures yet. Pick a line under All and say hello.</p>`;
+        : emptySign('No departures yet', 'Pick a line under All and say hello.', `<a class="pill press" href="#/lines/all">All lines${icon('chev', 15)}</a>`, 'Lines · Recent');
     }
     if (filter === 'interchanges') {
       const all = S.interchanges.map((x) => interchange(x.id)).filter(Boolean);
@@ -132,11 +132,11 @@ export function linesView(filter) {
     }
     if (filter === 'narrators') {
       const list = sorted.filter(isNarrator);
-      return list.length ? `<div class="index">${list.map(lineRow).join('')}</div>` : `<p class="search-none">No narrators yet. Import a card with several characters and choose One narrator.</p>`;
+      return list.length ? `<div class="index">${list.map(lineRow).join('')}</div>` : emptySign('No narrators yet', 'Import a card with several characters and choose One narrator.', '', 'Lines · One narrator');
     }
     if (filter === 'starred') {
       const log = logbook();
-      return log.length ? `<div class="roll">${log.map(starRow).join('')}</div>` : `<p class="search-none">Nothing starred yet. Long-press a message in a chat and tap Star.</p>`;
+      return log.length ? `<div class="roll">${log.map(starRow).join('')}</div>` : emptySign('Nothing starred yet', 'Long-press a message in a chat and tap Star. It lands here.', '', 'Lines · Starred');
     }
     const groups = S.interchanges.map((x) => interchange(x.id)).filter(Boolean);
     const chars = sorted.filter((c) => !isNarrator(c));

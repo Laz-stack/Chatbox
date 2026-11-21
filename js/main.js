@@ -92,7 +92,8 @@ function tagShared(root, toChat) {
     const [r, g, b] = getComputedStyle(arrowEl).color.match(/\d+/g).map(Number);
     document.documentElement.classList.toggle('vt-arrow-ink', r + g + b < 200);
   }
-  let el = root.querySelector('[data-av^="head:"]');
+  // The Platform hero's window lands on the chat's window when it's open; else on the header avatar.
+  let el = (origin?.startsWith('hero:') && root.querySelector(`.win.has-pic:not(.fold) [data-av="win:${origin.split(':')[1]}"]`)) || root.querySelector('[data-av^="head:"]');
   if (!el) {
     const id = origin?.split(':')[1];
     el = (origin && root.querySelector(`[data-av="${origin}"]`)) || (id && root.querySelector(`[data-av="line:${id}"]`));

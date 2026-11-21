@@ -3,12 +3,12 @@
 // scene, remove, add).
 import { S, getChat, saveChat, character, interchange, isInterchangeId, connectionFor, personaFor } from '../store.js';
 import { MAX_PLACES, MAP_SCENES, mapOn, hereOf, loreFor, makeMap, addPlace, removePlace, travel, normName } from '../worldmap.js';
-import { SCENES } from '../scenes.js';
+import { soundsLikeName } from '../scenepicker.js';
 import { esc, inkOn, agoLong } from '../util.js';
 import { readLine } from '../chronicle.js';
 import { topbar, icon, toast, openSheet } from '../ui.js';
 
-const sceneName = (k) => SCENES.find((s) => s.key === k)?.name || 'Character’s own';
+const sceneName = (k) => (k ? soundsLikeName(k) : 'Like the character’s');
 
 export async function worldMapView(id) {
   const chat = await getChat(id);
@@ -69,7 +69,7 @@ export async function worldMapView(id) {
     const cur = here()?.id === p.id;
     const usual = p.usual.map((id) => cast.find((c) => c.id === id)).filter(Boolean);
     return `<div class="wm-card"><b>${esc(p.name)}</b>${p.note ? `<p>${esc(p.note)}</p>` : ''}
-      <div class="wm-meta">${usual.length ? `<span class="wm-k">Usually</span>${usual.map((c) => `<span class="wm-who"><i style="background:${c.line?.color || '#2EAA67'}"></i>${esc(c.name.split(' ')[0])}</span>`).join('')}` : ''}<span class="wm-k">Background</span><span class="wm-tag">${esc(sceneName(p.scene))}</span></div>
+      <div class="wm-meta">${usual.length ? `<span class="wm-k">Usually</span>${usual.map((c) => `<span class="wm-who"><i style="background:${c.line?.color || '#2EAA67'}"></i>${esc(c.name.split(' ')[0])}</span>`).join('')}` : ''}<span class="wm-k">Sounds like</span><span class="wm-tag">${esc(sceneName(p.scene))}</span></div>
       <p class="wm-from">From ${p.from === 'lore' ? 'the lorebook' : p.from === 'story' ? 'the story' : 'you'}</p>
       ${cur ? `<p class="wm-at">You are here</p>` : `<button type="button" class="wm-go press" data-go="${p.id}">${icon('route', 17)}Travel here</button>`}</div>`;
   };
@@ -84,7 +84,7 @@ export async function worldMapView(id) {
   const editRows = () =>
     `<section class="ad-board"><h2 class="ad-h"><span>Places</span><span>${chat.map.places.length} of ${MAX_PLACES}</span></h2>
       ${chat.map.places
-        .map((p) => `<div class="wm-er"><input class="input" value="${esc(p.name)}" maxlength="40" aria-label="Name of ${esc(p.name)}" data-rename="${p.id}"><button type="button" class="wm-sc press" data-scene="${p.id}" aria-label="Background for ${esc(p.name)}: ${esc(sceneName(p.scene))}">${esc(sceneName(p.scene))}</button><button type="button" class="ibtn ghost press" data-rm="${p.id}" aria-label="Remove ${esc(p.name)}">${icon('trash', 18)}</button></div>`)
+        .map((p) => `<div class="wm-er"><input class="input" value="${esc(p.name)}" maxlength="40" aria-label="Name of ${esc(p.name)}" data-rename="${p.id}"><button type="button" class="wm-sc press" data-scene="${p.id}" aria-label="What ${esc(p.name)} sounds like: ${esc(sceneName(p.scene))}">${esc(sceneName(p.scene))}</button><button type="button" class="ibtn ghost press" data-rm="${p.id}" aria-label="Remove ${esc(p.name)}">${icon('trash', 18)}</button></div>`)
         .join('')}
       <button type="button" class="ad-add press" data-addp ${chat.map.places.length >= MAX_PLACES ? `disabled aria-describedby="wmFull"` : ''}>${icon('plus', 17)}Add a place</button>
       ${chat.map.places.length >= MAX_PLACES ? `<p class="ad-none" id="wmFull">The map holds ${MAX_PLACES} places. Remove one to add another.${chat.map.suggest?.length ? ` The story also found: ${esc(chat.map.suggest.join(', '))}.` : ''}</p>` : ''}</section>`;
@@ -195,7 +195,7 @@ export async function worldMapView(id) {
       function sceneSheet(p) {
         openSheet({
           label: 'Background',
-          html: `<h2 class="sheet-title">Background for ${esc(p.name)}</h2><div class="ad-states" role="radiogroup" aria-label="Background" style="flex-wrap:wrap">${['', ...MAP_SCENES].map((k) => `<button type="button" class="press" role="radio" aria-checked="${(p.scene || '') === k}" data-k="${k}">${esc(sceneName(k))}</button>`).join('')}</div>`,
+          html: `<h2 class="sheet-title">What ${esc(p.name)} sounds like</h2><p class="sheet-p">The ambience here when Sound is on Auto.</p><div class="ad-states" role="radiogroup" aria-label="Sounds like" style="flex-wrap:wrap">${['', ...MAP_SCENES].map((k) => `<button type="button" class="press" role="radio" aria-checked="${(p.scene || '') === k}" data-k="${k}">${esc(sceneName(k))}</button>`).join('')}</div>`,
           onMount(s, close) {
             s.addEventListener('click', async (e) => {
               const b = e.target.closest('[data-k]');

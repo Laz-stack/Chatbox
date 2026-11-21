@@ -24,12 +24,15 @@ export function homeView() {
     const where = cur ? `Chapter ${chat.chapters.indexOf(cur) + 1} · ${cur.title}` : featured.tagline || preview;
     const lastLine = said ? plain(named(textOf(said), featured, 'you', personaFor(chat))).replace(/\s+/g, ' ').trim() : '';
     const when = said?.at || chat?.updatedAt;
-    hero = `<a class="hero press" href="#/chat/${featured.id}" style="--line:${lc};--on:${inkOn(lc)};--ring:${luminance(lc) > 0.55 ? '#0A0A0A' : '#FFFFFF'}" aria-label="${started[0] ? 'Continue chatting with' : 'Start chatting with'} ${esc(featured.name)}">
-      <span class="hero-arrow">${arrow(128, 'currentColor')}</span>
-      <span class="hero-av" data-av="hero:${esc(featured.id)}">${avatarTile(featured, 92, { radius: 26, rot: -4 })}</span>
+    // Window seat: with a card picture, the hero is a window onto the character, like the chat's.
+    const pic = featured.avatarImage;
+    const quote = lastLine.replace(/^["“”'*\s]+|["“”'*\s]+$/g, '');
+    hero = `<a class="hero press${pic ? ' has-win' : ''}" href="#/chat/${featured.id}" style="--line:${lc};--on:${inkOn(lc)};--ring:${luminance(lc) > 0.55 ? '#0A0A0A' : '#FFFFFF'}" aria-label="${started[0] ? 'Continue chatting with' : 'Start chatting with'} ${esc(featured.name)}">
+      ${pic ? `<span class="hero-win" data-av="hero:${esc(featured.id)}"><img src="${esc(pic)}" alt=""></span>` : `<span class="hero-arrow">${arrow(128, 'currentColor')}</span>
+      <span class="hero-av" data-av="hero:${esc(featured.id)}">${avatarTile(featured, 92, { radius: 26, rot: -4 })}</span>`}
       <span class="hero-foot">
-        <span class="hero-kicker">${avatarBullet(featured, 34)}${started[0] ? (when ? `Continue · ${agoLong(when)}` : 'Continue the chat') : 'Start a chat'}</span>
-        <span class="hero-name">${esc(featured.name)}<span class="hero-sub">${esc(started[0] ? where : featured.tagline || preview)}</span>${started[0] && lastLine ? `<span class="hero-q">“${esc(lastLine.slice(0, 140))}”</span>` : ''}</span>
+        <span class="hero-kicker">${pic ? '' : avatarBullet(featured, 34)}${started[0] ? (when ? `Continue · ${agoLong(when)}` : 'Continue the chat') : 'Start a chat'}</span>
+        <span class="hero-name">${esc(featured.name)}<span class="hero-sub">${esc(started[0] ? where : featured.tagline || preview)}</span>${started[0] && quote ? `<span class="hero-q">“${esc(quote.slice(0, 140))}”</span>` : ''}</span>
         <span class="hero-line" aria-hidden="true">${Array.from({ length: dots }, (_, i) => `<i${i === dots - 1 ? ' class="now"' : ''} style="animation-delay:${0.4 + i * 0.06}s"></i>`).join('')}</span>
       </span></a>`;
   } else {
