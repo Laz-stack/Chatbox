@@ -202,7 +202,7 @@ html.vt-tabs .tabbar .stop-new .stop { view-transition-name: tab-new; }
 
 /* ---------- home ---------- */
 .hero { position: relative; display: block; height: 310px; border-radius: 30px; padding: 20px; background: var(--line, var(--green)); color: var(--on, var(--white)); text-decoration: none; overflow: hidden; margin-top: 18px; }
-.hero .hero-arrow { position: absolute; right: -34px; bottom: -34px; width: 260px; height: 260px; z-index: 0; pointer-events: none; color: color-mix(in srgb, var(--line, var(--green)) 84%, var(--on, #0A0A0A)); transition: color .16s ease, transform .3s var(--spring); animation: arrowIn .9s var(--out) .1s backwards; }
+.hero .hero-arrow { position: absolute; left: -34px; bottom: -34px; width: 260px; height: 260px; z-index: 0; pointer-events: none; color: color-mix(in srgb, var(--line, var(--green)) 84%, var(--on, #0A0A0A)); transition: color .16s ease, transform .3s var(--spring); animation: arrowIn .9s var(--out) .1s backwards; }
 .hero .hero-arrow svg { width: 100%; height: 100%; display: block; }
 .hero .hero-av, .hero .hero-foot, .hero .hero-win { z-index: 1; }
 .hero.has-win .hero-foot, .hero.has-win .hero-win { position: relative; }
