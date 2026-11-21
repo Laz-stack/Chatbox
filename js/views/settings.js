@@ -6,6 +6,7 @@ import { startImport } from './import.js';
 import { textSummary } from '../textstyle.js';
 import { esc, download, resizeImage } from '../util.js';
 import { avatarTile, avatarSVG, PRESETS, PRESET_KEYS } from '../avatar.js';
+import { sceneCount } from './scenes.js';
 import { ttsSupported, voices, speak } from '../tts.js';
 import { title2, topbar, group, row, sw, bindSwitch, field, area, toggleRow, bullet, icon, arrow, tabbar, openSheet, openMenu, toast, confirmSheet } from '../ui.js';
 
@@ -101,6 +102,7 @@ export function settingsView() {
       `<div class="row"><span class="row-ic" style="background:var(--plate2);color:var(--cream)">${icon('shield', 19)}</span><span class="row-tx"><span class="row-t">18+ content</span><span class="row-s" id="matureSub">${matureSub()}</span></span>${sw('tAdult', S.settings.mature, '18+ content')}</div>`
     )}
     <h2 class="sec">Data</h2>
+    ${group(row({ href: '#/scenes', ic: 'layers', bc: 'var(--plate2)', fc: 'var(--cream)', title: 'Scenes', sub: (() => { const n = sceneCount(); return n ? `${n} painted ${n === 1 ? 'scene' : 'scenes'}, kept from every chat` : 'Every scene you paint is kept here'; })() }))}
     ${group(row({ href: '#/sync', ic: 'refresh', bc: 'var(--cream)', fc: '#0A0A0A', title: 'Sync', sub: esc(syncSummary()) }), row({ href: '#/backup', ic: 'box', bc: 'var(--blue)', fc: '#fff', title: 'Backup and cards', sub: S.settings.lastBackup ? `Last backup ${new Date(S.settings.lastBackup).toLocaleDateString()}` : 'No backup yet' }))}
     <div class="note" style="margin-top:18px">${icon('shield', 18)}<span>${isPersistent() ? (S.settings.sync?.connected ? 'Saved in this browser and synced to your own Google Drive. Nothing goes to a server of ours.' : 'Everything is saved in this browser only. Nothing goes to a server of ours.') : 'This browser is blocking storage (private mode?), so changes will be lost when you close the tab.'}</span></div>
     <p class="credits">Faces: Open Peeps by Pablo Stanley (CC0). Icons: Phosphor (MIT). Platform train: OpenMoji high-speed train, recoloured (CC BY-SA 4.0).</p>

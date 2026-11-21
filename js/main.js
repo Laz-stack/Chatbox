@@ -17,6 +17,7 @@ import { syncView } from './views/sync.js';
 import { adventureView } from './views/adventure.js';
 import { worldMapView } from './views/worldmap.js';
 import { fromPictureView } from './views/frompicture.js';
+import { scenesView } from './views/scenes.js';
 import { startAutoSync, syncOn, signedIn, localChanges } from './sync.js';
 import { applyText } from './textstyle.js';
 import { openBuildSheet } from './build.js';
@@ -54,6 +55,7 @@ const routes = [
   [/^#\/persona$/, () => personasView()],
   [/^#\/persona\/([^/]+)$/, (id) => personaView(decodeURIComponent(id))],
   [/^#\/backup$/, () => backupView()],
+  [/^#\/scenes$/, () => scenesView()],
 ];
 
 let current = null;

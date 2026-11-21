@@ -124,12 +124,31 @@ export async function paint({ chat, cast, m, persona, textConn, style, signal, o
 export const picSrc = (p) => S.images?.[p.key] || '';
 export const isDemoPics = (c = picConn()) => c?.provider === 'demo';
 
+// ---------- Scenes: every painted scene is kept in its chat's Scenes, even after its message is gone ----------
+// chat.scenes: [{ id, key, prompt, caption, style, at, msgId }], newest last.
+export function scenesOf(chat) {
+  if (!chat?.messages) return [];
+  if (!chat.scenes) {
+    // Chats from before Scenes: start from the pictures still in the chat.
+    chat.scenes = [];
+    for (const m of chat.messages || []) for (const p of m.pics || []) chat.scenes.push({ id: p.id, key: p.key, prompt: p.prompt, caption: p.caption, style: p.style, at: p.at || m.at || 0, msgId: m.id });
+  }
+  return chat.scenes.filter((x) => S.images?.[x.key]);
+}
+export function keepScene(chat, rec, m) {
+  scenesOf(chat);
+  if (!chat.scenes.some((x) => x.key === rec.key)) chat.scenes.push({ id: rec.id, key: rec.key, prompt: rec.prompt, caption: rec.caption, style: rec.style, at: rec.at, msgId: m?.id || null });
+}
+export const removeScene = (chat, key) => (chat.scenes = (chat.scenes || []).filter((x) => x.key !== key));
+
 // Pictures nothing points to any more (a deleted message or chat) are removed from storage.
 export async function gcPictures() {
   const used = new Set();
   for (const c of S.chats.values()) {
+    scenesOf(c); // an older chat's scenes count as kept before anything is removed
     if (c.bgPic) used.add(c.bgPic);
     for (const m of c.messages || []) for (const p of m.pics || []) used.add(p.key);
+    for (const x of c.scenes || []) used.add(x.key);
   }
   const gone = Object.keys(S.images || {}).filter((k) => k.startsWith('pic:') && !used.has(k));
   if (!gone.length) return 0;
@@ -144,8 +163,9 @@ export function picStats() {
 // Delete every scene picture (Connections › Pictures).
 export async function clearPictures(saveChatFn) {
   for (const c of S.chats.values()) {
-    let touched = !!c.bgPic;
+    let touched = !!c.bgPic || !!c.scenes?.length;
     c.bgPic = null;
+    c.scenes = [];
     for (const m of c.messages || []) if (m.pics?.length) (m.pics = []), (touched = true);
     if (touched) await saveChatFn(c);
   }
