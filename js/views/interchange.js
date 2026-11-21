@@ -83,7 +83,7 @@ export function interchangeView(id) {
         err.hidden = true;
         $('#ixPicAv').classList.add('loading');
         try {
-          d.picture = await resizeImage(f, 512);
+          d.picture = await resizeImage(f, 1024);
         } catch {
           err.hidden = false;
           err.textContent = 'That picture couldn’t be read. Try another one.';

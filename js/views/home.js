@@ -1,7 +1,7 @@
 import { S, activeConnection, lastMessage, textOf, named, departures, logbook, character, interchange, latestChat, personaFor } from '../store.js';
 import { esc, ago, agoLong, plain, inkOn, luminance, boardTime, formatMessage } from '../util.js';
 import { avatarTile } from '../avatar.js';
-import { title2, bullet, avatarBullet, tabbar, icon, arrow, groupAvatar } from '../ui.js';
+import { title2, bullet, avatarBullet, tabbar, icon, arrow, groupAvatar, fitPics } from '../ui.js';
 import { startImport } from './import.js';
 import { chapterAt } from '../chapters.js';
 
@@ -28,11 +28,11 @@ export function homeView() {
     const pic = featured.avatarImage;
     const quote = lastLine.replace(/^["“”'*\s]+|["“”'*\s]+$/g, '');
     hero = `<a class="hero press${pic ? ' has-win' : ''}" href="#/chat/${featured.id}" style="--line:${lc};--on:${inkOn(lc)};--ring:${luminance(lc) > 0.55 ? '#0A0A0A' : '#FFFFFF'}" aria-label="${started[0] ? 'Continue chatting with' : 'Start chatting with'} ${esc(featured.name)}">
-      ${pic ? `<span class="hero-win" data-av="hero:${esc(featured.id)}"><img src="${esc(pic)}" alt=""></span>` : `<span class="hero-arrow">${arrow(128, 'currentColor')}</span>
+      ${pic ? `<span class="hero-win" data-av="hero:${esc(featured.id)}"><img src="${esc(pic)}" alt="" data-fit></span>` : `<span class="hero-arrow">${arrow(128, 'currentColor')}</span>
       <span class="hero-av" data-av="hero:${esc(featured.id)}">${avatarTile(featured, 92, { radius: 26, rot: -4 })}</span>`}
       <span class="hero-foot">
         <span class="hero-kicker">${pic ? '' : avatarBullet(featured, 34)}${started[0] ? (when ? `Continue · ${agoLong(when)}` : 'Continue the chat') : 'Start a chat'}</span>
-        <span class="hero-name">${esc(featured.name)}<span class="hero-sub">${esc(started[0] ? where : featured.tagline || preview)}</span>${started[0] && quote ? `<span class="hero-q">“${esc(quote.slice(0, 140))}”</span>` : ''}</span>
+        <span class="hero-name${pic && featured.name.length > 11 ? ' long' : ''}">${esc(featured.name)}<span class="hero-sub">${esc(started[0] ? where : featured.tagline || preview)}</span>${started[0] && quote ? `<span class="hero-q">“${esc(quote.slice(0, 140))}”</span>` : ''}</span>
         <span class="hero-line" aria-hidden="true">${Array.from({ length: dots }, (_, i) => `<i${i === dots - 1 ? ' class="now"' : ''} style="animation-delay:${0.4 + i * 0.06}s"></i>`).join('')}</span>
       </span></a>`;
   } else {
@@ -91,6 +91,7 @@ export function homeView() {
     html,
     depth: 0,
     mount(root) {
+      fitPics(root);
       root.querySelector('#homeCardIn').addEventListener('change', (e) => (startImport([...e.target.files]), (e.target.value = '')));
     },
   };

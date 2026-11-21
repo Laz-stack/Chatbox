@@ -1893,3 +1893,16 @@ button.bopt { width: 100%; text-align: left; }
 .rnd.pale, .wsign.pale .rnd { box-shadow: 0 0 0 1.5px #0A0A0A, inset 0 0 0 1.5px #0A0A0A; }
 .band.pale, .wsign.pale .band { border-top: 1.5px solid #0A0A0A; }
 .wopt:focus-visible, .ad-states button:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; }
+
+/* A square or small card picture is shown whole, framed, instead of cropped and blown up. The frame is
+   the character's line colour (Platform hero) or a dark tint of it (chat), and the sign sits under it. */
+.win-pic .pane.contain img, .hero-win.contain img { object-fit: contain; object-position: 50% 50%; }
+.win-pic .pane.contain { background: color-mix(in srgb, var(--accent, #2EAA67) 26%, #0A0A0A); }
+.win.framed { --wh: clamp(132px, 25vh, 220px); }
+.win.has-pic.framed:not(.fold) .sign { margin: 8px 0 0; }
+.hero-win.contain { background: color-mix(in srgb, var(--line, #2EAA67) 70%, #0A0A0A); }
+.hero-win.contain img { filter: drop-shadow(0 6px 14px rgba(0, 0, 0, .35)); }
+.hero.has-win .hero-name.long { white-space: normal; font-size: 38px; line-height: 1; text-wrap: balance; }
+.hero.has-win .hero-name.long .hero-sub { margin-top: 10px; }
+.win-pic .pane.contain, .hero-win.contain { position: relative; }
+.win-pic .pane.contain img, .hero-win.contain img { position: absolute; inset: 0; margin: auto; width: 100%; height: 100%; }
