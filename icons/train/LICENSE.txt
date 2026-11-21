@@ -1,0 +1,1 @@
+The Platform hero train (js/herotrain.js) is adapted from OpenMoji "high-speed train" (1F684) by the OpenMoji contributors, https://openmoji.org, licensed CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/). Changes: recoloured to cream and ink, two coaches made from its body section, joined into one train. The adapted artwork is shared under the same licence.
