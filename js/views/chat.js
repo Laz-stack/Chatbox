@@ -13,7 +13,8 @@ import { advOn, roll, RESULT, suggestMoves, advRowText } from '../adventure.js';
 import { hereOf, untravel } from '../worldmap.js';
 import { sttSupported, listen, speakParts, stopParts } from '../voice.js';
 import { voiceSheet } from './voicesheet.js';
-import { STYLES, picConn, picPrefs, providerName, paint, picSrc, altOf, squareOf, isDemoPics, gcPictures } from '../pictures.js';
+import { STYLES, picConn, picPrefs, providerName, paint, picSrc, altOf, squareOf, isDemoPics, gcPictures, keepScene, scenesOf, removeScene } from '../pictures.js';
+import { scenesSheet } from './scenes.js';
 import { esc, uid, formatMessage, markProse, fmtNum, estimateTokens, inkOn, ago, plain, detectMood, copyText, download, slug, reducedMotion, motion, lineAccent, EASE_OUT } from '../util.js';
 import { avatarTile } from '../avatar.js';
 import { windowSheet as openWindowSheet, pale } from '../scenepicker.js';
@@ -138,6 +139,7 @@ export async function chatView(id, focusId = null) {
   };
   const youWho = () => ({ name: me().name?.trim() || 'You', preset: me().preset, avatarImage: me().avatarImage, line: { color: '#FDCD15' } });
   const chat = await getChat(id);
+  if (chat) scenesOf(chat); // older chats: keep their painted scenes before anything can remove a message
   if (!chat) return null;
   let ctl = null;
   let vmStopAll = null; // set by the voice mode in mount(); unmount stops it
@@ -1359,6 +1361,7 @@ export async function chatView(id, focusId = null) {
         });
         clearInterval(timer);
         (m.pics ||= []).push(rec);
+        keepScene(chat, rec, m); // saved to this chat's Scenes too
         await saveChat(chat);
         if (destroyed) return;
         const i = chat.messages.indexOf(m);
@@ -1395,6 +1398,7 @@ export async function chatView(id, focusId = null) {
       else if (what === 'delete') {
         if (!(await confirmSheet({ title: 'Delete this picture?', body: 'It’s removed from this chat and from the app.', ok: 'Delete', danger: true }))) return;
         m.pics = m.pics.filter((x) => x !== p);
+        removeScene(chat, p.key);
         if (chat.bgPic === p.key) (chat.bgPic = null), setScene();
         await saveChat(chat);
         await gcPictures();
@@ -1907,6 +1911,7 @@ export async function chatView(id, focusId = null) {
             ]
           : [{ icon: 'card', label: 'Edit character', on: () => (location.hash = `#/edit/${ch.id}`) }]),
         ...(ix ? [] : [{ icon: 'image', label: 'Window', on: sceneSheet }]),
+        { icon: 'layers', label: scenesOf(chat).length ? `Scenes (${scenesOf(chat).length})` : 'Scenes', on: () => scenesSheet(chat, { title: ch.name, onWindow: () => setScene() }) },
         { icon: 'spark', label: 'Memory and notes', on: () => (location.hash = `#/memory/${encodeURIComponent(chat.id)}`) },
         { icon: 'layers', label: 'Final prompt', on: () => (location.hash = `#/final/${encodeURIComponent(chat.id)}`) },
         ...(ix ? [] : [{ icon: 'download', label: 'Export card (PNG)', on: async () => download(await exportCardPng(ch), slug(ch.name) + '.card.png') }]),
@@ -2311,7 +2316,8 @@ export async function chatView(id, focusId = null) {
             const b = e.target.closest('[data-del]');
             if (!b) return;
             const cid = b.dataset.del;
-            if (!(await confirmSheet({ title: 'Delete this chat?', body: 'Its messages, notes and summary go too. Other chats with this character stay.', ok: 'Delete chat', danger: true }))) return;
+            const nScenes = scenesOf(S.chats.get(cid) || {}).length;
+            if (!(await confirmSheet({ title: 'Delete this chat?', body: `Its messages, notes and summary go too${nScenes ? `, and its ${nScenes === 1 ? 'one painted scene' : `${nScenes} painted scenes`}` : ''}. Other chats with this character stay.`, ok: 'Delete chat', danger: true }))) return;
             await deleteChat(cid);
             if (cid === chat.id) {
               close();
