@@ -1952,3 +1952,13 @@ button.bopt { width: 100%; text-align: left; }
 .scn-cap { font: 800 14px/1.35 var(--font); color: var(--cream); margin-bottom: 2px; }
 .pic-lb-acts [aria-pressed='true'] { background: var(--yellow); color: var(--bg); }
 .scn-lb { z-index: 300; }
+
+/* Dim mode (js/dim.js): a warm multiply layer over everything. Black stays black, whites go to soft
+   paper, yellow to amber; it never takes touches. Fades in and out over two seconds. */
+.dim-layer { position: fixed; inset: 0; z-index: 2147483000; pointer-events: none; background: #E9BE8A; mix-blend-mode: multiply; opacity: 0; transition: opacity 2s ease; }
+.dim-layer.on { opacity: .9; }
+html.dim { --white: #F3F0EA; }
+.dim-times { display: flex; gap: 10px; margin: 14px 0 4px; }
+.dim-times label { flex: 1; display: flex; flex-direction: column; gap: 6px; font: 700 13px var(--font); color: var(--muted); }
+.dim-skip { margin: 10px 0 4px; }
+@media (prefers-reduced-motion: reduce) { .dim-layer { transition: none; } }

@@ -20,6 +20,7 @@ import { fromPictureView } from './views/frompicture.js';
 import { scenesView } from './views/scenes.js';
 import { startAutoSync, syncOn, signedIn, localChanges } from './sync.js';
 import { applyText } from './textstyle.js';
+import { startDim } from './dim.js';
 import { openBuildSheet } from './build.js';
 import { reducedMotion } from './util.js';
 import { toast, closeOverlays } from './ui.js';
@@ -237,6 +238,7 @@ window.addEventListener('unhandledrejection', (e) => {
   try {
     await load();
     applyText();
+    startDim();
   } catch (e) {
     console.error(e);
     toast('Could not open saved data. Starting fresh for this session.', { kind: 'err' });
