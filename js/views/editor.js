@@ -3,11 +3,12 @@ import { ttsSupported, voices } from '../tts.js';
 import { voiceSheet } from './voicesheet.js';
 import { esc, resizeImage, download, slug, motion } from '../util.js';
 import { avatarTile, avatarSVG, PRESETS, PRESET_KEYS, EXPRESSIONS } from '../avatar.js';
-import { sceneSVG, SCENES } from '../scenes.js';
-import { sceneSheet } from '../scenepicker.js';
+import { windowSheet, soundsLikeName } from '../scenepicker.js';
 import { exportCardPng, exportCardJson } from '../cards.js';
 import { blueprintHTML, bindBlueprint } from './blueprint-ui.js';
 import { topbar, ibtn, field, area, group, row, toggleRow, bindSwitch, bullet, icon, arrow, openSheet, openMenu, toast, confirmSheet } from '../ui.js';
+
+const winLabel = (d) => `${d.win === 'sign' ? 'Sign only' : 'Card picture'} · sounds like ${soundsLikeName(d.scene).toLowerCase()}`;
 
 const COLOR_NAMES = { '#2EAA67': 'Green', '#FB4DAA': 'Pink', '#FE6500': 'Orange', '#B8ACFE': 'Lilac', '#065BFE': 'Blue', '#12A5A5': 'Teal', '#5BC2F2': 'Sky', '#8A5530': 'Brown', '#ECECEC': 'Silver' };
 
@@ -66,7 +67,7 @@ export function editorView(id) {
       ${d.greetings?.length ? `<p class="fhint">Plus ${d.greetings.length} more opening${d.greetings.length === 1 ? '' : 's'} from the imported card. In a new chat, swipe the first message to pick one.</p>` : ''}
       <div><div class="hrow"><h2 class="h">Expressions</h2><span class="small">Swap with the reply's mood</span></div><div id="exprRow">${exprRow()}</div></div>
       ${group(
-        row({ id: 'sceneRow', lead: `<span class="row-ic" style="overflow:hidden;background:var(--plate2)" id="sceneThumb">${d.scene !== 'none' ? `<span style="width:100%;height:100%;filter:grayscale(1)">${sceneSVG(d.scene)}</span>` : icon('image', 19)}</span>`, title: 'Scene', sub: `<span id="sceneName">${SCENES.find((s) => s.key === d.scene)?.name || 'None'}</span>` }),
+        row({ id: 'sceneRow', lead: `<span class="row-ic" style="overflow:hidden;background:var(--plate2)" id="sceneThumb">${icon('image', 19)}</span>`, title: 'Window', sub: `<span id="sceneName">${winLabel(d)}</span>` }),
         row({ id: 'connRow', ic: 'link', bc: 'var(--cream)', title: 'Connection', sub: `<span id="connName">${connLabel()}</span>` }),
         ...(ttsSupported ? [row({ id: 'voiceRowE', ic: 'speaker', bc: 'var(--plate2)', fc: 'var(--cream)', title: 'Voice', sub: `<span id="voiceNameE">${esc(voiceLabel())}</span>` })] : [])
       )}
@@ -193,16 +194,17 @@ export function editorView(id) {
     );
 
     $('#sceneRow').addEventListener('click', () =>
-      sceneSheet({
-        value: { scene: d.scene, blur: d.sceneBlur ?? 4, dim: d.sceneDim ?? 60 },
-        cta: 'Use this scene',
+      windowSheet({
+        value: { win: d.win, scene: d.scene },
+        pic: d.avatarImage,
+        name: d.name || 'this character',
         onSave(v) {
-          Object.assign(d, { scene: v.scene, sceneBlur: v.blur, sceneDim: v.dim });
-          $('#sceneName').textContent = SCENES.find((x) => x.key === d.scene)?.name || 'None';
-          $('#sceneThumb').innerHTML = d.scene !== 'none' ? `<span style="width:100%;height:100%;filter:grayscale(1)">${sceneSVG(d.scene)}</span>` : icon('image', 19);
+          Object.assign(d, { win: v.win, scene: v.scene });
+          $('#sceneName').textContent = winLabel(d);
         },
       })
     );
+
 
     $('#connRow').addEventListener('click', (e) =>
       openMenu(e.currentTarget, [

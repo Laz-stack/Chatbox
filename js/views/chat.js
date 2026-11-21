@@ -16,8 +16,7 @@ import { voiceSheet } from './voicesheet.js';
 import { STYLES, picConn, picPrefs, providerName, paint, picSrc, altOf, squareOf, isDemoPics, gcPictures } from '../pictures.js';
 import { esc, uid, formatMessage, markProse, fmtNum, estimateTokens, inkOn, ago, plain, detectMood, copyText, download, slug, reducedMotion, motion, lineAccent, EASE_OUT } from '../util.js';
 import { avatarTile } from '../avatar.js';
-import { sceneSVG } from '../scenes.js';
-import { sceneSheet as openSceneSheet } from '../scenepicker.js';
+import { windowSheet as openWindowSheet } from '../scenepicker.js';
 import { speak, stopSpeaking, ttsSupported } from '../tts.js';
 import { exportCardPng } from '../cards.js';
 import { chatSound, silence, signal, ambienceNow, musicPlaying } from '../sound.js';
@@ -103,12 +102,31 @@ export async function chatView(id, focusId = null) {
   // Who you are in this chat (its own pick, else your default persona).
   const me = () => personaFor(chat);
   const sceneKey = () => hereOf(chat)?.scene || ch.scene;
-  // A picture set as this chat's background wins over the scene art.
-  // The character's portrait, duotoned into their line colour (Scene › Portrait).
-  const portraitHTML = () => `<div class="scene-duo" style="--accent:${lineAccent(ch.line?.color)}">${avatarTile(ch, 420, { radius: 0 })}</div>`;
-  const isPortrait = () => !ix && !chat.bgPic && sceneKey() === 'portrait';
-  const sceneInner = () => (chat.bgPic && S.images?.[chat.bgPic] ? `<img class="scene-pic" src="${esc(S.images[chat.bgPic])}" alt="">` : isPortrait() ? portraitHTML() : sceneKey() && sceneKey() !== 'none' && sceneKey() !== 'portrait' ? sceneSVG(sceneKey()) : '');
-  const sceneId = () => chat.bgPic || sceneKey() || '';
+  // The window (Window seat): the character's card picture, or a picture set for this chat, framed at
+  // the top of the chat over a station sign naming where the story is. Group chats show each member's
+  // picture as a pane. With no picture it folds to the sign.
+  const winPics = () => {
+    if (chat.bgPic && S.images?.[chat.bgPic]) return [S.images[chat.bgPic]];
+    if (ix) return ix.people.map((p) => p.avatarImage).filter(Boolean).slice(0, 3);
+    return ch.win !== 'sign' && ch.avatarImage ? [ch.avatarImage] : [];
+  };
+  const winKey = () => winPics().join('|').length + ':' + (chat.bgPic || '') + ':' + (ch.win || '');
+  const signInfo = () => {
+    const place = hereOf(chat)?.name;
+    const st = (chat.route || []).at(-1)?.title;
+    const cur = chapterAt(chat, chat.messages.length - 1);
+    const n = cur ? (chat.chapters || []).indexOf(cur) + 1 : 0;
+    const title = place || st || cur?.title || (ix ? ch.name : ch.tagline?.trim() || ch.name);
+    const sub = clockOn(chat) ? longText(chat.clock) + (chat.clock.weather ? ` · ${chat.clock.weather}` : '') : cur && cur.title !== title ? `Chapter ${n} · ${cur.title}` : cur ? `Chapter ${n}` : ix ? ch.tagline : `${ch.name}’s line`;
+    return { title, sub, num: String(Math.max(1, (chat.route || []).length)).padStart(2, '0'), letter: (ix ? ch.name : ch.line?.letter || ch.name || '?').trim()[0]?.toUpperCase() || '?' };
+  };
+  const bandOf = () => (ix ? `linear-gradient(90deg, ${ix.people.map((p, i, a) => `${p.line?.color || '#ECECEC'} ${(i / a.length) * 100}% ${((i + 1) / a.length) * 100}%`).join(', ')})` : ch.line?.color || '#ECECEC');
+  const signHTML = () => {
+    const s = signInfo();
+    const pics = winPics();
+    return `<span class="rnd" style="--c:${ix ? '#0A0A0A' : ch.line?.color || '#0A0A0A'}" aria-hidden="true">${esc(s.letter)}<b class="num">${s.num}</b></span><span class="sn"><b>${esc(s.title)}</b><small>${esc(s.sub || '')}</small></span>${pics[0] ? `<span class="sthumb" aria-hidden="true" style="background-image:url('${esc(pics[0])}')"></span>` : ''}<i class="band" style="background:${bandOf()}"></i>`;
+  };
+  const winPicHTML = () => winPics().map((src) => `<span class="pane"><img src="${esc(src)}" alt=""></span>`).join('');
   const youWho = () => ({ name: me().name?.trim() || 'You', preset: me().preset, avatarImage: me().avatarImage, line: { color: '#FDCD15' } });
   const chat = await getChat(id);
   if (!chat) return null;
@@ -122,8 +140,7 @@ export async function chatView(id, focusId = null) {
   const connText = (c) => (!c ? 'No connection' : c.provider === 'demo' ? 'Demo replies' : String(c.model || c.name).split('/').pop());
   // Short placeholder: a long name would wrap the composer onto several lines.
   const callName = scene ? 'the scene' : ix ? 'the interchange' : ch.name.length > 14 ? ch.name.split(/\s+/)[0].slice(0, 14) : ch.name;
-  const html = `<div class="chat" id="chat" style="--blur:${ch.sceneBlur ?? 4}px;--dim:${(ch.sceneDim ?? 60) / 100};--accent:${lineAccent(ch.line?.color)}">
-    <div class="chat-scene${isPortrait() ? ' duo' : ''}" id="scene" aria-hidden="true" data-k="${esc(sceneId())}">${sceneInner()}</div>
+  const html = `<div class="chat" id="chat" style="--accent:${lineAccent(ch.line?.color)}">
     <header class="chat-head">
       ${ibtn('back', 'Back to home', { href: '#/' })}
       <button type="button" class="chat-who press" id="whoBtn" aria-haspopup="dialog" aria-label="${esc(ch.name)}: chat details">${ix ? groupAvatar(ix, 36) : avatarBullet(ch, 36, '', `head:${ch.id}`)}<span class="who-tx"><span class="who-n">${esc(ch.name)}</span><span class="who-s"><span class="who-meta" id="meta"><span class="dot${conn0?.provider === 'demo' ? ' demo' : ''}" id="connDot"></span><span class="ell" id="connName">${esc(connText(conn0))}</span><span id="tokPill" ${S.settings.showCounter ? '' : 'hidden'}>· <span class="num" id="tokN">…</span></span><span id="noteWrap" ${!ix && chat.notes.length ? '' : 'hidden'}>· ${icon('pin', 12)}<span id="noteN">${chat.notes.length}</span></span></span><span id="status" hidden></span></span></span></button>
@@ -131,6 +148,7 @@ export async function chatView(id, focusId = null) {
       <button type="button" class="snd-btn press" id="sndBtn" hidden aria-haspopup="dialog" aria-label="Sound"><span class="snd-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span></button>
       ${ibtn('more', 'Chat options', { id: 'moreBtn' })}
     </header>
+    <div class="win${winPics().length ? ' has-pic' : ''}${chat.winFold ? ' fold' : ''}" id="win" data-k="${esc(winKey())}"><div class="win-pic" id="winPic"${ix ? '' : ` data-av="win:${esc(ch.id)}"`}>${winPicHTML()}</div><button type="button" class="sign press" id="signBtn" aria-expanded="${!chat.winFold}" aria-label="Where you are. Tap to ${chat.winFold ? 'open' : 'fold'} the window">${signHTML()}</button></div>
     <div class="log${story ? ' story' : ''}" id="log" role="log" aria-live="polite" aria-relevant="additions" aria-label="Chat with ${esc(ch.name)}"></div>
     <div class="chips${scene ? ' steer' : ''}" id="chips"></div>
     ${ix && !scene ? '<div class="nextbar" id="nextbar" role="radiogroup" aria-label="Who answers next"></div>' : ''}
@@ -1427,10 +1445,63 @@ export async function chatView(id, focusId = null) {
 
     // ---------- world map ----------
     // The background follows where the story is (a place's scene), else the character's own.
+    // The sign repaints when the place, station, chapter or story time changes; a new station ticks the number.
+    function paintSign() {
+      const b = root.querySelector('#signBtn');
+      if (!b) return;
+      const old = b.querySelector('.num')?.textContent;
+      b.innerHTML = signHTML();
+      const n = b.querySelector('.num');
+      if (old && n && old !== n.textContent && !reducedMotion()) n.classList.add('tick');
+    }
+    // The window folds to its sign while you read back through older messages, while you type on a
+    // phone (the keyboard needs the room) and when you tap the sign; it opens again at the bottom.
+    const winEl = root.querySelector('#win');
+    let autoFold = false;
+    let stuck = true; // the log was at its bottom: keep it there while the window opens or folds
+    const foldNow = () => {
+      const f = !!chat.winFold || autoFold;
+      winEl.classList.toggle('fold', f);
+      root.querySelector('#signBtn').setAttribute('aria-expanded', String(!f));
+      root.querySelector('#signBtn').setAttribute('aria-label', `Where you are: ${signInfo().title}. Tap to ${f ? 'open' : 'fold'} the window`);
+    };
+    const setAuto = (v) => {
+      if (autoFold === v) return;
+      autoFold = v;
+      foldNow();
+    };
+    const typingOnPhone = () => document.activeElement === input && matchMedia('(pointer: coarse)').matches;
+    log.addEventListener('scroll', () => {
+      const gap = log.scrollHeight - log.scrollTop - log.clientHeight;
+      stuck = gap < 24;
+      if (gap > 260) setAuto(true);
+      else if (stuck && !typingOnPhone()) setAuto(false);
+    }, { passive: true });
+    new ResizeObserver(() => stuck && toBottom()).observe(log);
+    input.addEventListener('focus', () => typingOnPhone() && setAuto(true));
+    input.addEventListener('blur', () => setTimeout(() => !typingOnPhone() && stuck && setAuto(false), 120));
+    root.querySelector('#signBtn').addEventListener('click', async () => {
+      const open = winEl.classList.contains('fold');
+      chat.winFold = !open;
+      autoFold = false;
+      foldNow();
+      if (!winPics().length && open) toast('No picture yet. Add one to the character, or set one from a painted scene.');
+      await saveChat(chat, false);
+    });
+    foldNow();
+
     function setScene() {
-      const el = root.querySelector('#scene');
-      const k = sceneId();
-      if (el && el.dataset.k !== k) (el.dataset.k = k), (el.innerHTML = sceneInner()), el.classList.toggle('duo', isPortrait());
+      const w = root.querySelector('#win');
+      if (!w) return;
+      const k = winKey();
+      if (w.dataset.k !== k) {
+        w.dataset.k = k;
+        const pic = w.querySelector('#winPic');
+        pic.innerHTML = winPicHTML();
+        w.classList.toggle('has-pic', !!winPics().length);
+        if (!reducedMotion()) pic.classList.remove('slide'), void pic.offsetWidth, pic.classList.add('slide');
+      }
+      paintSign();
       soundNow();
     }
     // Arriving from the World map: the scene starts at the new place.
@@ -1526,6 +1597,7 @@ export async function chatView(id, focusId = null) {
 
     // ---------- story time ----------
     function updateClock() {
+      paintSign();
       const b = root.querySelector('#clockBtn');
       if (!b) return;
       b.hidden = !clockOn(chat);
@@ -1812,7 +1884,7 @@ export async function chatView(id, focusId = null) {
               { icon: 'talk', label: scene ? 'Switch to Take turns' : 'Switch to One scene', on: switchMode },
             ]
           : [{ icon: 'card', label: 'Edit character', on: () => (location.hash = `#/edit/${ch.id}`) }]),
-        ...(ix ? [] : [{ icon: 'image', label: 'Scene', on: sceneSheet }]),
+        ...(ix ? [] : [{ icon: 'image', label: 'Window', on: sceneSheet }]),
         { icon: 'spark', label: 'Memory and notes', on: () => (location.hash = `#/memory/${encodeURIComponent(chat.id)}`) },
         { icon: 'layers', label: 'Final prompt', on: () => (location.hash = `#/final/${encodeURIComponent(chat.id)}`) },
         ...(ix ? [] : [{ icon: 'download', label: 'Export card (PNG)', on: async () => download(await exportCardPng(ch), slug(ch.name) + '.card.png') }]),
@@ -2232,23 +2304,15 @@ export async function chatView(id, focusId = null) {
     }
 
     function sceneSheet() {
-      const chatEl = root.querySelector('#chat');
-      const sceneEl = root.querySelector('#scene');
-      const apply = (d) => {
-        chatEl.style.setProperty('--blur', d.blur + 'px');
-        chatEl.style.setProperty('--dim', d.dim / 100);
-        sceneEl.innerHTML = d.scene === 'portrait' ? portraitHTML() : d.scene !== 'none' ? sceneSVG(d.scene) : '';
-        sceneEl.classList.toggle('duo', d.scene === 'portrait');
-      };
-      openSceneSheet({
-        value: { scene: ch.scene, blur: ch.sceneBlur ?? 4, dim: ch.sceneDim ?? 60 },
-        cta: `Use for ${esc(ch.name)}`,
-        portrait: ix ? '' : portraitHTML(),
-        onPreview: apply,
+      openWindowSheet({
+        value: { win: ch.win || 'card', scene: ch.scene || 'none' },
+        pic: ch.avatarImage,
+        name: ch.name,
         async onSave(d) {
-          Object.assign(ch, { scene: d.scene, sceneBlur: d.blur, sceneDim: d.dim });
+          Object.assign(ch, { win: d.win, scene: d.scene });
           await saveCharacter(ch);
-          toast('Scene saved');
+          setScene();
+          toast('Window saved');
         },
       });
     }

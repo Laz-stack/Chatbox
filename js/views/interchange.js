@@ -1,8 +1,7 @@
 // Create or edit an Interchange: pick 2–3 lines to meet in one chat, set the scene.
 import { S as store, interchange, saveInterchange, deleteInterchange, getChat, saveChat, newChat } from '../store.js';
 import { uid, esc, inkOn, resizeImage } from '../util.js';
-import { sceneSheet } from '../scenepicker.js';
-import { topbar, avatarBullet, field, area, icon, arrow, toast, confirmSheet, toggleRow, bindSwitch, groupAvatar, groupScene } from '../ui.js';
+import { topbar, avatarBullet, field, area, icon, arrow, toast, confirmSheet, toggleRow, bindSwitch, groupAvatar } from '../ui.js';
 
 export function interchangeView(id) {
   const isNew = id === 'new';
@@ -17,7 +16,7 @@ export function interchangeView(id) {
   const cover = existing?.cover || null;
   const people = () => d.members.map((id) => store.characters.find((c) => c.id === id)).filter(Boolean);
   const picHTML = () => `<span id="ixPicAv">${groupAvatar({ picture: d.picture, cover, useScene: d.useScene, sceneArt: d.sceneArt, people: people() }, 72)}</span>
-    <span class="ixpic-btns"><label class="pill press" style="cursor:pointer">${icon('upload', 15)}Upload<input type="file" accept="image/*" id="ixPicIn" class="vh"></label><button type="button" class="pill press" id="ixPicScene">${icon('image', 15)}Scene art</button>${d.picture || (cover && d.useScene) ? `<button type="button" class="pill press" id="ixPicRm">${icon('trash', 15)}${d.picture ? 'Remove' : 'Use cover'}</button>` : ''}</span>`;
+    <span class="ixpic-btns"><label class="pill press" style="cursor:pointer">${icon('upload', 15)}Upload<input type="file" accept="image/*" id="ixPicIn" class="vh"></label>${d.picture || (cover && !d.useScene) ? `<button type="button" class="pill press" id="ixPicScene">${icon('user', 15)}Their faces</button>` : ''}${d.picture || (cover && d.useScene) ? `<button type="button" class="pill press" id="ixPicRm">${icon('trash', 15)}${d.picture ? 'Remove' : 'Use cover'}</button>` : ''}</span>`;
   const max = () => (d.mode === 'scene' ? 5 : 3);
   const hint = () => (d.mode === 'scene' ? `Pick 2 to 5 lines. One scene: the AI narrates and voices everyone at once.` : `Pick 2 or 3 lines. They take turns, and you choose who answers next.`);
 
@@ -30,7 +29,7 @@ export function interchangeView(id) {
   const html = `<div class="screen no-tab">
     ${topbar({ back: existing ? `#/chat/${existing.id}` : '#/', backIcon: 'x', backLabel: 'Close', title: isNew ? 'New interchange' : 'Interchange', right: existing ? `<button type="button" class="ibtn press" id="delIx" aria-label="Delete interchange">${icon('trash')}</button>` : '' })}
     <div class="stack" style="gap:18px">
-      <div class="field"><div class="flabel"><span>Picture</span><span class="small">${cover ? 'Imported cover unless you upload one' : 'Scene art unless you upload one'}</span></div><div class="ixpic" id="ixPic">${picHTML()}</div><p class="fhint" id="ixPicErr" hidden></p></div>
+      <div class="field"><div class="flabel"><span>Picture</span><span class="small">${cover ? 'Imported cover unless you upload one' : 'Their faces unless you upload one'}</span></div><div class="ixpic" id="ixPic">${picHTML()}</div><p class="fhint" id="ixPicErr" hidden></p></div>
       <div class="field"><div class="flabel"><span>How they talk</span></div>
         <div class="seg two" role="group" aria-label="How they talk"><button type="button" class="press" data-mode="turns" aria-pressed="${d.mode !== 'scene'}"><b>Take turns</b><span>One reply, one speaker</span></button><button type="button" class="press" data-mode="scene" aria-pressed="${d.mode === 'scene'}"><b>One scene</b><span>Narrated, everyone at once</span></button></div></div>
       <div><div class="hrow"><h2 class="h">Who meets?</h2><span class="small" id="cnt">${d.members.length} of ${d.mode === 'scene' ? 5 : 3}</span></div>
@@ -93,18 +92,7 @@ export function interchangeView(id) {
       });
       $('#ixPic').addEventListener('click', (e) => {
         if (e.target.closest('#ixPicRm')) return (d.picture = null), (d.useScene = false), drawPic();
-        if (e.target.closest('#ixPicScene'))
-          sceneSheet({
-            value: { scene: d.sceneArt || groupScene({ people: people() }), blur: 0, dim: 0 },
-            cta: 'Use as picture',
-            onPreview() {},
-            onSave(v) {
-              d.sceneArt = v.scene === 'none' ? '' : v.scene;
-              d.picture = null;
-              d.useScene = true;
-              drawPic();
-            },
-          });
+        if (e.target.closest('#ixPicScene')) return (d.picture = null), (d.useScene = true), (d.sceneArt = ''), drawPic();
       });
       $('#ixWorld')?.addEventListener('input', (e) => (d.world = e.target.value));
       $('#saveIx').addEventListener('click', async () => {
