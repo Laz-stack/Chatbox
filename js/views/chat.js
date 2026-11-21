@@ -159,7 +159,7 @@ export async function chatView(id, focusId = null) {
       <button type="button" class="snd-btn press" id="sndBtn" hidden aria-haspopup="dialog" aria-label="Sound"><span class="snd-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span></button>
       ${ibtn('more', 'Chat options', { id: 'moreBtn' })}
     </header>
-    <div class="win${winPics().length ? ' has-pic' : ''}${chat.winFold ? ' fold' : ''}" id="win" data-k="${esc(winKey())}"><div class="win-pic" id="winPic"${ix ? '' : ` data-av="win:${esc(ch.id)}"`}>${winPicHTML()}</div><button type="button" class="sign press" id="signBtn" aria-controls="winPic" aria-label="Where you are">${signHTML()}</button></div>
+    <div class="win${winPics().length ? ' has-pic' : ''}${chat.winFold ? ' fold' : ''}" id="win"${chat.winOff ? ' hidden' : ''} data-k="${esc(winKey())}"><div class="win-pic" id="winPic"${ix ? '' : ` data-av="win:${esc(ch.id)}"`}>${winPicHTML()}</div><button type="button" class="sign press" id="signBtn" aria-controls="winPic" aria-label="Where you are">${signHTML()}</button></div>
     <div class="log${story ? ' story' : ''}" id="log" role="log" aria-live="polite" aria-relevant="additions" aria-label="Chat with ${esc(ch.name)}"></div>
     <div class="chips${scene ? ' steer' : ''}" id="chips"></div>
     ${ix && !scene ? '<div class="nextbar" id="nextbar" role="radiogroup" aria-label="Who answers next"></div>' : ''}
@@ -1911,6 +1911,13 @@ export async function chatView(id, focusId = null) {
             ]
           : [{ icon: 'card', label: 'Edit character', on: () => (location.hash = `#/edit/${ch.id}`) }]),
         ...(ix ? [] : [{ icon: 'image', label: 'Window', on: sceneSheet }]),
+        // The window and its station sign can be hidden for this chat, for more room to read.
+        { icon: chat.winOff ? 'eye' : 'eyeoff', label: chat.winOff ? 'Show the station sign' : 'Hide the station sign', on: async () => {
+          chat.winOff = !chat.winOff;
+          root.querySelector('#win').hidden = chat.winOff;
+          await saveChat(chat);
+          toast(chat.winOff ? 'Station sign hidden. ⋯ › Show the station sign brings it back.' : 'Station sign shown');
+        } },
         { icon: 'layers', label: scenesOf(chat).length ? `Scenes (${scenesOf(chat).length})` : 'Scenes', on: () => scenesSheet(chat, { title: ch.name, onWindow: () => setScene() }) },
         { icon: 'spark', label: 'Memory and notes', on: () => (location.hash = `#/memory/${encodeURIComponent(chat.id)}`) },
         { icon: 'layers', label: 'Final prompt', on: () => (location.hash = `#/final/${encodeURIComponent(chat.id)}`) },
