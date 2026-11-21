@@ -1905,4 +1905,12 @@ button.bopt { width: 100%; text-align: left; }
 .hero.has-win .hero-name.long { white-space: normal; font-size: 38px; line-height: 1; text-wrap: balance; }
 .hero.has-win .hero-name.long .hero-sub { margin-top: 10px; }
 .win-pic .pane.contain, .hero-win.contain { position: relative; }
-.win-pic .pane.contain img, .hero-win.contain img { position: absolute; inset: 0; margin: auto; width: 100%; height: 100%; }
+.win-pic .pane.contain img, .hero-win.contain img { position: absolute; inset: 0; margin: auto; object-fit: cover; object-position: 50% 0; border-radius: 8px; }
+
+/* The hero's window or its usual arrow and tile: only one shows */
+.hero.has-win .hero-arrow, .hero.has-win .hero-av, .hero.has-win .hero-kicker .bullet-av { display: none; }
+.hero:not(.has-win) .hero-win { display: none; }
+.hero:not(.has-win) .hero-name.long { white-space: normal; font-size: 38px; line-height: 1; text-wrap: balance; }
+/* A tall card picture: avatars show its top, where the face or cover usually is */
+.bullet-av img, .av img, .gav img { object-position: 50% 0; }
+.av img { object-fit: cover; }
