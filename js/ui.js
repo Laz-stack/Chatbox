@@ -47,18 +47,36 @@ export function fitPics(root) {
       const box = img.parentElement;
       const w = box.clientWidth;
       const h = box.clientHeight || parseFloat(getComputedStyle(box).getPropertyValue('--wh')) || 200;
-      if (!w || !img.naturalWidth) return;
-      const a = img.naturalWidth / img.naturalHeight;
+      const nw = img.naturalWidth;
+      const nh = img.naturalHeight;
+      if (!w || !nw) return;
+      const dpr = devicePixelRatio || 1;
+      const a = nw / nh;
       const boxA = w / h;
       const shown = a > boxA ? boxA / a : a / boxA; // the share of the picture a fill would keep
-      const blowUp = Math.max((w * devicePixelRatio) / img.naturalWidth, (h * devicePixelRatio) / img.naturalHeight);
+      const blowUp = Math.max((w * dpr) / nw, (h * dpr) / nh);
       const contain = shown < 0.78 || blowUp > 1.7;
       box.classList.toggle('contain', contain);
-      // Never blow a small picture up more than about 1.4 times: it's shown smaller instead, and sharp.
-      const cap = (n) => (contain ? `${Math.round((n * 1.4) / devicePixelRatio)}px` : '');
-      img.style.maxWidth = cap(img.naturalWidth);
-      img.style.maxHeight = cap(img.naturalHeight);
-      box.closest('.win')?.classList.toggle('framed', contain);
+      box.classList.toggle('tall', contain && a < 0.75);
+      let dh = h;
+      if (contain) {
+        // The whole picture, framed; a very tall one (a long card with a cover on top) shows its top
+        // as a 3:4 portrait instead of a sliver. Never more than about 1.4x its saved size.
+        const t = Math.max(a, 0.75);
+        dh = Math.min(h, w / t);
+        let dw = dh * t;
+        const maxW = (nw * 1.4) / dpr;
+        if (dw > maxW) (dw = maxW), (dh = dw / t);
+        if (a >= 0.75 && dh > (nh * 1.4) / dpr) (dh = (nh * 1.4) / dpr), (dw = dh * t);
+        img.style.width = `${Math.round(dw)}px`;
+        img.style.height = `${Math.round(dh)}px`;
+      } else img.style.width = img.style.height = '';
+      // Too small to show well in a window: the hero goes back to its usual layout, the chat to the sign.
+      const tiny = contain && dh < 110;
+      const hero = box.closest('.hero');
+      if (hero) hero.classList.toggle('has-win', !tiny);
+      const win = box.closest('.win');
+      if (win) win.classList.toggle('framed', contain && !tiny), win.classList.toggle('has-pic', !tiny);
     };
     if (img.complete && img.naturalWidth) go();
     else img.addEventListener('load', go, { once: true });

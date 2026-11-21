@@ -138,7 +138,7 @@ function planCard(json, image, sourceName) {
   };
 }
 
-const readImage = (bytes, name) => resizeImage(new File([bytes], name, { type: 'image/png' }), 1024);
+const readImage = (bytes, name) => resizeImage(new File([bytes], name, { type: 'image/png' }), 1024, { area: true });
 
 // Files in -> { cards: [plan], lore: [entries without a card], errors: [] }.
 export async function readFiles(files) {
