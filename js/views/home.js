@@ -4,6 +4,7 @@ import { avatarTile } from '../avatar.js';
 import { title2, bullet, avatarBullet, tabbar, icon, arrow, groupAvatar, fitPics } from '../ui.js';
 import { startImport } from './import.js';
 import { chapterAt } from '../chapters.js';
+import { railHTML, mountRail } from '../herotrain.js';
 
 export function homeView() {
   const conn = activeConnection();
@@ -24,20 +25,18 @@ export function homeView() {
     const where = cur ? `Chapter ${chat.chapters.indexOf(cur) + 1} · ${cur.title}` : featured.tagline || preview;
     const lastLine = said ? plain(named(textOf(said), featured, 'you', personaFor(chat))).replace(/\s+/g, ' ').trim() : '';
     const when = said?.at || chat?.updatedAt;
-    // Window seat: with a card picture, the hero is a window onto the character, like the chat's.
-    const pic = featured.avatarImage;
     const quote = lastLine.replace(/^["“”'*\s]+|["“”'*\s]+$/g, '');
-    hero = `<a class="hero press${pic ? ' has-win' : ''}" href="#/chat/${featured.id}" style="--line:${lc};--on:${inkOn(lc)};--anti:${luminance(lc) > 0.55 ? '#FFFFFF' : inkOn(lc) === '#FFFFFF' ? '#0A0A0A' : '#FFFFFF'};--ring:${luminance(lc) > 0.55 ? '#0A0A0A' : '#FFFFFF'}" aria-label="${started[0] ? 'Continue chatting with' : 'Start chatting with'} ${esc(featured.name)}">
-      <span class="hero-arrow" aria-hidden="true">${arrow(260, 'currentColor')}</span>${pic ? `<span class="hero-win" data-av="hero:${esc(featured.id)}"><img src="${esc(pic)}" alt="" data-fit></span>` : ''}
-      <span class="hero-av"${pic ? '' : ` data-av="hero:${esc(featured.id)}"`}>${avatarTile(featured, 92, { radius: 26, rot: -4 })}</span>
+    hero = `<a class="hero press" href="#/chat/${featured.id}" style="--line:${lc};--on:${inkOn(lc)};--anti:${luminance(lc) > 0.55 ? '#FFFFFF' : inkOn(lc) === '#FFFFFF' ? '#0A0A0A' : '#FFFFFF'};--ring:${luminance(lc) > 0.55 ? '#0A0A0A' : '#FFFFFF'}" aria-label="${started[0] ? 'Continue chatting with' : 'Start chatting with'} ${esc(featured.name)}">
+      ${railHTML()}
+      <span class="hero-av" data-av="hero:${esc(featured.id)}">${avatarTile(featured, 92, { radius: 26, rot: -4 })}</span>
       <span class="hero-foot">
         <span class="hero-kicker">${avatarBullet(featured, 34)}${started[0] ? (when ? `Continue · ${agoLong(when)}` : 'Continue the chat') : 'Start a chat'}</span>
-        <span class="hero-name${pic && featured.name.length > 11 ? ' long' : ''}">${esc(featured.name)}<span class="hero-sub">${esc(started[0] ? where : featured.tagline || preview)}</span>${started[0] && quote ? `<span class="hero-q">“${esc(quote.slice(0, 140))}”</span>` : ''}</span>
+        <span class="hero-name${featured.name.length > 11 ? ' long' : ''}">${esc(featured.name)}<span class="hero-sub">${esc(started[0] ? where : featured.tagline || preview)}</span>${started[0] && quote ? `<span class="hero-q">“${esc(quote.slice(0, 140))}”</span>` : ''}</span>
         <span class="hero-line" aria-hidden="true">${Array.from({ length: dots }, (_, i) => `<i${i === dots - 1 ? ' class="now"' : ''} style="animation-delay:${0.4 + i * 0.06}s"></i>`).join('')}</span>
       </span></a>`;
   } else {
     hero = `<a class="hero empty press" href="#/edit/new">
-      <span class="hero-arrow" aria-hidden="true">${arrow(260, 'currentColor')}</span>
+      ${railHTML()}
       <span class="hero-foot"><span class="hero-name">New line<span class="hero-sub">Create your first character</span></span></span></a>`;
   }
 
@@ -92,17 +91,9 @@ export function homeView() {
     depth: 0,
     mount(root) {
       fitPics(root);
-      // The arrow sits in the card's background; pressing the card lights it up and it pops toward the
-      // corner, then flies on into the chat (the screen change, main.js).
+      // The railway in the card: tapping it runs the train into the tunnel, then the chat opens from there.
       const hero = root.querySelector('.hero');
-      if (hero) {
-        const pop = () => hero.classList.add('pop');
-        const drop = () => hero.classList.remove('pop');
-        hero.addEventListener('pointerdown', pop);
-        hero.addEventListener('pointercancel', drop);
-        hero.addEventListener('pointerleave', drop);
-        hero.addEventListener('click', pop);
-      }
+      if (hero) mountRail(hero, { onDepart: (x, y) => document.dispatchEvent(new CustomEvent('chatbox:depart', { detail: { x, y } })) });
       root.querySelector('#homeCardIn').addEventListener('change', (e) => (startImport([...e.target.files]), (e.target.value = '')));
     },
   };

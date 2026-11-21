@@ -103,6 +103,7 @@ export function settingsView() {
     <h2 class="sec">Data</h2>
     ${group(row({ href: '#/sync', ic: 'refresh', bc: 'var(--cream)', fc: '#0A0A0A', title: 'Sync', sub: esc(syncSummary()) }), row({ href: '#/backup', ic: 'box', bc: 'var(--blue)', fc: '#fff', title: 'Backup and cards', sub: S.settings.lastBackup ? `Last backup ${new Date(S.settings.lastBackup).toLocaleDateString()}` : 'No backup yet' }))}
     <div class="note" style="margin-top:18px">${icon('shield', 18)}<span>${isPersistent() ? (S.settings.sync?.connected ? 'Saved in this browser and synced to your own Google Drive. Nothing goes to a server of ours.' : 'Everything is saved in this browser only. Nothing goes to a server of ours.') : 'This browser is blocking storage (private mode?), so changes will be lost when you close the tab.'}</span></div>
+    <p class="credits">Faces: Open Peeps by Pablo Stanley (CC0). Icons: Phosphor (MIT). Platform train: OpenMoji high-speed train, recoloured (CC BY-SA 4.0).</p>
   </div>${tabbar('settings')}`;
   return {
     html,

@@ -202,14 +202,10 @@ html.vt-tabs .tabbar .stop-new .stop { view-transition-name: tab-new; }
 
 /* ---------- home ---------- */
 .hero { position: relative; display: block; height: 310px; border-radius: 30px; padding: 20px; background: var(--line, var(--green)); color: var(--on, var(--white)); text-decoration: none; overflow: hidden; margin-top: 18px; }
-.hero .hero-arrow { position: absolute; left: -34px; bottom: -34px; width: 260px; height: 260px; z-index: 0; pointer-events: none; color: color-mix(in srgb, var(--line, var(--green)) 84%, var(--on, #0A0A0A)); transition: color .16s ease, transform .3s var(--spring); animation: arrowIn .9s var(--out) .1s backwards; }
-.hero .hero-arrow svg { width: 100%; height: 100%; display: block; }
 .hero .hero-av, .hero .hero-foot, .hero .hero-win { z-index: 1; }
 .hero.has-win .hero-foot, .hero.has-win .hero-win { position: relative; }
 .hero.empty { --line: var(--yellow); --on: #0A0A0A; --anti: #FFFFFF; }
-/* Pressed: the background arrow lights up in ink and pops toward the corner it points at. */
 /* It lights up away from the ink (brighter on a light card, deeper on a dark one), so text stays readable over it. */
-.hero.pop .hero-arrow { color: color-mix(in srgb, var(--line, var(--green)) 45%, var(--anti, #FFFFFF)); transform: translate(16px, -16px) scale(1.1); }
 .hero .hero-av { position: absolute; right: 20px; top: 20px; animation: tileIn .8s var(--spring) .25s both; }
 .hero .hero-av .av { box-shadow: 0 0 0 4px var(--ring, var(--white)); }
 .hero-foot { position: absolute; left: 20px; right: 20px; bottom: 20px; display: flex; flex-direction: column; gap: 12px; }
@@ -519,13 +515,8 @@ html[data-dir='back']::view-transition-new(root) { animation-name: fadeIn, vtInB
 html.vt-tap::view-transition-old(root) { animation: vtRecede .5s var(--out) both; }
 html.vt-tap::view-transition-new(root) { animation: vtReveal .5s cubic-bezier(.22, .9, .25, 1) both; }
 /* Home -> Chat: the hero arrow keeps going the way it points, off the top-right corner. */
-::view-transition-group(hero-arrow) { animation: none; }
-::view-transition-old(hero-arrow) { animation: arrowAway .46s cubic-bezier(.55, 0, .75, .3) both; }
 @keyframes vtReveal { from { clip-path: circle(0 at var(--tx, 50%) var(--ty, 50%)); } to { clip-path: circle(var(--tr, 150%) at var(--tx, 50%) var(--ty, 50%)); } }
 @keyframes vtRecede { to { transform: scale(.96); filter: brightness(.6); } }
-html.vt-arrow-ink::view-transition-old(hero-arrow) { animation-name: arrowAwayLit; }
-@keyframes arrowAway { to { transform: translate(110vw, -110vh) scale(1.6); } }
-@keyframes arrowAwayLit { 35% { filter: invert(.92); } to { transform: translate(110vw, -110vh) scale(1.6); filter: invert(.92); } }
 @keyframes vtOut { to { opacity: 0; transform: translateX(-6%); } }
 @keyframes vtIn { from { transform: translateX(14%); } }
 @keyframes vtOutBack { to { opacity: 0; transform: translateX(6%); } }
@@ -1921,6 +1912,27 @@ button.bopt { width: 100%; text-align: left; }
 /* A tall card picture: avatars show its top, where the face or cover usually is */
 .bullet-av img, .av img, .gav img { object-position: 50% 0; }
 .av img { object-fit: cover; }
-@media (prefers-reduced-motion: reduce) { .hero .hero-arrow { transition: color .16s ease; } .hero.pop .hero-arrow { transform: none; } }
 /* The card's text and picture always sit above its background arrow */
 .hero.has-win > .hero-foot, .hero.has-win > .hero-win { position: relative; inset: auto; z-index: 1; }
+
+/* ---------- Platform hero railway (js/herotrain.js) ----------
+   A metro line across the top of the card in a shade of its colour, with stations; a cream-and-ink
+   bullet train waits at its left end. On tap the line lights and the train runs into the tunnel behind
+   the picture tile. The text and tile sit above it. */
+.hero .hero-rail { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+.hr-svg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; }
+.hr-base, .hr-lit { fill: none; stroke-width: 18; stroke-linecap: round; stroke-linejoin: round; }
+.hr-base { stroke: color-mix(in srgb, var(--line, var(--green)) 84%, var(--on, #0A0A0A)); }
+.hr-lit { stroke: color-mix(in srgb, var(--line, var(--green)) 45%, var(--cream)); stroke-dasharray: 1 1; stroke-dashoffset: 1; transition: stroke-dashoffset .3s var(--out); }
+.hero.go .hr-lit { stroke-dashoffset: 0; }
+.hr-stop { fill: var(--cream); stroke: #0A0A0A; stroke-width: 3.5; }
+.hr-here { fill: #0A0A0A; stroke: var(--cream); stroke-width: 4; }
+.hr-train { position: absolute; inset: 0; contain: layout style paint; }
+.hr-train i { position: absolute; left: 0; top: 0; width: 5.5px; height: 33.8px; background-image: var(--spr); background-repeat: no-repeat; background-size: 172.4px 33.8px; backface-visibility: hidden; }
+.hero.go .hr-train i { will-change: transform; }
+.hero .hero-av { z-index: 2; }
+.hero .hero-foot { z-index: 1; }
+.hero.go { transform: scale(.985); transition: transform .2s var(--out); }
+@media (prefers-reduced-motion: reduce) { .hr-lit { transition: none; } .hero.go { transform: none; } }
+
+.credits { margin: 18px 4px 0; font: 500 12px/1.5 var(--font); color: var(--muted); text-wrap: pretty; }

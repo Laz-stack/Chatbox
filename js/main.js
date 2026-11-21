@@ -78,21 +78,14 @@ document.addEventListener(
   },
   true
 );
+// The Platform hero's train hands over the point the chat should open from (its tunnel), after its run.
+document.addEventListener('chatbox:depart', (e) => (tap = { x: e.detail.x, y: e.detail.y, t: performance.now() }));
 const routeKind = (h) => (/^#\/chat\//.test(h) ? 'chat' : /^#?\/?$/.test(h) ? 'home' : /^#\/lines/.test(h) ? 'lines' : 'other');
 
 // Names stay on a node after a transition; clear them so the next (unrelated) one has no orphans.
-const clearShared = (root) => root.querySelectorAll('[data-av], .hero-arrow').forEach((n) => (n.style.viewTransitionName = ''));
+const clearShared = (root) => root.querySelectorAll('[data-av]').forEach((n) => (n.style.viewTransitionName = ''));
 
 function tagShared(root, toChat) {
-  // Home -> Chat: the hero's big arrow gets its own layer and keeps flying the way it points.
-  const arrowEl = toChat && root.querySelector('.hero-arrow');
-  if (arrowEl) {
-    arrowEl.style.viewTransitionName = 'hero-arrow';
-    // A dark (ink) arrow would vanish over the dark chat it flies across, so it lights up as it leaves.
-    const [r, g, b] = getComputedStyle(arrowEl).color.match(/\d+/g).map(Number);
-    document.documentElement.classList.toggle('vt-arrow-ink', r + g + b < 200);
-  }
-  // The Platform hero's window lands on the chat's window when it's open; else on the header avatar.
   let el = (origin?.startsWith('hero:') && root.querySelector(`.win.has-pic:not(.fold) [data-av="win:${origin.split(':')[1]}"]`)) || root.querySelector('[data-av^="head:"]');
   if (!el) {
     const id = origin?.split(':')[1];
@@ -171,7 +164,7 @@ async function render() {
     // A transition skipped by a quick second tap isn't an error worth a toast.
     t.ready.catch(() => {});
     t.updateCallbackDone?.catch(() => {});
-    t.finished.catch(() => {}).finally(() => html.classList.remove('vt-tap', 'vt-arrow-ink'));
+    t.finished.catch(() => {}).finally(() => html.classList.remove('vt-tap'));
   } else {
     await swap();
   }
