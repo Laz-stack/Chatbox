@@ -61,16 +61,34 @@ async function save(patch) {
 export function dimSheet({ onChange } = {}) {
   const html = (d = dimPrefs()) => `<h2 class="sheet-title">Dim mode</h2>
     <p class="sheet-p">For reading at night: the whole app gets warmer and dimmer, like a reading lamp. Whites turn to soft paper, yellow to amber, and blue light is cut.</p>
-    <div class="ad-states" role="radiogroup" aria-label="Dim mode" style="flex-wrap:wrap">${[['off', 'Off'], ['night', 'At night'], ['always', 'Always']].map(([k, l]) => `<button type="button" class="press" role="radio" aria-checked="${d.mode === k}" data-mode="${k}">${l}</button>`).join('')}</div>
+    <div class="ad-states" role="radiogroup" aria-label="Dim mode" style="flex-wrap:wrap">${[['off', 'Off'], ['night', 'At night'], ['always', 'Always']].map(([k, l]) => `<button type="button" class="press" role="radio" aria-checked="${d.mode === k}" tabindex="${d.mode === k ? 0 : -1}" data-mode="${k}">${l}</button>`).join('')}</div>
     <div class="dim-times"${d.mode === 'night' ? '' : ' hidden'}><label>From<input class="input" type="time" id="dimFrom" value="${esc(d.from)}"></label><label>To<input class="input" type="time" id="dimTo" value="${esc(d.to)}"></label></div>
     ${d.mode !== 'off' ? `<button type="button" class="pill press dim-skip" id="dimSkip">${d.skip > Date.now() ? 'Turn back on now' : d.mode === 'always' ? 'Off for the next 8 hours' : 'Off for tonight'}</button>` : ''}
-    <p class="fhint">${dimNow(d) ? 'On now.' : d.mode === 'off' ? 'Off.' : d.skip > Date.now() ? 'Off until later.' : 'Off now; it turns on at ' + esc(d.from) + '.'}</p>`;
+    <p class="fhint" role="status">${dimNow(d) ? 'On now.' : d.mode === 'off' ? 'Off.' : d.skip > Date.now() ? `Off until ${new Date(d.skip).toTimeString().slice(0, 5)}.` : 'Off now; it turns on at ' + esc(d.from) + '.'}</p>`;
   openSheet({
     label: 'Dim mode',
     html: `<div id="dimBody">${html()}</div>`,
     onMount(s) {
       const body = s.querySelector('#dimBody');
-      const redraw = () => ((body.innerHTML = html()), onChange?.());
+      // Redraw, then put focus back where it was (the same option, time field or button).
+      const redraw = () => {
+        const a = document.activeElement;
+        const sel = a?.dataset?.mode ? `[data-mode="${a.dataset.mode}"]` : a?.id ? `#${a.id}` : null;
+        body.innerHTML = html();
+        onChange?.();
+        if (sel) (body.querySelector(sel) || body.querySelector('[aria-checked="true"]'))?.focus();
+      };
+      body.addEventListener('keydown', async (e) => {
+        const cur = e.target.closest('[data-mode]');
+        const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+        if (!cur || !step) return;
+        e.preventDefault();
+        const all = [...body.querySelectorAll('[data-mode]')];
+        const next = all[(all.indexOf(cur) + step + all.length) % all.length];
+        next.focus();
+        await save({ mode: next.dataset.mode, skip: 0 });
+        redraw();
+      });
       body.addEventListener('click', async (e) => {
         const m = e.target.closest('[data-mode]');
         if (m) return await save({ mode: m.dataset.mode, skip: 0 }), redraw();

@@ -149,7 +149,8 @@ async function render() {
     window.scrollTo(0, 0);
     return view.mount?.(app);
   };
-  if (document.startViewTransition && !reducedMotion() && current) {
+  // In dim mode the screen changes without a view transition: its snapshots would be drawn above the dim layer.
+  if (document.startViewTransition && !reducedMotion() && current && !document.documentElement.classList.contains('dim')) {
     clearShared(app);
     if (shared) tagShared(app, kind === 'chat');
     // A fresh tap (not a back gesture or keyboard) sets the point the new screen grows from.
