@@ -133,7 +133,7 @@ export async function readCardFile(file) {
     const raw = chunks.ccv3 || chunks.chara;
     if (!raw) throw new Error('This PNG has no character card inside.');
     const json = JSON.parse(b64utf8(raw));
-    const avatar = await resizeImage(file, 512);
+    const avatar = await resizeImage(file, 1024);
     return cardToCharacter(json, avatar);
   }
   const json = JSON.parse(await file.text());

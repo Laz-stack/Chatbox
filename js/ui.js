@@ -38,6 +38,33 @@ export const groupAvatar = (ix, s = 40) => {
 export const emptySign = (title, sub, action = '', where = 'This platform') =>
   `<div class="esign"><div class="sign"><span class="rnd" style="--c:#7A7A7A" aria-hidden="true">–<b>00</b></span><span class="sn"><b>${title}</b><small>${where}</small></span><i class="band" style="background:#7A7A7A"></i></div><p class="esign-p">${sub}</p>${action}</div>`;
 
+// A card picture in a window (chat, Platform hero): fill the window only when that neither crops away
+// much of the picture nor blows a small one up; otherwise show the whole picture in a frame
+// (".contain"). Card pictures are mostly square or portrait, and saved at 512-1024px.
+export function fitPics(root) {
+  root.querySelectorAll('img[data-fit]').forEach((img) => {
+    const go = () => {
+      const box = img.parentElement;
+      const w = box.clientWidth;
+      const h = box.clientHeight || parseFloat(getComputedStyle(box).getPropertyValue('--wh')) || 200;
+      if (!w || !img.naturalWidth) return;
+      const a = img.naturalWidth / img.naturalHeight;
+      const boxA = w / h;
+      const shown = a > boxA ? boxA / a : a / boxA; // the share of the picture a fill would keep
+      const blowUp = Math.max((w * devicePixelRatio) / img.naturalWidth, (h * devicePixelRatio) / img.naturalHeight);
+      const contain = shown < 0.78 || blowUp > 1.7;
+      box.classList.toggle('contain', contain);
+      // Never blow a small picture up more than about 1.4 times: it's shown smaller instead, and sharp.
+      const cap = (n) => (contain ? `${Math.round((n * 1.4) / devicePixelRatio)}px` : '');
+      img.style.maxWidth = cap(img.naturalWidth);
+      img.style.maxHeight = cap(img.naturalHeight);
+      box.closest('.win')?.classList.toggle('framed', contain);
+    };
+    if (img.complete && img.naturalWidth) go();
+    else img.addEventListener('load', go, { once: true });
+  });
+}
+
 export const title2 = (a, b, { tag = 'h1', size = 30 } = {}) =>
   `<${tag} class="t2" style="font-size:${size}px"><span>${a}</span><span class="sub">${b}</span></${tag}>`;
 

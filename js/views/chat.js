@@ -24,7 +24,7 @@ import { soundSheet } from './soundsheet.js';
 import { bindMarkButton } from '../markpicker.js';
 import { helperComplete } from '../helper.js';
 import { extractJson } from '../blueprint.js';
-import { ibtn, avatarBullet, icon, arrow, openMenu, openSheet, toast, clearToasts, confirmSheet, autosize, reel, groupAvatar, toggleRow, bindSwitch } from '../ui.js';
+import { ibtn, avatarBullet, icon, arrow, openMenu, openSheet, toast, clearToasts, confirmSheet, autosize, reel, groupAvatar, toggleRow, bindSwitch, fitPics } from '../ui.js';
 
 // Streams text into a bubble word by word, keeping *actions* italic as they arrive.
 class StreamRenderer {
@@ -127,7 +127,11 @@ export async function chatView(id, focusId = null) {
     const pics = winPics();
     return `<span class="rnd${!ix && pale(ch.line?.color) ? ' pale' : ''}" style="--c:${ix ? '#0A0A0A' : ch.line?.color || '#0A0A0A'}" aria-hidden="true">${esc(s.letter)}<b class="num">${s.num}</b></span><span class="sn"><b>${esc(s.title)}</b><small>${esc(s.sub || '')}</small></span>${pics[0] ? `<span class="sthumb" aria-hidden="true" style="background-image:url('${esc(pics[0])}')"></span>` : ''}<i class="band${(ix ? ix.people.some((p) => pale(p.line?.color)) : pale(ch.line?.color)) ? ' pale' : ''}" style="background:${bandOf()}"></i>`;
   };
-  const winPicHTML = () => winPics().map((src) => `<span class="pane"><img src="${esc(src)}" alt=""></span>`).join('');
+  // One picture is fitted to the window (whole card in a frame when it's square or small); several are panes.
+  const winPicHTML = () => {
+    const pics = winPics();
+    return pics.map((src) => `<span class="pane"><img src="${esc(src)}" alt=""${pics.length === 1 ? ' data-fit' : ''}></span>`).join('');
+  };
   const youWho = () => ({ name: me().name?.trim() || 'You', preset: me().preset, avatarImage: me().avatarImage, line: { color: '#FDCD15' } });
   const chat = await getChat(id);
   if (!chat) return null;
@@ -1468,6 +1472,7 @@ export async function chatView(id, focusId = null) {
     // The window folds to its sign while you read back through older messages, while you type on a
     // phone (the keyboard needs the room) and when you tap the sign; it opens again at the bottom.
     const winEl = root.querySelector('#win');
+    fitPics(winEl);
     let autoFold = false;
     let stuck = true; // the log was at its bottom: keep it there while the window opens or folds
     const foldNow = () => {
@@ -1509,6 +1514,8 @@ export async function chatView(id, focusId = null) {
         const pic = w.querySelector('#winPic');
         pic.innerHTML = winPicHTML();
         w.classList.toggle('has-pic', !!winPics().length);
+        w.classList.remove('framed');
+        fitPics(w);
         if (!reducedMotion()) pic.classList.remove('slide'), void pic.offsetWidth, pic.classList.add('slide');
       }
       paintSign();
