@@ -198,6 +198,8 @@ export function editorView(id) {
         value: { win: d.win, scene: d.scene },
         pic: d.avatarImage,
         name: d.name || 'this character',
+        letter: d.line?.letter,
+        color: d.line?.color || '#0A0A0A',
         onSave(v) {
           Object.assign(d, { win: v.win, scene: v.scene });
           $('#sceneName').textContent = winLabel(d);

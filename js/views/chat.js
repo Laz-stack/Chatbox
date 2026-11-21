@@ -16,7 +16,7 @@ import { voiceSheet } from './voicesheet.js';
 import { STYLES, picConn, picPrefs, providerName, paint, picSrc, altOf, squareOf, isDemoPics, gcPictures } from '../pictures.js';
 import { esc, uid, formatMessage, markProse, fmtNum, estimateTokens, inkOn, ago, plain, detectMood, copyText, download, slug, reducedMotion, motion, lineAccent, EASE_OUT } from '../util.js';
 import { avatarTile } from '../avatar.js';
-import { windowSheet as openWindowSheet } from '../scenepicker.js';
+import { windowSheet as openWindowSheet, pale } from '../scenepicker.js';
 import { speak, stopSpeaking, ttsSupported } from '../tts.js';
 import { exportCardPng } from '../cards.js';
 import { chatSound, silence, signal, ambienceNow, musicPlaying } from '../sound.js';
@@ -106,6 +106,7 @@ export async function chatView(id, focusId = null) {
   // the top of the chat over a station sign naming where the story is. Group chats show each member's
   // picture as a pane. With no picture it folds to the sign.
   const winPics = () => {
+    if (!ix && ch.win === 'sign') return [];
     if (chat.bgPic && S.images?.[chat.bgPic]) return [S.images[chat.bgPic]];
     if (ix) return ix.people.map((p) => p.avatarImage).filter(Boolean).slice(0, 3);
     return ch.win !== 'sign' && ch.avatarImage ? [ch.avatarImage] : [];
@@ -124,7 +125,7 @@ export async function chatView(id, focusId = null) {
   const signHTML = () => {
     const s = signInfo();
     const pics = winPics();
-    return `<span class="rnd" style="--c:${ix ? '#0A0A0A' : ch.line?.color || '#0A0A0A'}" aria-hidden="true">${esc(s.letter)}<b class="num">${s.num}</b></span><span class="sn"><b>${esc(s.title)}</b><small>${esc(s.sub || '')}</small></span>${pics[0] ? `<span class="sthumb" aria-hidden="true" style="background-image:url('${esc(pics[0])}')"></span>` : ''}<i class="band" style="background:${bandOf()}"></i>`;
+    return `<span class="rnd${!ix && pale(ch.line?.color) ? ' pale' : ''}" style="--c:${ix ? '#0A0A0A' : ch.line?.color || '#0A0A0A'}" aria-hidden="true">${esc(s.letter)}<b class="num">${s.num}</b></span><span class="sn"><b>${esc(s.title)}</b><small>${esc(s.sub || '')}</small></span>${pics[0] ? `<span class="sthumb" aria-hidden="true" style="background-image:url('${esc(pics[0])}')"></span>` : ''}<i class="band${(ix ? ix.people.some((p) => pale(p.line?.color)) : pale(ch.line?.color)) ? ' pale' : ''}" style="background:${bandOf()}"></i>`;
   };
   const winPicHTML = () => winPics().map((src) => `<span class="pane"><img src="${esc(src)}" alt=""></span>`).join('');
   const youWho = () => ({ name: me().name?.trim() || 'You', preset: me().preset, avatarImage: me().avatarImage, line: { color: '#FDCD15' } });
@@ -148,7 +149,7 @@ export async function chatView(id, focusId = null) {
       <button type="button" class="snd-btn press" id="sndBtn" hidden aria-haspopup="dialog" aria-label="Sound"><span class="snd-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span></button>
       ${ibtn('more', 'Chat options', { id: 'moreBtn' })}
     </header>
-    <div class="win${winPics().length ? ' has-pic' : ''}${chat.winFold ? ' fold' : ''}" id="win" data-k="${esc(winKey())}"><div class="win-pic" id="winPic"${ix ? '' : ` data-av="win:${esc(ch.id)}"`}>${winPicHTML()}</div><button type="button" class="sign press" id="signBtn" aria-expanded="${!chat.winFold}" aria-label="Where you are. Tap to ${chat.winFold ? 'open' : 'fold'} the window">${signHTML()}</button></div>
+    <div class="win${winPics().length ? ' has-pic' : ''}${chat.winFold ? ' fold' : ''}" id="win" data-k="${esc(winKey())}"><div class="win-pic" id="winPic"${ix ? '' : ` data-av="win:${esc(ch.id)}"`}>${winPicHTML()}</div><button type="button" class="sign press" id="signBtn" aria-controls="winPic" aria-label="Where you are">${signHTML()}</button></div>
     <div class="log${story ? ' story' : ''}" id="log" role="log" aria-live="polite" aria-relevant="additions" aria-label="Chat with ${esc(ch.name)}"></div>
     <div class="chips${scene ? ' steer' : ''}" id="chips"></div>
     ${ix && !scene ? '<div class="nextbar" id="nextbar" role="radiogroup" aria-label="Who answers next"></div>' : ''}
@@ -1453,6 +1454,16 @@ export async function chatView(id, focusId = null) {
       b.innerHTML = signHTML();
       const n = b.querySelector('.num');
       if (old && n && old !== n.textContent && !reducedMotion()) n.classList.add('tick');
+      labelSign();
+    }
+    // The sign's name for screen readers: where you are and when; open/folded only when there's a picture.
+    function labelSign() {
+      const b = root.querySelector('#signBtn');
+      if (!b) return;
+      const s = signInfo();
+      b.setAttribute('aria-label', `Where you are: ${s.title}${s.sub ? `, ${s.sub}` : ''}`);
+      if (winPics().length) b.setAttribute('aria-expanded', String(!root.querySelector('#win').classList.contains('fold')));
+      else b.removeAttribute('aria-expanded');
     }
     // The window folds to its sign while you read back through older messages, while you type on a
     // phone (the keyboard needs the room) and when you tap the sign; it opens again at the bottom.
@@ -1462,8 +1473,7 @@ export async function chatView(id, focusId = null) {
     const foldNow = () => {
       const f = !!chat.winFold || autoFold;
       winEl.classList.toggle('fold', f);
-      root.querySelector('#signBtn').setAttribute('aria-expanded', String(!f));
-      root.querySelector('#signBtn').setAttribute('aria-label', `Where you are: ${signInfo().title}. Tap to ${f ? 'open' : 'fold'} the window`);
+      labelSign();
     };
     const setAuto = (v) => {
       if (autoFold === v) return;
@@ -2308,6 +2318,9 @@ export async function chatView(id, focusId = null) {
         value: { win: ch.win || 'card', scene: ch.scene || 'none' },
         pic: ch.avatarImage,
         name: ch.name,
+        letter: ch.line?.letter,
+        color: ch.line?.color || '#0A0A0A',
+        num: signInfo().num,
         async onSave(d) {
           Object.assign(ch, { win: d.win, scene: d.scene });
           await saveCharacter(ch);

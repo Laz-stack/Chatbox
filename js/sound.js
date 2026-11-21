@@ -249,6 +249,7 @@ export function ambienceFor(chat, ch) {
   else if (has(words, /forest|wood|garden|park|field|meadow|mountain|trail|grove|countryside|village/)) base = 'forest';
   else if (has(words, /street|city|road|alley|station|platform|downtown|square|market|bridge|plaza|town/)) base = 'street';
   else if (has(words, /room|home|apartment|flat|house|bedroom|office|library|hall|castle|kitchen|study|shop|inside|indoors/)) base = 'room';
+  else if (sceneKey === 'none') return { key: 'quiet', label: 'Quiet', layers: [] }; // Window › Sounds like › Quiet
   else base = { cafe: 'cafe', rain: 'street', night: 'forest', sakura: 'forest', room: 'room' }[sceneKey] || 'room';
   const indoor = base === 'cafe' || base === 'room' || base === 'fire';
   const weather = clockOn(chat) ? chat.clock.weather : sceneKey === 'rain' ? 'rain' : 'clear';

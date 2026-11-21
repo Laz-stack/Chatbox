@@ -1854,10 +1854,10 @@ button.bopt { width: 100%; text-align: left; }
 .wopt[aria-checked='true'] { box-shadow: inset 0 0 0 3px var(--yellow); }
 .wopt-art { width: 96px; height: 72px; flex: none; border-radius: 12px; overflow: hidden; position: relative; background: var(--plate2); display: grid; place-items: center; color: var(--muted); }
 .wopt-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 20%; }
-.wopt-art .sign.mini { position: absolute; left: 6px; right: 6px; bottom: 6px; place-self: end stretch; gap: 6px; min-height: 0; padding: 4px 6px 7px; border-radius: 6px; box-shadow: none; }
-.wopt-art .sign.mini .rnd { width: 20px; height: 20px; border-width: 2.5px; font-size: 8px; }
-.wopt-art .sign.mini .rnd b { font-size: 5.5px; }
-.wopt-art .sign.mini .band { height: 3px; }
+.wopt-art .wsign { position: absolute; left: 6px; right: 6px; bottom: 6px; place-self: end stretch; gap: 6px; min-height: 0; padding: 4px 6px 7px; border-radius: 6px; box-shadow: none; }
+.wopt-art .wsign .rnd { width: 20px; height: 20px; border-width: 2.5px; font-size: 8px; }
+.wopt-art .wsign .rnd b { font-size: 5.5px; }
+.wopt-art .wsign .band { height: 3px; }
 .wopt-t b { display: block; font: 800 16px/1.2 var(--font); }
 .wopt-t small { display: block; font: 500 13px/1.4 var(--font); color: var(--muted); margin-top: 2px; }
 /* A group chat's picture made of its members' faces */
@@ -1868,9 +1868,9 @@ button.bopt { width: 100%; text-align: left; }
 .gav.mos > span { min-width: 0; min-height: 0; display: grid; place-items: center; overflow: hidden; }
 .gav.mos > span > img, .gav.mos > span > svg { width: 100%; height: 100%; object-fit: cover; }
 
-.wopt-art .sign.mini .ln { flex: 1; height: 6px; border-radius: 3px; background: #0A0A0A; max-width: 44px; }
+.wopt-art .wsign .ln { flex: 1; height: 6px; border-radius: 3px; background: #0A0A0A; max-width: 44px; }
 /* The log fades out under the window's edge instead of cutting a bubble in half. */
-.chat .log { -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 14px); mask-image: linear-gradient(180deg, transparent 0, #000 14px); }
+.chat .log { -webkit-mask-image: linear-gradient(180deg, transparent 0, transparent 10px, #000 44px); mask-image: linear-gradient(180deg, transparent 0, transparent 10px, #000 44px); }
 /* Platform hero with a card picture: a window onto the character above the line */
 .hero.has-win { height: auto; padding: 12px; }
 .hero-win { display: block; height: 168px; border-radius: 20px; overflow: hidden; background: rgba(10, 10, 10, .25); animation: heroWin .6s var(--out) .05s both; }
@@ -1888,3 +1888,8 @@ button.bopt { width: 100%; text-align: left; }
 .esign-p { margin: 0; font: 500 15px/1.5 var(--font); color: var(--muted); max-width: 46ch; }
 @keyframes esignIn { from { opacity: 0; transform: translateY(8px); } }
 @media (prefers-reduced-motion: reduce) { .esign { animation: none; } }
+
+/* A pale line (Silver) still shows on the white sign */
+.rnd.pale, .wsign.pale .rnd { box-shadow: 0 0 0 1.5px #0A0A0A, inset 0 0 0 1.5px #0A0A0A; }
+.band.pale, .wsign.pale .band { border-top: 1.5px solid #0A0A0A; }
+.wopt:focus-visible, .ad-states button:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; }
