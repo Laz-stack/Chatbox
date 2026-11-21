@@ -202,7 +202,14 @@ html.vt-tabs .tabbar .stop-new .stop { view-transition-name: tab-new; }
 
 /* ---------- home ---------- */
 .hero { position: relative; display: block; height: 310px; border-radius: 30px; padding: 20px; background: var(--line, var(--green)); color: var(--on, var(--white)); text-decoration: none; overflow: hidden; margin-top: 18px; }
-.hero .hero-arrow { position: absolute; left: 14px; top: 12px; animation: arrowIn .9s var(--out) .1s both; }
+.hero .hero-arrow { position: absolute; right: -34px; bottom: -34px; width: 260px; height: 260px; z-index: 0; pointer-events: none; color: color-mix(in srgb, var(--line, var(--green)) 84%, var(--on, #0A0A0A)); transition: color .16s ease, transform .3s var(--spring); animation: arrowIn .9s var(--out) .1s backwards; }
+.hero .hero-arrow svg { width: 100%; height: 100%; display: block; }
+.hero .hero-av, .hero .hero-foot, .hero .hero-win { z-index: 1; }
+.hero.has-win .hero-foot, .hero.has-win .hero-win { position: relative; }
+.hero.empty { --line: var(--yellow); --on: #0A0A0A; --anti: #FFFFFF; }
+/* Pressed: the background arrow lights up in ink and pops toward the corner it points at. */
+/* It lights up away from the ink (brighter on a light card, deeper on a dark one), so text stays readable over it. */
+.hero.pop .hero-arrow { color: color-mix(in srgb, var(--line, var(--green)) 45%, var(--anti, #FFFFFF)); transform: translate(16px, -16px) scale(1.1); }
 .hero .hero-av { position: absolute; right: 20px; top: 20px; animation: tileIn .8s var(--spring) .25s both; }
 .hero .hero-av .av { box-shadow: 0 0 0 4px var(--ring, var(--white)); }
 .hero-foot { position: absolute; left: 20px; right: 20px; bottom: 20px; display: flex; flex-direction: column; gap: 12px; }
@@ -1908,9 +1915,12 @@ button.bopt { width: 100%; text-align: left; }
 .win-pic .pane.contain img, .hero-win.contain img { position: absolute; inset: 0; margin: auto; object-fit: cover; object-position: 50% 0; border-radius: 8px; }
 
 /* The hero's window or its usual arrow and tile: only one shows */
-.hero.has-win .hero-arrow, .hero.has-win .hero-av, .hero.has-win .hero-kicker .bullet-av { display: none; }
+.hero.has-win .hero-av, .hero.has-win .hero-kicker .bullet-av { display: none; }
 .hero:not(.has-win) .hero-win { display: none; }
 .hero:not(.has-win) .hero-name.long { white-space: normal; font-size: 38px; line-height: 1; text-wrap: balance; }
 /* A tall card picture: avatars show its top, where the face or cover usually is */
 .bullet-av img, .av img, .gav img { object-position: 50% 0; }
 .av img { object-fit: cover; }
+@media (prefers-reduced-motion: reduce) { .hero .hero-arrow { transition: color .16s ease; } .hero.pop .hero-arrow { transform: none; } }
+/* The card's text and picture always sit above its background arrow */
+.hero.has-win > .hero-foot, .hero.has-win > .hero-win { position: relative; inset: auto; z-index: 1; }

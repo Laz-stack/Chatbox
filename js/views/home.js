@@ -27,8 +27,8 @@ export function homeView() {
     // Window seat: with a card picture, the hero is a window onto the character, like the chat's.
     const pic = featured.avatarImage;
     const quote = lastLine.replace(/^["“”'*\s]+|["“”'*\s]+$/g, '');
-    hero = `<a class="hero press${pic ? ' has-win' : ''}" href="#/chat/${featured.id}" style="--line:${lc};--on:${inkOn(lc)};--ring:${luminance(lc) > 0.55 ? '#0A0A0A' : '#FFFFFF'}" aria-label="${started[0] ? 'Continue chatting with' : 'Start chatting with'} ${esc(featured.name)}">
-      ${pic ? `<span class="hero-win" data-av="hero:${esc(featured.id)}"><img src="${esc(pic)}" alt="" data-fit></span>` : ''}<span class="hero-arrow">${arrow(128, 'currentColor')}</span>
+    hero = `<a class="hero press${pic ? ' has-win' : ''}" href="#/chat/${featured.id}" style="--line:${lc};--on:${inkOn(lc)};--anti:${luminance(lc) > 0.55 ? '#FFFFFF' : inkOn(lc) === '#FFFFFF' ? '#0A0A0A' : '#FFFFFF'};--ring:${luminance(lc) > 0.55 ? '#0A0A0A' : '#FFFFFF'}" aria-label="${started[0] ? 'Continue chatting with' : 'Start chatting with'} ${esc(featured.name)}">
+      <span class="hero-arrow" aria-hidden="true">${arrow(260, 'currentColor')}</span>${pic ? `<span class="hero-win" data-av="hero:${esc(featured.id)}"><img src="${esc(pic)}" alt="" data-fit></span>` : ''}
       <span class="hero-av"${pic ? '' : ` data-av="hero:${esc(featured.id)}"`}>${avatarTile(featured, 92, { radius: 26, rot: -4 })}</span>
       <span class="hero-foot">
         <span class="hero-kicker">${avatarBullet(featured, 34)}${started[0] ? (when ? `Continue · ${agoLong(when)}` : 'Continue the chat') : 'Start a chat'}</span>
@@ -37,7 +37,7 @@ export function homeView() {
       </span></a>`;
   } else {
     hero = `<a class="hero empty press" href="#/edit/new">
-      <span class="hero-arrow">${arrow(128, '#0A0A0A')}</span>
+      <span class="hero-arrow" aria-hidden="true">${arrow(260, 'currentColor')}</span>
       <span class="hero-foot"><span class="hero-name">New line<span class="hero-sub">Create your first character</span></span></span></a>`;
   }
 
@@ -92,6 +92,17 @@ export function homeView() {
     depth: 0,
     mount(root) {
       fitPics(root);
+      // The arrow sits in the card's background; pressing the card lights it up and it pops toward the
+      // corner, then flies on into the chat (the screen change, main.js).
+      const hero = root.querySelector('.hero');
+      if (hero) {
+        const pop = () => hero.classList.add('pop');
+        const drop = () => hero.classList.remove('pop');
+        hero.addEventListener('pointerdown', pop);
+        hero.addEventListener('pointercancel', drop);
+        hero.addEventListener('pointerleave', drop);
+        hero.addEventListener('click', pop);
+      }
       root.querySelector('#homeCardIn').addEventListener('change', (e) => (startImport([...e.target.files]), (e.target.value = '')));
     },
   };
