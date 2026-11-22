@@ -118,7 +118,10 @@ export function scenesView() {
     const gs = groups();
     if (!gs.length) return emptySign('No scenes yet', 'Scenes you paint in any chat are kept here. Set up Pictures, then hold a reply › Picture this.', `<a class="pill press" href="#/connections/pictures">Pictures${icon('chev', 15)}</a>`, 'Depot · Scenes');
     const total = gs.reduce((n, g) => n + g.list.length, 0);
-    return `<p class="scn-sum">${total} ${total === 1 ? 'scene' : 'scenes'} across ${gs.length} ${gs.length === 1 ? 'chat' : 'chats'}</p>${gs
+    // Roughly how much room they take on this device (pictures are stored as text, about 4/3 of their size).
+    const bytes = gs.reduce((n, g) => n + g.list.reduce((m, x) => m + (S.images?.[x.key]?.length || 0) * 0.75, 0), 0);
+    const size = bytes > 1e6 ? `${(bytes / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1e3))} KB`;
+    return `<p class="scn-sum">${total} ${total === 1 ? 'scene' : 'scenes'} across ${gs.length} ${gs.length === 1 ? 'chat' : 'chats'} · ${size} on this phone${bytes > 50e6 ? '. Removing ones you don’t need frees space.' : ''}</p>${gs
       .map(({ c, list }) => `<section class="scn-sec"><a class="scn-h press" href="#/chat/${encodeURIComponent(c.id)}"><b>${esc(ownerName(c))}</b><span>${list.length}</span>${icon('chev', 16)}</a>${thumbs(c, list)}</section>`)
       .join('')}`;
   };

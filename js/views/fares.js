@@ -178,7 +178,7 @@ export function faresView() {
     <div class="rc-wrap"><div class="rc-stack" id="rcStack">${stackHTML(lastTop)}</div></div>
     <p class="rc-hint" id="rcHint">${hint(lastTop)}</p>
     <div id="rcBusy">${busyHTML(PAPERS[lastTop][0])}</div>
-    <p class="fhint" style="margin-top:18px">OpenRouter costs are what it billed for each request. Other connections use the prices in their More options, with tokens counted by the provider or estimated (about four characters each); pictures use your price per picture.</p>
+    <p class="fhint" style="margin-top:18px">With OpenRouter, each cost is what OpenRouter actually charged. For other connections it’s worked out from the prices you set in the connection’s More options, so treat it as an estimate. Pictures use your price per picture.</p>
   </div>${tabbar('fares')}`;
 
   return {

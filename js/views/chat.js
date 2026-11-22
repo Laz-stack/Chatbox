@@ -378,10 +378,16 @@ export async function chatView(id, focusId = null) {
       });
     }
     const chapterById = (id) => (chat.chapters || []).find((c) => c.id === id);
+    // Jump far up the log: messages off screen are drawn at a stand-in height until seen, so jump
+    // straight there, then again on the next frames once the real heights are in.
+    const reach = (el, block) => {
+      el.scrollIntoView({ block, behavior: 'auto' });
+      requestAnimationFrame(() => requestAnimationFrame(() => el.isConnected && el.scrollIntoView({ block, behavior: 'auto' })));
+    };
     function goChapter(id) {
       const el = log.querySelector(`.chap[data-chap="${CSS.escape(id)}"]`);
       if (!el) return;
-      el.scrollIntoView({ block: 'start', behavior: reducedMotion() ? 'auto' : 'smooth' });
+      reach(el, 'start');
       el.focus({ preventScroll: true });
     }
     function chapterMenu(btn) {
@@ -558,7 +564,7 @@ export async function chatView(id, focusId = null) {
     function jumpTo(msgId) {
       const el = log.querySelector(`.msg[data-id="${CSS.escape(msgId)}"]`);
       if (!el) return;
-      el.scrollIntoView({ block: 'center', behavior: reducedMotion() ? 'auto' : 'smooth' });
+      reach(el, 'center');
       el.classList.add('found');
       setTimeout(() => el.classList.remove('found'), 2200);
     }
@@ -650,7 +656,7 @@ export async function chatView(id, focusId = null) {
       find.at = ((k % n) + n) % n;
       find.hits.forEach((mk, j) => mk.classList.toggle('cur', j === find.at));
       out.textContent = `${find.at + 1} of ${n}`;
-      find.hits[find.at].scrollIntoView({ block: 'center', behavior: reducedMotion() ? 'auto' : 'smooth' });
+      reach(find.hits[find.at], 'center');
     }
     function openFind() {
       const fb = root.querySelector('#findbar');

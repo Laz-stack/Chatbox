@@ -1,6 +1,7 @@
 // Built-in faces for characters without a picture of their own: Open Peeps by Pablo Stanley
 // (CC0, drawn by hand; files in icons/faces), each in four expressions, on the line colour.
 import { esc, inkOn } from './util.js';
+import { small } from './thumbs.js';
 
 export const PRESETS = {
   mika: { name: 'Long bangs' },
@@ -41,7 +42,7 @@ export function avatarTile(who, size, { expr = 'happy', radius, rot = 0, cls = '
   const r = radius ?? Math.round(size * 0.28);
   const bg = who.line?.color || who.color || '#2EAA67';
   const inner = who.avatarImage
-    ? `<img src="${esc(who.avatarImage)}" alt="" width="${size}" height="${size}" style="width:100%;height:100%;object-fit:cover;display:block">`
+    ? `<img src="${esc(size <= 120 ? small(who.avatarImage) : who.avatarImage)}"${size <= 120 ? ' data-small' : ''} alt="" width="${size}" height="${size}" style="width:100%;height:100%;object-fit:cover;display:block">`
     : faceSVG(who, size, expr, bg);
   const ringStyle = ring ? `box-shadow:0 0 0 4px ${ring};` : '';
   return `<span class="av ${cls}" data-expr="${expr}" style="width:${size}px;height:${size}px;border-radius:${r}px;transform:rotate(${rot}deg);${ringStyle}">${inner}</span>`;
