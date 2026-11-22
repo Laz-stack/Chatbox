@@ -138,7 +138,12 @@ export async function perchancePrompt({ chat, cast, m, persona, conn, style, sig
 export async function keepPicture({ chat, alt = 0, data, prompt, cap, style, from = 'perchance', extra = {} }) {
   const key = 'pic:' + uid();
   S.images = { ...(S.images || {}), [key]: data };
-  await saveImages();
+  try {
+    await saveImages();
+  } catch {
+    delete S.images[key];
+    throw new Error('Couldn’t save the picture. Free some space and try again.');
+  }
   const place = hereOf(chat);
   const when = clockOn(chat) ? `Day ${chat.clock.day} · ${hhmm(chat.clock.min)}` : '';
   return { id: uid(), key, prompt, caption: [cap || place?.name, when].filter(Boolean).join(' · '), style, at: Date.now(), alt, from, ...extra };

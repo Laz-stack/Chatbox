@@ -141,7 +141,15 @@ const blobToData = (b) => new Promise((res, rej) => {
 });
 
 // Paint: returns { url (data URL), ms, seed, model, size }.
-export async function nmPaint({ prompt, signal, onWait, overrides = {} }) {
+// One at a time: a second paint (a quick double tap, an auto-paint for a new station) waits its turn.
+let queue = Promise.resolve();
+export function nmPaint(o) {
+  const run = queue.then(() => paintNow(o));
+  queue = run.catch(() => {});
+  return run;
+}
+async function paintNow({ prompt, signal, onWait, overrides = {} }) {
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
   const p = { ...nmPrefs(), ...overrides };
   if (!p.token.trim()) throw new NmError('Nightmare needs its token.', 'Copy it from Nightmare (Settings › Advanced) into Connections › Pictures.');
   await whenFree(signal, onWait);
@@ -194,11 +202,11 @@ export async function writeLooks({ name, sheet, conn, anime, signal }) {
 }
 
 // The scene as tags (the look tags of who's in it are added in front by compose()).
-export async function sceneTags({ chat, people, persona, withMe, m, conn, mood, frame, anime, signal }) {
+export async function sceneTags({ chat, people, speaker, persona, withMe, m, conn, mood, frame, anime, signal }) {
   const you = persona?.name?.trim() || 'the user';
   const place = hereOf(chat);
   const when = clockOn(chat) ? `${partOfDay(chat.clock.min)} (${hhmm(chat.clock.min)}), ${chat.clock.weather}` : '';
-  const text = named(textOf(m), people[0] || {}, you, persona).replace(/!\[[^\]]*\]\([^)]*\)/g, '').slice(0, 1800);
+  const text = named(textOf(m), speaker || people[0] || {}, you, persona).replace(/!\[[^\]]*\]\([^)]*\)/g, '').slice(0, 1800);
   const inFrame = [...people.map((p) => p.name), ...(withMe ? [you] : [])];
   const brief = { in_the_picture: inFrame, place: place ? `${place.name}: ${place.note}` : '', time: when, moment: text };
   const ask =
@@ -223,10 +231,24 @@ export async function sceneTags({ chat, people, persona, withMe, m, conn, mood, 
 }
 
 // Look tags first (in the order people appear), then framing, then the scene; fitted to 77 tokens.
+// Count tags (1girl, 1boy) from every look are added up into one ("2girls", "1girl, 1boy") and go first,
+// and each look gets a share of the tokens so the scene always has room (at least 25).
+const COUNT = /^(\d+)\s*(girl|boy|other)s?$/i;
 export function compose({ looks, frame, tags }) {
+  const counts = { girl: 0, boy: 0, other: 0 };
+  const per = looks.length ? Math.max(8, Math.floor((TOKEN_LIMIT - 25) / looks.length)) : 0;
+  const lookTags = looks.flatMap((l) => {
+    const own = splitTags(l.tags).filter((t) => {
+      const c = t.match(COUNT);
+      if (c) counts[c[2].toLowerCase()] += +c[1];
+      return !c;
+    });
+    return fitTags(own, per).keep;
+  });
+  const countTags = Object.entries(counts).filter(([, n]) => n).map(([k, n]) => `${n}${k}${n > 1 ? 's' : ''}`);
   const all = [];
   const seen = new Set();
-  for (const t of [...looks.flatMap((l) => splitTags(l.tags)), ...splitTags(frameTags(frame)), ...tags]) {
+  for (const t of [...countTags, ...lookTags, ...splitTags(frameTags(frame)), ...tags.filter((t) => !countTags.length || !COUNT.test(t))]) {
     const k = t.toLowerCase();
     if (!seen.has(k)) seen.add(k), all.push(t);
   }

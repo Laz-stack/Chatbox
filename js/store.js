@@ -637,7 +637,9 @@ export async function restore(data) {
   if (!data || data.app !== 'chatbox') throw new Error('This file is not a Chatbox backup.');
   await db.clear();
   await db.set('seeded', true);
+  const nmLocal = S.settings.nightmare; // Nightmare's address and token belong to this phone
   S.settings = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };
+  if (nmLocal) S.settings.nightmare = nmLocal;
   S.persona = { ...S.persona, ...(data.persona || {}) };
   setupPersonas(data.personas);
   S.connections = data.connections || [];
