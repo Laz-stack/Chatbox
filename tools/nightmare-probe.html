@@ -17,7 +17,10 @@ input { width: 100%; min-height: 48px; padding: 0 14px; border: 0; border-radius
 input:focus-visible, button:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
 .row { display: flex; gap: 8px; margin-top: 16px; }
 button { flex: 1; min-height: 52px; border: 0; border-radius: 20px; font: 800 15px/1 system-ui, sans-serif; cursor: pointer; }
-#go { background: var(--red); color: #fff; }
+#go, #run { background: var(--red); color: #fff; }
+h2 { margin: 26px 0 6px; font: 800 18px/1.2 system-ui, sans-serif; }
+#pic { display: block; width: 100%; margin-top: 14px; border-radius: 14px; }
+#run:disabled { opacity: .45; cursor: default; }
 #copy { background: var(--plate2); color: var(--cream); }
 #copy:disabled, #go:disabled { opacity: .45; cursor: default; }
 #status { min-height: 22px; margin: 14px 0 6px; font-weight: 700; }
@@ -41,6 +44,10 @@ li pre { margin: 6px 0 0; white-space: pre-wrap; word-break: break-word; font: 1
     <input id="tok" type="password" autocomplete="off" spellcheck="false" placeholder="Paste the token from Nightmare">
     <div class="row"><button type="submit" id="go">Probe</button><button type="button" id="copy" disabled>Copy results</button></div>
   </form>
+  <h2>Step 2: test a picture</h2>
+  <p>Paints one test picture (a mountain lake at dawn) with your first installed model, and records how Nightmare answers so Chatbox can do the same.</p>
+  <div class="row"><button type="button" id="run">Paint a test picture</button></div>
+  <img id="pic" alt="The test picture from Nightmare" hidden>
   <div id="status" role="status"></div>
   <ol id="out"></ol>
 </main>
@@ -87,6 +94,91 @@ $('#f').addEventListener('submit', async (e) => {
   $('#status').textContent = reached ? 'Done. Tap Copy results and paste them to Claude.' : 'Nightmare didn’t answer. Check that it’s open and both switches are on.';
   $('#go').disabled = false;
   $('#copy').disabled = !reached;
+});
+// Step 2: learn /run and /results from their answers (error messages name what's missing).
+const ID_KEYS = ['id', 'job', 'job_id', 'jobId', 'run', 'run_id', 'runId', 'task', 'task_id', 'ticket'];
+function shrinkJson(v, d = 0) {
+  if (typeof v === 'string') {
+    if (v.startsWith('data:image')) return `(data URL picture, ${v.length} chars)`;
+    if (v.length > 300) return `(long text, ${v.length} chars, starts "${v.slice(0, 40)}")`;
+    return v;
+  }
+  if (Array.isArray(v)) return v.slice(0, 5).map((x) => shrinkJson(x, d + 1)).concat(v.length > 5 ? [`(+${v.length - 5} more)`] : []);
+  if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, shrinkJson(x, d + 1)]));
+  return v;
+}
+function findPic(v) {
+  if (typeof v === 'string') return /^data:image|^https?:\/\/.+\.(png|jpe?g|webp)/i.test(v) || (v.length > 2000 && /^[A-Za-z0-9+/=]+$/.test(v.slice(0, 200))) ? v : null;
+  if (v && typeof v === 'object') for (const x of Object.values(v)) { const f = findPic(x); if (f) return f; }
+  return null;
+}
+async function call(base, tok, path, body) {
+  const r = await fetch(base + path, { method: 'POST', headers: { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const type = r.headers.get('content-type') || '';
+  if (type.startsWith('image/')) { const blob = await r.blob(); return { status: r.status, type, pic: URL.createObjectURL(blob), text: `(${type} picture, ${blob.size} bytes)` }; }
+  const text = (await r.text()).split(tok).join('[token]');
+  let json = null;
+  try { json = JSON.parse(text); } catch {}
+  return { status: r.status, type, json, text: json ? JSON.stringify(shrinkJson(json)) : text.slice(0, 1500) };
+}
+function log(path, body, res) {
+  const li = document.createElement('li');
+  if (res.status >= 200 && res.status < 300) li.className = 'hit';
+  li.innerHTML = '<span class="code"></span><b></b><pre></pre>';
+  li.querySelector('.code').textContent = res.status;
+  li.querySelector('b').textContent = 'POST ' + path + ' ' + JSON.stringify(body);
+  li.querySelector('pre').textContent = res.text;
+  $('#out').appendChild(li);
+  report += `\nPOST ${path} ${JSON.stringify(body)} → ${res.status} ${res.type}\n${res.text}\n`;
+}
+$('#run').addEventListener('click', async () => {
+  const base = $('#addr').value.trim().replace(/\/+$/, '');
+  const tok = $('#tok').value.trim();
+  if (!tok) return ($('#status').textContent = 'Paste the token first.');
+  $('#run').disabled = true;
+  $('#copy').disabled = true;
+  $('#out').innerHTML = '';
+  $('#pic').hidden = true;
+  report = `Nightmare test picture (${base})\n`;
+  try {
+    let model = '';
+    try {
+      const m = await (await fetch(base + '/models', { headers: { Authorization: 'Bearer ' + tok } })).json();
+      model = m.models?.[0]?.id || '';
+    } catch {}
+    const prompt = 'a quiet mountain lake at dawn, mist over the water, pine trees, soft light, landscape painting';
+    const steps = [
+      ['/run', {}],
+      ['/results', {}],
+      ['/run', { recipe: 'txt2img' }],
+      ['/run', { recipe: 'txt2img', model, prompt }],
+    ];
+    let last;
+    for (const [k, [path, body]] of steps.entries()) {
+      $('#status').textContent = `Step ${k + 1} of ${steps.length}…`;
+      last = await call(base, tok, path, body);
+      log(path, body, last);
+    }
+    // A job id in the answer: ask /results for it until a picture comes back (up to 4 minutes).
+    let pic = last.pic || findPic(last.json);
+    const j = last.json || {};
+    const key = ID_KEYS.find((k) => j[k] != null) || Object.keys(j).find((k) => /id$/i.test(k) && typeof j[k] !== 'object');
+    for (let t = 0; !pic && key && t < 80; t++) {
+      $('#status').textContent = `Painting… asking for the result (${t * 3}s)`;
+      await new Promise((r) => setTimeout(r, 3000));
+      const res = await call(base, tok, '/results', { [key]: j[key] });
+      if (t < 3 || res.pic || findPic(res.json) || res.status >= 400) log('/results', { [key]: j[key] }, res);
+      pic = res.pic || findPic(res.json);
+      if (res.status >= 400) break;
+    }
+    if (pic) ($('#pic').src = pic.startsWith('data:') || pic.startsWith('blob:') || pic.startsWith('http') ? pic : 'data:image/png;base64,' + pic), ($('#pic').hidden = false);
+    report += `\nPicture found: ${pic ? 'yes' : 'no'}\n`;
+    $('#status').textContent = (pic ? 'Painted. ' : 'Done (no picture seen yet). ') + 'Tap Copy results and paste them to Claude.';
+  } catch (err) {
+    $('#status').textContent = 'Couldn’t reach Nightmare: ' + err.message;
+  }
+  $('#run').disabled = false;
+  $('#copy').disabled = !report;
 });
 $('#copy').addEventListener('click', async () => {
   try {
