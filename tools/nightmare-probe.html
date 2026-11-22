@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Nightmare Probe</title>
+<style>
+:root { --bg: #0A0A0A; --plate: #1E1E1E; --plate2: #333; --cream: #ECECEC; --muted: #9B9B9B; --yellow: #FDCD15; --red: #E70404; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; padding: 20px 16px 48px; background: var(--bg); color: var(--cream); font: 500 15px/1.45 system-ui, sans-serif; }
+main { max-width: 560px; margin: 0 auto; }
+h1 { margin: 0 0 6px; font: 800 24px/1.15 system-ui, sans-serif; }
+p { margin: 0 0 14px; color: var(--muted); }
+label { display: block; margin: 14px 0 6px; font-weight: 700; }
+input { width: 100%; min-height: 48px; padding: 0 14px; border: 0; border-radius: 14px; background: var(--plate); color: var(--cream); font: 500 15px/1 ui-monospace, monospace; }
+input:focus-visible, button:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
+.row { display: flex; gap: 8px; margin-top: 16px; }
+button { flex: 1; min-height: 52px; border: 0; border-radius: 20px; font: 800 15px/1 system-ui, sans-serif; cursor: pointer; }
+#go { background: var(--red); color: #fff; }
+#copy { background: var(--plate2); color: var(--cream); }
+#copy:disabled, #go:disabled { opacity: .45; cursor: default; }
+#status { min-height: 22px; margin: 14px 0 6px; font-weight: 700; }
+ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+li { padding: 10px 12px; border-radius: 14px; background: var(--plate); }
+li b { font: 800 14px/1.3 ui-monospace, monospace; }
+li .code { float: right; font: 800 13px/1.3 ui-monospace, monospace; color: var(--muted); }
+li.hit .code { color: var(--yellow); }
+li pre { margin: 6px 0 0; white-space: pre-wrap; word-break: break-word; font: 12.5px/1.4 ui-monospace, monospace; color: var(--cream); max-height: 220px; overflow: auto; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Nightmare probe</h1>
+  <p>Asks the Nightmare app on this phone which commands its API has, so Chatbox can paint with it. Your token is only sent to Nightmare on this phone (127.0.0.1) and isn’t saved or shown in the results.</p>
+  <p>In Nightmare: Settings › Advanced, turn on “Listen on the local network” and “Allow browser pages”.</p>
+  <form id="f">
+    <label for="addr">Address</label>
+    <input id="addr" value="http://127.0.0.1:8820" autocomplete="off" spellcheck="false">
+    <label for="tok">Token</label>
+    <input id="tok" type="password" autocomplete="off" spellcheck="false" placeholder="Paste the token from Nightmare">
+    <div class="row"><button type="submit" id="go">Probe</button><button type="button" id="copy" disabled>Copy results</button></div>
+  </form>
+  <div id="status" role="status"></div>
+  <ol id="out"></ol>
+</main>
+<script>
+// Read-only GETs on likely paths; nothing is run or changed in Nightmare.
+const PATHS = ['/info', '/', '/help', '/docs', '/api', '/routes', '/endpoints', '/openapi.json', '/flows', '/models', '/status', '/queue', '/jobs', '/history', '/results', '/pictures', '/images', '/gallery', '/run', '/generate', '/txt2img', '/api/flows', '/v1/flows', '/v1/models'];
+const $ = (s) => document.querySelector(s);
+let report = '';
+$('#f').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const base = $('#addr').value.trim().replace(/\/+$/, '');
+  const tok = $('#tok').value.trim();
+  if (!tok) return ($('#status').textContent = 'Paste the token first.');
+  $('#go').disabled = true;
+  $('#copy').disabled = true;
+  $('#out').innerHTML = '';
+  report = `Nightmare probe (${base})\n`;
+  let reached = 0;
+  for (const [k, p] of PATHS.entries()) {
+    $('#status').textContent = `Asking ${p} (${k + 1} of ${PATHS.length})…`;
+    let line;
+    try {
+      const ctl = new AbortController();
+      const t = setTimeout(() => ctl.abort(), 8000);
+      const r = await fetch(base + p, { headers: { Authorization: 'Bearer ' + tok }, signal: ctl.signal });
+      clearTimeout(t);
+      const type = r.headers.get('content-type') || '';
+      let body = type.startsWith('image/') ? `(${type} picture)` : (await r.text()).split(tok).join('[token]');
+      if (body.length > 1500) body = body.slice(0, 1500) + ' …';
+      line = { p, code: String(r.status), body, hit: r.ok };
+      reached++;
+    } catch (err) {
+      line = { p, code: 'failed', body: err.name === 'AbortError' ? 'No answer in 8 seconds.' : 'Couldn’t reach Nightmare (is it open, with “Allow browser pages” on?).', hit: false };
+    }
+    const li = document.createElement('li');
+    if (line.hit) li.className = 'hit';
+    li.innerHTML = `<span class="code"></span><b></b><pre></pre>`;
+    li.querySelector('.code').textContent = line.code;
+    li.querySelector('b').textContent = line.p;
+    li.querySelector('pre').textContent = line.body;
+    $('#out').appendChild(li);
+    report += `\n${line.p} → ${line.code}\n${line.body}\n`;
+  }
+  $('#status').textContent = reached ? 'Done. Tap Copy results and paste them to Claude.' : 'Nightmare didn’t answer. Check that it’s open and both switches are on.';
+  $('#go').disabled = false;
+  $('#copy').disabled = !reached;
+});
+$('#copy').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(report);
+    $('#status').textContent = 'Copied. Paste it to Claude.';
+  } catch {
+    $('#status').textContent = 'Couldn’t copy: take screenshots of the list instead.';
+  }
+});
+</script>
+</body>
+</html>
