@@ -2121,3 +2121,32 @@ label:has(> input.vh:focus-visible), label:has(input.vh:focus-visible) { outline
 .hid-tx small { display: block; margin-top: 3px; font: 600 12px/1.2 var(--font); }
 .hid-show { min-height: 44px; padding: 0 16px; border-radius: 22px; box-shadow: inset 0 0 0 2px var(--cream); color: var(--cream); font: 800 13px/1 var(--font); }
 @media (prefers-reduced-motion: reduce) { .sw, .sw > .ix, .ln-fold-c, .ln-fold-in { transition: none; } }
+
+/* ---------- Lines: characters are solid plates; Recent hangs each one's chats under it as stations ---------- */
+.ln-count, .ln-n { flex: none; display: inline-flex; align-items: center; justify-content: center; border-radius: 15px; background: rgba(10, 10, 10, .85); color: var(--cream); font: 800 12px/1 var(--font); }
+.ln-count { min-height: 30px; padding: 0 11px; }
+.ln-n { width: 30px; height: 30px; }
+.ln-count.light, .ln-n.light { background: rgba(255, 255, 255, .92); color: #0A0A0A; }
+.ln-grp { border-radius: 22px; background: var(--plate); overflow: hidden; animation: riseIn .45s var(--out) both; }
+.ln-grp .sw { border-radius: 0; animation: none; }
+.ln-grp > .sw:first-child { border-radius: 22px 22px 0 0; }
+.ln-grp > .sw:last-child { border-radius: 0 0 22px 22px; }
+.ln-grp .ln-head { border-radius: 22px 22px 0 0; min-height: 60px; }
+.ln-grp .sw-under { border-radius: 0; }
+.ln-grp .sw-d { border-radius: 0; }
+.ln-grp > .sw:last-child .sw-d { border-radius: 0 0 22px 0; }
+.ln-stn { position: relative; z-index: 1; display: flex; gap: 12px; align-items: flex-start; min-height: 56px; padding: 10px 14px 10px 30px; background: var(--plate); color: var(--white); text-decoration: none; touch-action: pan-y; -webkit-user-drag: none; user-select: none; transition: transform .3s var(--out); }
+.sw.dragging > .ln-stn { transition: none; }
+.ln-stn::before { content: ''; position: absolute; left: 31px; top: 0; bottom: 0; width: 4px; background: var(--c); }
+.ln-grp > .sw:last-child .ln-stn::before { bottom: 50%; }
+.ln-dot { position: relative; z-index: 1; flex: none; width: 14px; height: 14px; margin: 3px 0 0 -3px; border-radius: 50%; background: var(--plate); box-shadow: 0 0 0 3px var(--c); }
+.ln-st { display: block; font: 700 14px/1.25 var(--font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ln-ss { display: block; margin-top: 2px; font: 600 12px/1.25 var(--font); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ln-w { flex: none; font: 800 12px/1.4 var(--font); color: var(--soft); }
+.ln-grp > .sw + .sw .ln-stn { box-shadow: 0 -1px 0 var(--hair) inset; }
+.ln-grp > .sw:nth-child(2) .ln-stn { box-shadow: none; }
+@media (prefers-reduced-motion: reduce) { .ln-stn { transition: none; } }
+/* The rows clip their corners, so the focus ring is drawn inside them. */
+.sw > a:focus-visible { outline-offset: -3px; }
+.ln-grp { transition: height .3s var(--out), opacity .3s, margin .3s; }
+.ln-grp.gone { height: 0 !important; opacity: 0; margin-top: -8px; }

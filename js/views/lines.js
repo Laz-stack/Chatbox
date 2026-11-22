@@ -1,6 +1,6 @@
 // Lines: every character (and later every Interchange), all departures, the full Logbook,
 // and a search across names, taglines and every message in every chat.
-import { S, textOf, named, departures, logbook, character, lastMessage, interchange, latestChat, chatsFor, hiddenChats, setHidden, deleteChat, deleteCharacter, deleteInterchange } from '../store.js';
+import { S, textOf, named, hasStarted, departures, logbook, character, lastMessage, interchange, latestChat, chatsFor, hiddenChats, setHidden, deleteChat, deleteCharacter, deleteInterchange } from '../store.js';
 import { esc, ago, agoLong, plain, inkOn, debounce, formatMessage, cleanTagline } from '../util.js';
 import { title2, avatarBullet, tabbar, icon, groupAvatar, emptySign, toast, confirmSheet } from '../ui.js';
 import { startImport } from './import.js';
@@ -40,16 +40,59 @@ const fold = (rows) =>
     : '';
 const grey = (html) => html.replace('class="bullet', 'class="bullet hid-av');
 
+// A character is a solid plate; how many chats they have sits in a pill on the right.
+const countPill = (n, c) => `<span class="ln-count${inkOn(c.line?.color || '#2EAA67') === '#FFFFFF' ? ' light' : ''}">${n ? `${n} chat${n === 1 ? '' : 's'}` : 'no chats yet'}</span>`;
 function lineRow(c) {
-  const chat = latestChat(c.id);
-  const n = chatsFor(c.id).filter((x) => x.messages.some((m) => m.role === 'user')).length;
-  const when = chat && chat.messages.some((m) => m.role === 'user') ? (ago(chat.updatedAt) === 'now' ? 'just now' : ago(chat.updatedAt)) : 'not started';
-  return sw(`<a class="ix press" href="#/chat/${c.id}" style="${colorVars(c)}" aria-label="Chat with ${esc(c.name)}" aria-describedby="swHint">${badge(c)}<span class="row-tx"><span class="row-t">${esc(c.name)}</span><span class="row-s">${esc(cleanTagline(c.tagline, c.name) || 'No tagline')}${n > 1 ? ` · ${n} chats` : ''}</span></span><span class="ix-t num">${when}</span></a>`, 'char', c.id, c.name, { hidden: !!c.hidden });
+  const n = shownChats(c.id).length;
+  return sw(`<a class="ix press" href="#/chat/${c.id}" style="${colorVars(c)}" aria-label="${esc(c.name)}, character, ${n} chat${n === 1 ? '' : 's'}" aria-describedby="swHint">${badge(c)}<span class="row-tx"><span class="row-t">${esc(c.name)}</span><span class="row-s">${esc(cleanTagline(c.tagline, c.name) || 'No tagline')}</span></span>${countPill(n, c)}</a>`, 'char', c.id, c.name, { hidden: !!c.hidden });
 }
 
 function ixRow(ix, kind = 'ix', chat = latestChat(ix.id)) {
   const when = chat && chat.messages.some((m) => m.role === 'user') ? (ago(chat.updatedAt) === 'now' ? 'just now' : ago(chat.updatedAt)) : 'not started';
   return sw(`<a class="ix ixg press" href="#/chat/${ix.id}" aria-label="Open ${esc(ix.title)}" aria-describedby="swHint">${groupAvatar(ix, 44)}<span class="row-tx"><span class="row-t">${esc(ix.title)}</span><span class="row-s">${ix.mode === 'scene' ? 'Carriage' : 'Interchange'} · ${ix.people.map((p) => esc(p.name)).join(', ')}</span></span><span class="ix-t num">${when}</span></a>`, kind, kind === 'chat' ? chat?.id : ix.id, ix.title, { hidden: kind === 'ix' && !!ix.hidden, group: true });
+}
+
+// Recent: each character's chats hang under their plate like stations on a line. The character
+// with the newest chat comes first; their chats run newest first. A chat is named by your first line.
+const chatTitle = (chat) => {
+  const first = chat.messages.find((m) => m.role === 'user');
+  return first ? plain(textOf(first)).slice(0, 80) || 'Untitled chat' : 'Not started yet';
+};
+// The chats a character or group shows: started and not hidden, newest first. One source for the
+// station list, the count badge and the All pill.
+const shownChats = (id) => chatsFor(id).filter((c) => hasStarted(c) && !c.hidden);
+function recentGroups() {
+  const groups = new Map();
+  for (const d of departures()) {
+    if (d.ix) continue;
+    if (!groups.has(d.c.id)) groups.set(d.c.id, { c: d.c, chats: [] });
+    groups.get(d.c.id).chats.push(d.chat);
+  }
+  // Groups (Interchanges) can have several chats too; departures() lists only the newest one.
+  for (const x of S.interchanges) {
+    if (x.hidden) continue;
+    const ix = interchange(x.id);
+    const chats = ix && shownChats(ix.id);
+    if (chats?.length) groups.set(ix.id, { ix, c: ix.people[0], chats });
+  }
+  return [...groups.values()].sort((a, b) => b.chats[0].updatedAt - a.chats[0].updatedAt);
+}
+function lineGroup({ c, ix, chats }) {
+  const id = ix ? ix.id : c.id;
+  const name = ix ? ix.title : c.name;
+  const vars = ix ? '--c:#ECECEC;--ink:#0A0A0A' : colorVars(c);
+  const n = chats.length;
+  const head = sw(
+    `<a class="ix press ln-head" href="#/chat/${chats[0].id}" style="${vars}" aria-label="${esc(name)}, ${ix ? 'group' : 'character'}, ${n} chat${n === 1 ? '' : 's'}" aria-describedby="swHint">${ix ? groupAvatar(ix, 44) : badge(c)}<span class="row-tx"><span class="row-t">${esc(name)}</span><span class="row-s">${ix ? `${ix.mode === 'scene' ? 'Carriage' : 'Interchange'} · ${ix.people.map((p) => esc(p.name)).join(', ')}` : esc(cleanTagline(c.tagline, c.name) || 'No tagline')}</span></span><span class="ln-n${!ix && /^#fff/i.test(inkOn(c.line?.color || '#2EAA67')) ? ' light' : ''}" aria-hidden="true">${n}</span></a>`,
+    ix ? 'ix' : 'char', id, name, { group: !!ix }
+  );
+  const who = ix ? ix.people[0] : c;
+  const stations = chats
+    .map((chat) =>
+      sw(`<a class="ln-stn press" href="#/chat/${chat.id}" aria-label="Chat with ${esc(name)}: ${esc(chatTitle(chat))}, ${esc(agoLong(chat.updatedAt))}" aria-describedby="swHint"><span class="ln-dot" aria-hidden="true"></span><span class="row-tx"><span class="ln-st">${esc(chatTitle(chat))}</span><span class="ln-ss">${esc(plain(named(textOf(lastMessage(chat)), who)))}</span></span><span class="ln-w num">${ago(chat.updatedAt)}</span></a>`, 'chat', chat.id, name, { group: !!ix })
+    )
+    .join('');
+  return `<div class="ln-grp" role="group" aria-label="${esc(name)}" style="${vars}">${head}${stations}</div>`;
 }
 
 function departureRow({ c, chat, ix }) {
@@ -139,10 +182,11 @@ export function linesView(filter) {
   ];
   const body = () => {
     if (filter === 'recent') {
-      const deps = departures();
+      const groups = recentGroups();
+      const deps = groups.flatMap((g) => g.chats);
       const hid = hiddenChats().map(({ c, chat, ix }) => hidRow('chat', chat.id, ix ? ix.title : c.name, ix ? `<span class="hid-av">${groupAvatar(ix, 40)}</span>` : grey(avatarBullet(c, 40)), 'Chat'));
       return (deps.length
-        ? section('Recent', deps.length, deps.map(departureRow).join('')) + (deps.length < 4 ? `<a class="ln-all press" href="#/lines/all">All lines${icon('chev', 16)}</a>` : '')
+        ? section('Recent chats', deps.length, groups.map(lineGroup).join('')) + (deps.length < 4 ? `<a class="ln-all press" href="#/lines/all">All lines${icon('chev', 16)}</a>` : '')
         : emptySign('No departures yet', 'Pick a line under All and say hello.', `<a class="pill press" href="#/lines/all">All lines${icon('chev', 15)}</a>`, 'Lines · Recent')) + fold(hid);
     }
     if (filter === 'interchanges') {
@@ -217,7 +261,7 @@ function bindSwipes(box, redraw) {
   let swallow = false;
   const setOpen = (w, on) => {
     w.classList.toggle('open', on);
-    const row = w.querySelector('.ix');
+    const row = w.querySelector('.ix, .ln-stn');
     row.style.transform = on ? `translateX(${OPEN}px)` : '';
     w.querySelectorAll('.sw-under button').forEach((b) => (b.tabIndex = on ? 0 : -1));
   };
@@ -225,7 +269,7 @@ function bindSwipes(box, redraw) {
   // A link would start the browser's own drag and cancel the swipe.
   box.addEventListener('dragstart', (e) => e.target.closest?.('.sw') && e.preventDefault());
   box.addEventListener('keydown', (e) => {
-    const row = e.target.closest('.sw > .ix');
+    const row = e.target.closest('.sw > .ix, .sw > .ln-stn');
     const w = e.target.closest('.sw');
     if (row && (e.key === 'ArrowLeft' || e.key === 'Delete')) {
       e.preventDefault();
@@ -235,11 +279,11 @@ function bindSwipes(box, redraw) {
     } else if (w && w.classList.contains('open') && (e.key === 'Escape' || e.key === 'ArrowRight')) {
       e.preventDefault();
       setOpen(w, false);
-      w.querySelector('.ix').focus();
+      w.querySelector('.ix, .ln-stn').focus();
     }
   });
   box.addEventListener('pointerdown', (e) => {
-    const row = e.target.closest('.sw > .ix');
+    const row = e.target.closest('.sw > .ix, .sw > .ln-stn');
     if (!row || e.button > 0) return;
     const w = row.parentElement;
     drag = { w, row, x0: e.clientX, y0: e.clientY, base: w.classList.contains('open') ? OPEN : 0, dx: 0, live: false, id: e.pointerId };
@@ -278,7 +322,7 @@ function bindSwipes(box, redraw) {
   box.addEventListener(
     'click',
     (e) => {
-      const row = e.target.closest('.sw > .ix');
+      const row = e.target.closest('.sw > .ix, .sw > .ln-stn');
       if (!row) return;
       if (swallow || row.parentElement.classList.contains('open')) {
         e.preventDefault();
@@ -308,19 +352,23 @@ function bindSwipes(box, redraw) {
       redraw();
       const f = box.querySelector('.ln-fold');
       if (f) f.classList.add('open'), f.querySelector('.ln-fold-b').setAttribute('aria-expanded', 'true');
-      (f?.querySelector('[data-show]') || f?.querySelector('.ln-fold-b') || box.querySelector('.sw > .ix'))?.focus();
+      (f?.querySelector('[data-show]') || f?.querySelector('.ln-fold-b') || box.querySelector('.sw > .ix, .sw > .ln-stn'))?.focus();
       return toast('Back on Lines');
     }
     const b = e.target.closest('.sw-under [data-act]');
     if (!b) return;
     const w = b.closest('.sw');
     const { kind, id, name } = w.dataset;
+    // A plate takes its whole group with it, and so does a group's last station.
+    const grp = w.closest('.ln-grp');
+    const whole = grp && (grp.firstElementChild === w || grp.querySelectorAll(':scope > .sw').length <= 2);
+    const gone = whole ? [...grp.querySelectorAll(':scope > .sw')] : [w];
+    const goneBox = whole ? grp : w;
     // After the list redraws, focus goes to the row that took this one's place.
-    const at = [...box.querySelectorAll('.sw')].indexOf(w);
-    const refocus = () => {
-      const rows = box.querySelectorAll('.sw > .ix');
-      (rows[Math.min(at, rows.length - 1)] || box.querySelector('.ln-fold-b') || box.querySelector('a, button'))?.focus();
-    };
+    const all = [...box.querySelectorAll('.sw')];
+    const next = all.slice(all.indexOf(gone.at(-1)) + 1).find((x) => !gone.includes(x)) || all.slice(0, all.indexOf(gone[0])).reverse()[0];
+    const nextSel = next && `.sw[data-kind="${next.dataset.kind}"][data-id="${CSS.escape(next.dataset.id)}"] > a`;
+    const refocus = () => (box.querySelector(nextSel || '#none') || box.querySelector('.ln-fold-b') || box.querySelector('a, button'))?.focus();
     if (b.dataset.act === 'show') {
       await setHidden(kind, id, false);
       redraw();
@@ -329,7 +377,7 @@ function bindSwipes(box, redraw) {
     }
     if (b.dataset.act === 'hide') {
       await setHidden(kind, id, true);
-      await collapse(w);
+      await collapse(goneBox);
       redraw();
       refocus();
       return toast(`${name} hidden · find it under Hidden`, {
@@ -338,19 +386,22 @@ function bindSwipes(box, redraw) {
         onAction: async () => (await setHidden(kind, id, false), redraw()),
       });
     }
-    const n = kind === 'char' ? chatsFor(id).filter((c) => c.messages.some((m) => m.role === 'user')).length : 0;
+    // Delete takes every chat, hidden ones too, so the count says so.
+    const started = kind === 'char' ? chatsFor(id).filter(hasStarted) : [];
+    const n = started.length;
+    const nHidden = started.filter((c) => c.hidden).length;
     const first = esc(name.split(' ')[0]);
     const copy =
       kind === 'chat'
         ? { title: `Delete this chat with ${esc(name)}?`, body: `Messages, notes and memory go too. ${w.dataset.group ? 'The group and its characters stay.' : `Other chats with ${first} stay.`} This can’t be undone.`, ok: 'Delete chat' }
         : kind === 'char'
-          ? { title: `Delete ${esc(name)}${n ? ` and ${n === 1 ? 'their chat' : `${n} chats`}` : ''}?`, body: `The character${n ? ' and every chat with them' : ''} go for good. To keep them but tidy Lines, use Hide instead.`, ok: 'Delete' }
+          ? { title: `Delete ${esc(name)}${n ? ` and ${n === 1 ? 'their chat' : `${n} chats`}${nHidden ? ` (${nHidden} hidden)` : ''}` : ''}?`, body: `The character${n ? ' and every chat with them' : ''} go for good. To keep them but tidy Lines, use Hide instead.`, ok: 'Delete' }
           : { title: `Delete ${esc(name)}?`, body: 'The group chat goes for good. Its characters stay. This can’t be undone.', ok: 'Delete' };
-    if (!(await confirmSheet({ ...copy, danger: true }))) return setOpen(w, false), setTimeout(() => w.querySelector('.ix').focus(), 320);
+    if (!(await confirmSheet({ ...copy, danger: true }))) return setOpen(w, false), setTimeout(() => w.querySelector('.ix, .ln-stn').focus(), 320);
     if (kind === 'chat') await deleteChat(id);
     else if (kind === 'char') await deleteCharacter(id);
     else await deleteInterchange(id);
-    await collapse(w);
+    await collapse(goneBox);
     redraw();
     refocus();
     toast(kind === 'chat' ? 'Chat deleted' : `${name} deleted`);
