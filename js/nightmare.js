@@ -4,7 +4,7 @@
 // {run, ms, results:[{kind:'image', url:'/results/<run>/output.png'}], failed:[]}.
 // These settings stay on this phone: they aren't synced, and the token is left out of backups.
 import { S, saveSettings, textOf, named } from './store.js';
-import { helperComplete } from './helper.js';
+import { helperComplete, helperJson, helperFor } from './helper.js';
 import { compileSheet } from './blueprint.js';
 import { hereOf } from './worldmap.js';
 import { clockOn, hhmm, partOfDay } from './clock.js';
@@ -214,20 +214,21 @@ export async function sceneTags({ chat, people, speaker, persona, withMe, m, con
     `tags: ${anime ? 'Danbooru-style tags' : 'short visual phrases'}, comma-separated, at most 40 tokens in all, most important first: what they are doing and their poses and expressions, interaction, then the place, then light and time. ` +
     `Only ${inFrame.join(' and ') || 'the scene'} in the picture${withMe ? '' : ` (not ${you})`}. Their looks are added separately: don't describe hair, eyes or outfits unless the moment changes them (undressed, wet, torn). ${anime ? '' : 'No character names. '}Everyone is an adult. ` +
     `${MOOD_ASK[mood] || 'Mood: as the moment is written.'}${frame ? ` Framing: ${FRAMES.find((f) => f[0] === frame)?.[1].toLowerCase()}.` : ''} caption: 1 to 4 words naming the place or moment.`;
-  const out = await helperComplete(conn, 'scene', { system: 'You write image-model tags. Reply with ONE JSON object and nothing else.', messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: 1500, temperature: 0.6, signal });
-  const t = String(out || '').replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-  let tags = '';
-  let cap = '';
+  // The sturdy reader: room for models that think first, their thinking stripped, and one more
+  // ask for the JSON alone if the first reply can't be read.
+  let j = null;
   try {
-    const j = JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1));
-    tags = String(j.tags || '');
-    cap = String(j.caption || '').slice(0, 40);
-  } catch {
-    const mm = t.match(/"tags"\s*:\s*"((?:[^"\\]|\\.)*)/);
-    tags = mm ? mm[1] : t.includes('{') ? '' : t;
+    j = await helperJson(conn, 'scene', { system: 'You write image-model tags. Reply with ONE JSON object and nothing else.', messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: 2000, temperature: 0.6, signal });
+  } catch (e) {
+    if (e.name === 'AbortError' || signal?.aborted) throw e;
   }
-  if (!tags.trim()) throw new NmError('The scene couldn’t be tagged. Try again.');
-  return { tags: splitTags(tags.replace(/\\n/g, ' ')), cap };
+  const raw = Array.isArray(j?.tags) ? j.tags.join(', ') : String(j?.tags || j?.prompt || '');
+  const tags = splitTags(raw.replace(/\\n|\n/g, ' '));
+  if (!tags.length) {
+    const who = helperFor(conn, 'scene');
+    throw new NmError(`${who?.model ? `${who.model}` : 'The text model'} didn’t send the scene tags back.`, 'It may be a model that only thinks, or one that won’t tag this scene. Pick another model for background jobs (Connections › Helper), or turn on Show the prompt first and write the scene yourself.');
+  }
+  return { tags, cap: String(j?.caption || '').slice(0, 40) };
 }
 
 // Look tags first (in the order people appear), then framing, then the scene; fitted to 77 tokens.
