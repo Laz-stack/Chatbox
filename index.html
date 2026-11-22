@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <!-- What this page may load. Scripts only from Chatbox itself (and Google sign-in for Sync), so text
+       from a character card can never run as code. Connections stay open: AI providers are your choice. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; style-src 'self' 'unsafe-inline' https://accounts.google.com/gsi/style; img-src * data: blob:; media-src * data: blob:; font-src 'self' data:; connect-src * data: blob:; frame-src https://accounts.google.com https://datacat.run; worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="theme-color" content="#0A0A0A">
   <meta name="color-scheme" content="dark">

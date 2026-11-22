@@ -2,6 +2,7 @@
 // (CC0, drawn by hand; files in icons/faces), each in four expressions, on the line colour.
 import { esc, inkOn } from './util.js';
 import { small } from './thumbs.js';
+import { safeColor, safeCss } from './safe.js';
 
 export const PRESETS = {
   mika: { name: 'Long bangs' },
@@ -22,11 +23,11 @@ const faceFile = (key, expr) => `icons/faces/${PRESETS[key] ? key : 'mika'}-${EX
 
 // A plain initial on the line colour: for characters with no face chosen yet (e.g. saved passengers).
 export const initialSVG = (name, size, bg = '#2EAA67') =>
-  `<svg viewBox="0 0 100 100" width="${size}" height="${size}" aria-hidden="true"><rect width="100" height="100" fill="${bg}"/><text x="50" y="52" text-anchor="middle" dominant-baseline="central" font-family="Archivo, sans-serif" font-weight="900" font-size="52" fill="${inkOn(bg)}">${esc(((name || '?').trim()[0] || '?').toUpperCase())}</text></svg>`;
+  `<svg viewBox="0 0 100 100" width="${size}" height="${size}" aria-hidden="true"><rect width="100" height="100" fill="${safeColor(bg)}"/><text x="50" y="52" text-anchor="middle" dominant-baseline="central" font-family="Archivo, sans-serif" font-weight="900" font-size="52" fill="${inkOn(safeColor(bg))}">${esc(((name || '?').trim()[0] || '?').toUpperCase())}</text></svg>`;
 export const faceSVG = (who, size, expr, bg) => (who.preset === 'initial' ? initialSVG(who.name, size, bg) : avatarSVG(who.preset, size, expr, bg));
 
 export function avatarSVG(presetKey, size, expr = 'happy', bg = '#2EAA67', href = faceFile(presetKey, expr)) {
-  return `<svg viewBox="0 0 100 100" width="${size}" height="${size}" aria-hidden="true"><rect width="100" height="100" fill="${bg}"/><image href="${href}" x="0" y="2" width="100" height="100"/></svg>`;
+  return `<svg viewBox="0 0 100 100" width="${size}" height="${size}" aria-hidden="true"><rect width="100" height="100" fill="${safeColor(bg)}"/><image href="${href}" x="0" y="2" width="100" height="100"/></svg>`;
 }
 
 // The same face as one self-contained image (for drawing on a canvas, where linked files don't load).
@@ -40,10 +41,10 @@ export async function faceDataURL(who, size, expr = 'happy', bg = '#2EAA67') {
 // Avatar tile for a character (or the persona): uploaded image or chibi preset.
 export function avatarTile(who, size, { expr = 'happy', radius, rot = 0, cls = '', ring = '' } = {}) {
   const r = radius ?? Math.round(size * 0.28);
-  const bg = who.line?.color || who.color || '#2EAA67';
+  const bg = safeColor(who.line?.color || who.color);
   const inner = who.avatarImage
     ? `<img src="${esc(size <= 120 ? small(who.avatarImage) : who.avatarImage)}"${size <= 120 ? ' data-small' : ''} alt="" width="${size}" height="${size}" style="width:100%;height:100%;object-fit:cover;display:block">`
     : faceSVG(who, size, expr, bg);
-  const ringStyle = ring ? `box-shadow:0 0 0 4px ${ring};` : '';
+  const ringStyle = ring ? `box-shadow:0 0 0 4px ${safeCss(ring, 'transparent')};` : '';
   return `<span class="av ${cls}" data-expr="${expr}" style="width:${size}px;height:${size}px;border-radius:${r}px;transform:rotate(${rot}deg);${ringStyle}">${inner}</span>`;
 }

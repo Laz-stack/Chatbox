@@ -5,6 +5,7 @@ import { compileSheet } from './blueprint.js';
 import { blankCharacter, LINE_COLORS, S } from './store.js';
 import { resizeImage, cleanTagline } from './util.js';
 import { faceDataURL } from './avatar.js';
+import { cleanCharacter } from './safe.js';
 
 const CRC = (() => {
   const t = new Uint32Array(256);
@@ -90,7 +91,8 @@ export function cardToCharacter(json, avatarImage = null) {
     .join('\n\n');
   const ext = d.extensions?.chatbox || {};
   const ch = blankCharacter();
-  return {
+  // A card can carry anything in its Chatbox extras: colours and keys are checked before use.
+  return cleanCharacter({
     ...ch,
     name: String(d.name).slice(0, 60),
     tagline: cleanTagline(String(ext.tagline || d.creator_notes || '').split('\n').find((l) => l.trim().split(/\s+/).length > 3) || '', d.name).split(/(?<=[.!?])\s/)[0].slice(0, 80),
@@ -100,7 +102,7 @@ export function cardToCharacter(json, avatarImage = null) {
     preset: ext.preset || ch.preset,
     scene: ext.scene || ch.scene,
     avatarImage,
-  };
+  }, ch.line.color);
 }
 
 export function characterToCard(ch) {

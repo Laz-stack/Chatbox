@@ -3,6 +3,7 @@ import * as db from './db.js';
 import { uid, setImageResolver } from './util.js';
 import { bondsAt } from './chronicle.js';
 import { tiesAt } from './ties.js';
+import { cleanState, cleanCharacter, cleanInterchange, cleanPersona } from './safe.js';
 
 // A character's line colour. Never red (action) or yellow (selected): those mean something else in the app.
 export const LINE_COLORS = ['#2EAA67', '#FB4DAA', '#FE6500', '#B8ACFE', '#065BFE', '#12A5A5', '#5BC2F2', '#8A5530', '#ECECEC'];
@@ -117,6 +118,12 @@ function demoConnection() {
 }
 
 export async function load() {
+  const loaded = await loadAll();
+  // Anything that came in from outside (an old card import, a restore, Sync) is checked once more.
+  if (cleanState(S)) await saveEverything();
+  return loaded;
+}
+async function loadAll() {
   const all = new Map(await db.entries());
   if (all.has('settings')) S.settings = { ...DEFAULT_SETTINGS, ...all.get('settings') };
   if (all.has('persona')) S.persona = { ...S.persona, ...all.get('persona') };
@@ -194,6 +201,7 @@ export function newPersona() {
   return { id: 'p-' + uid(), name: '', about: '', avatarImage: null, preset: ['haru', 'sora', 'yui', 'ren', 'mika', 'kai'][n % 6], color: ['#065BFE', '#FB4DAA', '#2EAA67', '#B8ACFE', '#FE6500', '#E70404'][n % 6], useEverywhere: true };
 }
 export async function savePersonaEntry(p) {
+  cleanPersona(p);
   p.updatedAt = Date.now(); // lets Sync tell which edit is newer
   const i = S.personas.findIndex((x) => x.id === p.id);
   if (i >= 0) Object.assign(S.personas[i], p);
@@ -259,6 +267,7 @@ export function interchange(id) {
   return members.length ? { ...ix, people: members, title: ix.name?.trim() || members.map((c) => c.name).join(' × ') } : null;
 }
 export async function saveInterchange(ix) {
+  cleanInterchange(ix);
   ix.updatedAt = Date.now(); // lets Sync tell which edit is newer
   const i = S.interchanges.findIndex((x) => x.id === ix.id);
   if (i >= 0) S.interchanges[i] = ix;
@@ -409,6 +418,7 @@ export const activeConnection = () => connection(S.settings.activeConnectionId) 
 export const connectionFor = (ch) => (ch?.connectionId && connection(ch.connectionId)) || activeConnection();
 
 export async function saveCharacter(ch) {
+  cleanCharacter(ch);
   ch.updatedAt = Date.now(); // lets Sync tell which edit is newer
   const i = S.characters.findIndex((c) => c.id === ch.id);
   if (i >= 0) S.characters[i] = ch;
@@ -586,6 +596,13 @@ export function snapshot({ includeKeys = true } = {}) {
   };
 }
 
+async function saveEverything() {
+  await Promise.all([saveSettings(), savePersona(), saveConnections(), saveCharacters(), saveInterchanges(), saveLore(), saveImages()]);
+  const keep = new Set([...S.chats.keys()].map((k) => 'chat:' + k));
+  for (const [k] of await db.entries()) if (typeof k === 'string' && k.startsWith('chat:') && !keep.has(k)) await db.del(k);
+  await Promise.all([...S.chats.values()].map((c) => db.set('chat:' + c.id, c)));
+}
+
 export async function restore(data) {
   if (!data || data.app !== 'chatbox') throw new Error('This file is not a Chatbox backup.');
   await db.clear();
@@ -602,7 +619,8 @@ export async function restore(data) {
   S.chats = new Map();
   for (const c of data.chats || []) S.chats.set((c.id ||= c.characterId), c);
   for (const c of [...S.chats.values()])
-    if (c.id === c.characterId && !c.id.startsWith('ix-')) S.chats.delete(c.id), S.chats.set((c.id = `${c.id}~1`), c);
+    if (c.id === c.characterId && !String(c.id).startsWith('ix-')) S.chats.delete(c.id), S.chats.set((c.id = `${c.id}~1`), c);
+  cleanState(S);
   await Promise.all([
     saveSettings(),
     savePersona(),
