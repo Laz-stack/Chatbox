@@ -80,7 +80,7 @@ export function datacatView() {
         ? ['Connecting to Datacat…', '']
         : quiet
           ? ['Datacat isn’t answering here', 'Open it in your browser, download the card, then pick the file.']
-          : ['Tap Import on a character', 'It waits here until you review it.'];
+          : ['Open a character on Datacat', 'Then tap its import button, next to Download. It waits here until you review it.'];
     const st = $('#dcSt');
     if (st.querySelector('b').textContent !== t) st.querySelector('b').textContent = t;
     st.querySelector('small').textContent = sub;
