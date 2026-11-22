@@ -14,10 +14,10 @@ import { advOn, roll, RESULT, suggestMoves, advRowText } from '../adventure.js';
 import { hereOf, untravel } from '../worldmap.js';
 import { sttSupported, listen, speakParts, stopParts } from '../voice.js';
 import { voiceSheet } from './voicesheet.js';
-import { STYLES, picConn, picPrefs, providerName, paint, picSrc, altOf, squareOf, isDemoPics, gcPictures, keepScene, scenesOf, removeScene } from '../pictures.js';
+import { STYLES, picConn, picPrefs, providerName, paint, picSrc, altOf, squareOf, isDemoPics, gcPictures, keepScene, scenesOf, removeScene, perchancePrompt, keepPicture, PERCHANCE_URL } from '../pictures.js';
 import { scenesSheet } from './scenes.js';
 import { parseChoices, choicesHTML, colourNames, wrapParas } from '../reading.js';
-import { esc, uid, formatMessage, markProse, fmtNum, estimateTokens, inkOn, ago, plain, detectMood, copyText, download, slug, reducedMotion, motion, lineAccent, EASE_OUT } from '../util.js';
+import { esc, uid, formatMessage, markProse, fmtNum, estimateTokens, inkOn, ago, plain, detectMood, copyText, download, slug, reducedMotion, motion, lineAccent, EASE_OUT, resizeImage } from '../util.js';
 import { avatarTile } from '../avatar.js';
 import { windowSheet as openWindowSheet, pale } from '../scenepicker.js';
 import { speak, stopSpeaking, ttsSupported } from '../tts.js';
@@ -148,6 +148,7 @@ export async function chatView(id, focusId = null) {
   let watchOff = null; // set by watch mode in mount(); unmount stops it
   let busy = false;
   let destroyed = false;
+  const pcRuns = new Map(); // Paint on Perchance: message id -> { ctl, alt } while its prompt is written
   let markOnLeave = null;
   let markOff = null; // set in mount(): marks the paragraph you were reading when you leave
 
@@ -1360,12 +1361,190 @@ export async function chatView(id, focusId = null) {
 
     // ---------- scene pictures ----------
     function picsHTML(m) {
-      if (!m.pics?.length) return '';
-      return m.pics
+      return (m.pics || [])
         .filter((p) => (p.alt || 0) === (m.alt || 0)) // pictures belong to the version they show
-        .map((p) => (picSrc(p) ? `<figure class="pic" data-pic="${p.id}"><button type="button" class="pic-open" data-picid="${p.id}" aria-label="Open picture: ${esc(altOf(p))}"><img class="pic-img" src="${esc(picSrc(p))}" alt="${esc(altOf(p))}"></button><figcaption><span>${esc(p.caption || STYLES[p.style]?.label || 'Scene')}</span><button type="button" class="pic-more press" data-picmore="${p.id}" aria-label="Picture options">${icon('more', 18)}</button></figcaption></figure>` : ''))
-        .join('');
+        .map((p) => (picSrc(p) ? `<figure class="pic" data-pic="${p.id}"><button type="button" class="pic-open" data-picid="${p.id}" aria-label="Open picture: ${esc(altOf(p))}"><img class="pic-img" src="${esc(picSrc(p))}" alt="${esc(altOf(p))}"></button><figcaption><span>${esc(p.caption || STYLES[p.style]?.label || 'Scene')}</span>${p.from === 'perchance' ? '<small class="pic-from">From Perchance</small>' : ''}<button type="button" class="pic-more press" data-picmore="${p.id}" aria-label="Picture options">${icon('more', 18)}</button></figcaption></figure>` : ''))
+        .join('') + pcHTML(m);
     }
+    // ---------- Paint on Perchance: the prompt on the plate, then two steps (copy & open, add the picture) ----------
+    // Kept on the message (m.pcPending) so it is still there after Perchance's tab and a reload.
+    function pcLines(t) {
+      const out = [];
+      let cur = '';
+      for (const w of t.split(/\s+/)) {
+        if ((cur + ' ' + w).trim().length > 30 && cur) out.push(cur), (cur = w);
+        else cur = (cur + ' ' + w).trim();
+      }
+      if (cur) out.push(cur);
+      const keep = out.slice(0, 6);
+      if (out.length > 6) keep[5] += ' …';
+      return keep.map((l) => `<span>${esc(l)}</span>`).join('');
+    }
+    const pcWritingHTML = (id) => `<figure class="pc-plate" data-pcrun="${esc(id)}"><div class="pc-board wait"><span role="status">Writing the scene…</span></div><figcaption class="pc-cap"><span>Paint on Perchance</span><button type="button" class="pc-btn press" data-pc="stop">Cancel</button></figcaption></figure>`;
+    function pcHTML(m) {
+      const run = pcRuns.get(m.id);
+      if (run && run.alt === (m.alt || 0)) return pcWritingHTML(m.id); // still writing (kept through a redraw)
+      const q = m.pcPending;
+      if (!q || (q.alt || 0) !== (m.alt || 0)) return '';
+      const copied = q.step === 'copied';
+      const opened = q.step === 'opened'; // Perchance opened but the copy failed (copied from the sheet)
+      const next = copied || opened;
+      return `<figure class="pc-plate" data-pcfor="${esc(m.id)}" aria-label="Paint on Perchance"><div class="pc-board"><span class="vh">Prompt: ${esc(q.prompt)}</span><span aria-hidden="true">${pcLines(q.prompt)}</span></div><div class="pc-steps">
+        <button type="button" class="pc-step press ${next ? 'done' : 'go'}" data-pc="open"><span class="pc-n" aria-hidden="true">${next ? '✓' : '1'}</span><span class="pc-t">${next ? 'Copy &amp; open again' : 'Copy &amp; open Perchance'}<small>${copied ? 'Copied. Paste it there, paint, and save the picture.' : opened ? 'Copy the prompt from the sheet, then paste it there.' : 'The prompt is copied; Perchance opens in a new tab'}</small></span></button>
+        <label class="pc-step press${next ? ' go' : ''}"><input type="file" accept="image/*" class="vh pc-file"><span class="pc-n" aria-hidden="true">2</span><span class="pc-t">Add the picture<small>Pick it from your Downloads or gallery</small></span></label>
+      </div><figcaption class="pc-cap"><button type="button" class="pc-btn press" data-pc="edit">Edit prompt</button><button type="button" class="pc-btn press" data-pc="cancel">Cancel</button></figcaption></figure>`;
+    }
+    const pcMsg = (el) => chat.messages.find((x) => x.id === el.closest('[data-pcfor]')?.dataset.pcfor);
+    const pcRedraw = (m, focus) => {
+      const i = chat.messages.indexOf(m);
+      if (i < 0 || destroyed) return;
+      rerenderMsg(i);
+      if (focus) log.querySelector(`[data-pcfor="${CSS.escape(m.id)}"] ${focus}`)?.focus();
+    };
+    // Focus back on the reply itself (its plate is gone).
+    const focusReply = (m) => {
+      const b = log.querySelector(`.msg[data-id="${CSS.escape(m.id)}"] .bubble`);
+      if (!b) return;
+      if (!b.hasAttribute('tabindex')) b.setAttribute('tabindex', '-1');
+      b.focus({ preventScroll: true });
+    };
+    async function runPerchance(m, style) {
+      pcRuns.get(m.id)?.ctl.abort(); // one at a time per reply
+      if (!chat.messages.includes(m)) return;
+      const alt = m.alt || 0; // the version this prompt is for
+      const ctl = new AbortController();
+      pcRuns.set(m.id, { ctl, alt });
+      pcRedraw(m); // the writing plate (the older prompt, if any, stays saved until the new one is ready)
+      if (nearBottom()) toBottom(true);
+      // A redraw of the reply (another version, an edit) draws the plate again while it's still writing.
+      const live = () => log.querySelector(`[data-pcrun="${CSS.escape(m.id)}"]`) || document.createElement('figure');
+      try {
+        const q = await perchancePrompt({ chat, cast: ix ? ix.people : [ch], m, persona: me(), conn: connectionFor(ch), style, signal: ctl.signal });
+        if (ctl.signal.aborted || !chat.messages.includes(m)) return;
+        // The new prompt replaces any older one only now that it's ready.
+        m.pcPending = { ...q, style, step: 'ready', alt, at: Date.now() };
+        pcRuns.delete(m.id);
+        await saveChat(chat);
+        pcRedraw(m, (m.alt || 0) === alt ? '[data-pc="open"]' : '');
+      } catch (e) {
+        if (pcRuns.get(m.id)?.ctl === ctl) pcRuns.delete(m.id);
+        if (e.name === 'AbortError' || ctl.signal.aborted || destroyed) return void (pcRuns.has(m.id) || pcRedraw(m));
+        const pl = live();
+        const board = pl.querySelector('.pc-board');
+        board.innerHTML = `<b role="alert">Couldn’t write the scene.</b><span>${esc(e.message || '')}${e.hint ? ' ' + esc(e.hint) : ''}</span>`;
+        board.classList.add('failed');
+        const cap = pl.querySelector('figcaption');
+        cap.innerHTML = `<button type="button" class="pc-btn press" data-x>Close</button><button type="button" class="pc-btn press" data-again>Try again</button>`;
+        cap.querySelector('[data-x]').addEventListener('click', () => (pl.remove(), focusReply(m)));
+        cap.querySelector('[data-again]').addEventListener('click', () => {
+          pl.remove();
+          runPerchance(m, style);
+          log.querySelector(`[data-pcrun="${CSS.escape(m.id)}"] .pc-btn`)?.focus();
+        });
+        cap.querySelector('[data-again]').focus({ preventScroll: true });
+      }
+    }
+    // Phones only copy and open a tab straight after a tap: copy first (the page still has focus), then open.
+    function pcOpen(m) {
+      const q = m.pcPending;
+      const copying = copyText(q.prompt);
+      const w = window.open(PERCHANCE_URL, '_blank');
+      if (w) w.opener = null;
+      else toast('Perchance didn’t open', { action: 'Open', onAction: () => window.open(PERCHANCE_URL, '_blank', 'noopener') });
+      copying.then(
+        () => {
+          q.step = 'copied';
+          saveChat(chat, false);
+          pcRedraw(m, '.pc-file');
+          toast('Prompt copied');
+        },
+        () => {
+          q.step = 'opened';
+          saveChat(chat, false);
+          pcRedraw(m);
+          copyBySheet(q.prompt, () => log.querySelector(`[data-pcfor="${CSS.escape(m.id)}"] .pc-file`)?.focus());
+        },
+      );
+    }
+    function copyBySheet(text, after) {
+      openSheet({
+        label: 'Copy the prompt',
+        html: `<h2 class="sheet-title">Copy the prompt</h2><p class="sheet-p">Your browser didn’t let Chatbox copy it. Long-press the prompt, choose Select all, then Copy.</p><textarea class="input area" id="pcCopy" rows="7" readonly>${esc(text)}</textarea><div style="height:14px"></div><div class="sheet-actions"><button type="button" class="btn-primary press" data-x><span>Done</span></button></div>`,
+        onMount(s, close) {
+          const ta = s.querySelector('#pcCopy');
+          ta.focus();
+          ta.select();
+          s.querySelector('[data-x]').onclick = () => close();
+        },
+        onClose: () => setTimeout(() => after?.(), 50),
+      });
+    }
+    function pcEdit(m) {
+      const q = m.pcPending;
+      openSheet({
+        label: 'Edit prompt',
+        html: `<h2 class="sheet-title">Edit prompt</h2><textarea class="input area" id="pcTa" rows="8" maxlength="2000" aria-label="Prompt for Perchance" data-autofocus>${esc(q.prompt)}</textarea><div style="height:14px"></div><div class="sheet-actions"><button type="button" class="btn-primary plate press" data-x><span>Cancel</span></button><button type="button" class="btn-primary press" data-ok><span>Save</span></button></div>`,
+        onMount(s, close) {
+          s.querySelector('[data-x]').onclick = () => close();
+          s.querySelector('[data-ok]').onclick = async () => {
+            const v = s.querySelector('#pcTa').value.trim();
+            if (!v) return toast('The prompt can’t be empty.');
+            if (m.pcPending !== q) return close(); // cancelled meanwhile
+            if (v !== q.prompt) (q.prompt = v), (q.step = 'ready'), (q.edited = true); // copy the new one
+            await saveChat(chat, false);
+            close();
+            pcRedraw(m, '[data-pc="open"]');
+          };
+        },
+      });
+    }
+    async function pcCancel(m) {
+      const was = m.pcPending;
+      delete m.pcPending;
+      await saveChat(chat, false);
+      pcRedraw(m);
+      focusReply(m);
+      toast('Perchance picture cancelled', {
+        action: 'Undo',
+        onAction: async () => {
+          if (m.pcPending || !chat.messages.includes(m)) return;
+          m.pcPending = was;
+          await saveChat(chat, false);
+          pcRedraw(m, '[data-pc="open"]');
+        },
+      });
+    }
+    async function pcFile(input) {
+      const m = pcMsg(input);
+      const f = input.files?.[0];
+      const q = m?.pcPending;
+      const done = () => (input.value = ''); // the same file can be picked again
+      if (!f || !q) return done();
+      if (f.type && !f.type.startsWith('image/')) return done(), toast('That file isn’t a picture.');
+      let data;
+      try {
+        data = await resizeImage(f, 1280);
+      } catch {
+        return done(), toast('That picture couldn’t be read. Try saving it as PNG or JPEG.');
+      }
+      if (!chat.messages.includes(m) || m.pcPending !== q) return done(); // cancelled or replaced meanwhile
+      let rec;
+      try {
+        rec = await keepPicture({ chat, alt: q.alt || 0, data, prompt: q.prompt, cap: q.cap, style: q.style });
+        (m.pics ||= []).push(rec);
+        keepScene(chat, rec, m); // saved to this chat's Scenes too
+        delete m.pcPending;
+        await saveChat(chat);
+      } catch {
+        if (rec) (m.pics = m.pics.filter((x) => x !== rec)), removeScene(chat, rec.key), (m.pcPending = q);
+        return done(), toast('Couldn’t save the picture. Free some space and try again.');
+      }
+      pcRedraw(m);
+      log.querySelector(`[data-pic="${rec.id}"]`)?.classList.add('fresh');
+      log.querySelector(`[data-picmore="${rec.id}"]`)?.focus({ preventScroll: true });
+      toast('Picture added');
+    }
+    log.addEventListener('change', (e) => e.target.matches('.pc-file') && pcFile(e.target));
     const picOwner = (pid) => chat.messages.find((x) => x.pics?.some((p) => p.id === pid));
     function pictureSheet(m) {
       const pc = picConn();
@@ -1374,10 +1553,11 @@ export async function chatView(id, focusId = null) {
       openSheet({
         label: 'Picture this',
         html: `<h2 class="sheet-title">Picture this</h2>
-          <p class="sheet-p">${pc ? `Paints this moment with ${esc(who)}’s look${hereOf(chat) ? `, ${esc(hereOf(chat).name)}` : ''}${clockOn(chat) ? `, ${esc(partOfDay(chat.clock.min))}` : ''}. ${isDemoPics(pc) ? 'Demo pictures are free placeholders.' : `One picture, billed by ${esc(providerName(pc))}.`}` : 'Pictures need an image model: an OpenAI or OpenRouter connection set under Connections › Pictures.'}</p>
-          ${pc ? `<div class="ck-chips" role="radiogroup" aria-label="Style">${Object.entries(STYLES).map(([k, s]) => `<button type="button" class="press" role="radio" aria-checked="${style === k}" data-style="${k}">${s.label}</button>`).join('')}</div>
-          <div class="ck-tog">${toggleRow('picAuto', 'Paint each new station', 'A picture whenever the Route map gets a new station. Each one is billed.', !!chat.picAuto)}</div>` : ''}
-          <button type="button" class="pic-go press" id="picGo">${icon(pc ? 'image' : 'link', 18)}${pc ? 'Paint it' : 'Set up Pictures'}</button>`,
+          <p class="sheet-p">${pc ? `Paints this moment with ${esc(who)}’s look${hereOf(chat) ? `, ${esc(hereOf(chat).name)}` : ''}${clockOn(chat) ? `, ${esc(partOfDay(chat.clock.min))}` : ''}. ${isDemoPics(pc) ? 'Demo pictures are free placeholders.' : `One picture, billed by ${esc(providerName(pc))}.`} Or paint it yourself on Perchance: Chatbox writes the prompt, you add the picture.` : `Chatbox writes the prompt for this moment with ${esc(who)}’s look; you paint it on Perchance (free, in a new tab) and add the picture. Or set up an image model under Connections › Pictures.`}</p>
+          <div class="ck-chips" role="radiogroup" aria-label="Style">${Object.entries(STYLES).map(([k, s]) => `<button type="button" class="press" role="radio" aria-checked="${style === k}" data-style="${k}">${s.label}</button>`).join('')}</div>
+          ${pc ? `<div class="ck-tog">${toggleRow('picAuto', 'Paint each new station', 'A picture whenever the Route map gets a new station. Each one is billed.', !!chat.picAuto)}</div>` : ''}
+          <button type="button" class="pic-go press" id="picGo">${icon('image', 18)}${pc ? 'Paint it' : 'Paint on Perchance'}</button>
+          <button type="button" class="pic-alt press" id="picAlt">${pc ? 'Paint on Perchance' : 'Set up Pictures'}</button>`,
         onMount(s, close) {
           s.querySelector('.ck-chips')?.addEventListener('click', (e) => {
             const b = e.target.closest('[data-style]');
@@ -1387,13 +1567,14 @@ export async function chatView(id, focusId = null) {
           });
           const tog = s.querySelector('#picAuto');
           if (tog) bindSwitch(tog, async (on) => ((chat.picAuto = on), await saveChat(chat)));
-          s.querySelector('#picGo').addEventListener('click', async () => {
+          const go = async (perchance) => {
             close();
-            if (!pc) return void (location.hash = '#/connections');
             chat.picStyle = style;
             await saveChat(chat, false);
-            runPaint(m, style);
-          });
+            perchance ? runPerchance(m, style) : runPaint(m, style);
+          };
+          s.querySelector('#picGo').addEventListener('click', () => go(!pc));
+          s.querySelector('#picAlt').addEventListener('click', () => (pc ? go(true) : (close(), void (location.hash = '#/connections'))));
         },
       });
     }
@@ -1470,7 +1651,7 @@ export async function chatView(id, focusId = null) {
         await saveCharacter(who);
         renderAll();
         toast(`${who.name}’s portrait updated`);
-      } else if (what === 'again') runPaint(m, p.style);
+      } else if (what === 'again') p.from === 'perchance' ? runPerchance(m, p.style) : runPaint(m, p.style);
       else if (what === 'delete') {
         if (!(await confirmSheet({ title: 'Delete this picture?', body: 'It’s removed from this chat and from the app.', ok: 'Delete', danger: true }))) return;
         m.pics = m.pics.filter((x) => x !== p);
@@ -1489,7 +1670,7 @@ export async function chatView(id, focusId = null) {
         { icon: 'image', label: chat.bgPic === p?.key ? 'Remove as background' : 'Use as background', on: () => picAction(pid, 'bg') },
         // Only for characters shown as a letter.
         ...(who && !who.avatarImage && who.preset === 'initial' ? [{ icon: 'user', label: `Use as ${who.name}’s portrait`, on: () => picAction(pid, 'portrait') }] : []),
-        { icon: 'refresh', label: 'Paint again (new picture)', on: () => picAction(pid, 'again') },
+        { icon: 'refresh', label: p?.from === 'perchance' ? 'Paint again on Perchance' : 'Paint again (new picture)', on: () => picAction(pid, 'again') },
         { icon: 'trash', label: 'Delete picture', on: () => picAction(pid, 'delete') },
       ];
     };
@@ -1498,6 +1679,18 @@ export async function chatView(id, focusId = null) {
       if (chap) return chapterMenu(chap);
       const cg = e.target.closest('[data-chapgo]');
       if (cg) return goChapter(cg.dataset.chapgo);
+      const pcb = e.target.closest('button[data-pc]');
+      if (pcb?.dataset.pc === 'stop') {
+        const m = chat.messages.find((x) => x.id === pcb.closest('[data-pcrun]').dataset.pcrun);
+        pcRuns.get(m?.id)?.ctl.abort();
+        return m && focusReply(m);
+      }
+      if (pcb) {
+        const m = pcMsg(pcb);
+        if (!m?.pcPending) return;
+        const k = pcb.dataset.pc;
+        return k === 'open' ? pcOpen(m) : k === 'edit' ? pcEdit(m) : pcCancel(m);
+      }
       const more = e.target.closest('[data-picmore]');
       if (more) return openMenu(more, picItems(more.dataset.picmore));
       const opener = e.target.closest('.pic-open');
@@ -2770,6 +2963,7 @@ export async function chatView(id, focusId = null) {
       markOff?.();
       watchOff?.();
       destroyed = true;
+      pcRuns.forEach((r) => r.ctl.abort());
       silence();
       ctl?.abort();
       vmStopAll?.();

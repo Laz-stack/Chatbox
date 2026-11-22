@@ -121,6 +121,24 @@ export async function paint({ chat, cast, m, persona, textConn, style, signal, o
   const when = clockOn(chat) ? `Day ${chat.clock.day} · ${hhmm(chat.clock.min)}` : '';
   return { id: uid(), key, prompt, caption: [cap || place?.name, when].filter(Boolean).join(' · '), style, at: Date.now(), alt: m.alt || 0 };
 }
+// Paint on Perchance: Chatbox writes the prompt, the user paints it there and adds the picture back.
+export const PERCHANCE_URL = 'https://perchance.org/ai-character-generator';
+export async function perchancePrompt({ chat, cast, m, persona, conn, style, signal }) {
+  const raw = await describe({ chat, cast, m, persona, conn, signal });
+  const [prompt, cap] = raw.split('\n§');
+  if (!prompt?.trim()) throw new Error('The scene couldn’t be described. Try again.');
+  const st = STYLES[style] || STYLES.painterly;
+  return { prompt: `${prompt.trim().replace(/[.\s]+$/, '')}. ${st.words}. All characters are adults. Wide landscape composition. No text, captions, logos or watermarks.`, cap: (cap || '').trim() };
+}
+// The picture the user brought back, kept like a painted one.
+export async function keepPicture({ chat, alt = 0, data, prompt, cap, style }) {
+  const key = 'pic:' + uid();
+  S.images = { ...(S.images || {}), [key]: data };
+  await saveImages();
+  const place = hereOf(chat);
+  const when = clockOn(chat) ? `Day ${chat.clock.day} · ${hhmm(chat.clock.min)}` : '';
+  return { id: uid(), key, prompt, caption: [cap || place?.name, when].filter(Boolean).join(' · '), style, at: Date.now(), alt, from: 'perchance' };
+}
 export const picSrc = (p) => S.images?.[p.key] || '';
 export const isDemoPics = (c = picConn()) => c?.provider === 'demo';
 
