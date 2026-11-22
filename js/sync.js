@@ -16,7 +16,7 @@ const API = 'https://www.googleapis.com/drive/v3/files';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
 const TOMB_DAYS = 60;
 // Settings that belong to this device, not to you.
-const LOCAL_SETTINGS = ['sync', 'activeConnectionId', 'helperId', 'lastBackup', 'includeKeysInBackup', 'seenChatTips', 'migrated', 'diaryWho', 'personaId', 'voiceURI', 'readAloud', 'text', 'sound'];
+const LOCAL_SETTINGS = ['sync', 'activeConnectionId', 'helperId', 'lastBackup', 'includeKeysInBackup', 'seenChatTips', 'migrated', 'diaryWho', 'personaId', 'voiceURI', 'readAloud', 'text', 'sound', 'nightmare'];
 
 export const syncPrefs = () => ({ clientId: '', auto: true, keys: false, ...(S.settings.sync || {}) });
 export const syncOn = () => !!S.settings.sync?.connected;

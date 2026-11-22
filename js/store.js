@@ -612,7 +612,8 @@ export function snapshot({ includeKeys = true } = {}) {
     app: 'chatbox',
     version: 1,
     exportedAt: new Date().toISOString(),
-    settings: S.settings,
+    // Nightmare's token unlocks the app on this phone: left out like API keys.
+    settings: includeKeys || !S.settings.nightmare ? S.settings : { ...S.settings, nightmare: { ...S.settings.nightmare, token: '' } },
     persona: S.persona,
     personas: S.personas,
     connections: S.connections.map((c) => (includeKeys ? c : { ...c, apiKey: '' })),

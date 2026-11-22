@@ -6,6 +6,7 @@ import { helper } from '../helper.js';
 import { picPrefs, picConn, picModel, MODEL_HINTS, STYLES, isDemoPics, picStats, clearPictures } from '../pictures.js';
 import { saveChat } from '../store.js';
 import { PROVIDERS as P2, generateImage } from '../providers.js';
+import { NM_ID, nmPrefs, saveNm, nmPaint, nmInfo, nmModels } from '../nightmare.js';
 
 // Provider letters on a neutral plate (colour is kept for meaning: yellow = active).
 const LETTER_BG = { anthropic: '#333333', openai: '#333333', openrouter: '#333333', custom: '#333333', demo: '#333333' };
@@ -83,11 +84,17 @@ function picturesSheet(onChange) {
   openSheet({
     label: 'Scene pictures',
     html: `<h2 class="sheet-title">Scene pictures</h2><p class="sheet-p">Pick the connection that paints. Its key and address are used; the image model is set below.</p>
-      <div class="hp-list" role="radiogroup" aria-label="Pictures connection">${opt('', 'Off', 'No pictures')}${list.map((c) => opt(c.id, esc(connName(c)), c.provider === 'demo' ? 'Placeholder pictures, to try it' : esc(P2[c.provider]?.label || ''))).join('')}</div>
-      <div class="field" style="margin-top:14px" id="pmWrap"><div class="flabel"><label for="pmModel">Image model</label></div><input class="input" id="pmModel" value="${esc(p0.model || '')}" placeholder="${esc(MODEL_HINTS[picConn()?.provider] || 'gpt-image-1')}" autocomplete="off" spellcheck="false"></div>
-      <div class="field" style="margin-top:12px"><div class="flabel"><label for="pmPrice">Price per picture ($)</label><span class="small">For Fares, when the provider doesn’t say</span></div><input class="input" id="pmPrice" type="number" min="0" step="0.001" inputmode="decimal" value="${p0.price ?? ''}" placeholder="e.g. 0.01"></div>
-      <p class="tx-lbl">Default style</p><div class="ck-chips" role="radiogroup" aria-label="Default style">${Object.entries(STYLES).map(([k, s]) => `<button type="button" class="press" role="radio" aria-checked="${p0.style === k}" data-ps="${k}">${s.label}</button>`).join('')}</div>
-      <button type="button" class="btn-primary plate press" id="pmTest" style="margin-top:16px;justify-content:center"><span>${isDemoPics() ? 'Paint a test' : 'Paint a test (billed)'}</span></button>
+      <div class="hp-list" role="radiogroup" aria-label="Pictures connection">${opt('', 'Off', 'No pictures')}${opt(NM_ID, 'Nightmare (this phone)', 'Stable Diffusion in the Nightmare app · free')}${list.map((c) => opt(c.id, esc(connName(c)), c.provider === 'demo' ? 'Placeholder pictures, to try it' : esc(P2[c.provider]?.label || ''))).join('')}</div>
+      <div id="nmWrap"${p0.connId === NM_ID ? '' : ' hidden'}>
+        <p class="fhint" style="margin-top:14px">In Nightmare: Settings › Advanced, turn on “Listen on the local network” and “Allow browser pages”, then Copy token and paste it here. Model, size and finishing are chosen when you paint.</p>
+        <div class="field" style="margin-top:12px"><div class="flabel"><label for="nmUrl">Address</label><span class="small">Nightmare on this phone</span></div><input class="input" id="nmUrl" value="${esc(nmPrefs().url)}" autocomplete="off" spellcheck="false" inputmode="url"></div>
+        <div class="field" style="margin-top:12px"><div class="flabel"><label for="nmTok">Token</label><span class="small">Stays on this phone</span></div><input class="input" id="nmTok" type="password" value="${esc(nmPrefs().token)}" autocomplete="off" spellcheck="false" placeholder="Paste the token from Nightmare"></div>
+        <div class="ck-tog">${toggleRow('nmSave', 'Keep a copy in Nightmare’s gallery', 'Off: the picture is only in Chatbox', nmPrefs().autosave)}</div>
+      </div>
+      <div class="field" style="margin-top:14px" id="pmWrap"${p0.connId === NM_ID ? ' hidden' : ''}><div class="flabel"><label for="pmModel">Image model</label></div><input class="input" id="pmModel" value="${esc(p0.model || '')}" placeholder="${esc(MODEL_HINTS[picConn()?.provider] || 'gpt-image-1')}" autocomplete="off" spellcheck="false"></div>
+      <div class="field" style="margin-top:12px" id="pmPriceWrap"${p0.connId === NM_ID ? ' hidden' : ''}><div class="flabel"><label for="pmPrice">Price per picture ($)</label><span class="small">For Fares, when the provider doesn’t say</span></div><input class="input" id="pmPrice" type="number" min="0" step="0.001" inputmode="decimal" value="${p0.price ?? ''}" placeholder="e.g. 0.01"></div>
+      <div id="pmStyleWrap"${p0.connId === NM_ID ? ' hidden' : ''}><p class="tx-lbl">Default style</p><div class="ck-chips" role="radiogroup" aria-label="Default style">${Object.entries(STYLES).map(([k, s]) => `<button type="button" class="press" role="radio" aria-checked="${p0.style === k}" data-ps="${k}">${s.label}</button>`).join('')}</div></div>
+      <button type="button" class="btn-primary plate press" id="pmTest" style="margin-top:16px;justify-content:center"><span>${isDemoPics() || p0.connId === NM_ID ? 'Paint a test' : 'Paint a test (billed)'}</span></button>
       <div id="pmOut" class="pm-out" aria-live="polite"></div>
       ${(() => {
         const st = picStats();
@@ -105,8 +112,15 @@ function picturesSheet(onChange) {
         s.querySelectorAll('[data-pc]').forEach((x) => (x.setAttribute('aria-checked', x === b), (x.tabIndex = x === b ? 0 : -1)));
         await save({ connId: b.dataset.pc || null });
         s.querySelector('#pmModel').placeholder = MODEL_HINTS[picConn()?.provider] || 'gpt-image-1';
+        const nmOn = b.dataset.pc === NM_ID;
+        s.querySelector('#nmWrap').hidden = !nmOn;
+        ['#pmWrap', '#pmPriceWrap', '#pmStyleWrap'].forEach((q) => (s.querySelector(q).hidden = nmOn));
+        s.querySelector('#pmTest span').textContent = isDemoPics() || nmOn ? 'Paint a test' : 'Paint a test (billed)';
       });
       s.querySelector('#pmModel').addEventListener('change', (e) => save({ model: e.target.value.trim() }));
+      s.querySelector('#nmUrl').addEventListener('change', (e) => saveNm({ url: e.target.value.trim().replace(/\/+$/, '') || 'http://127.0.0.1:8820' }).then(onChange));
+      s.querySelector('#nmTok').addEventListener('change', (e) => saveNm({ token: e.target.value.trim() }).then(onChange));
+      bindSwitch(s.querySelector('#nmSave'), (on) => saveNm({ autosave: on }));
       s.querySelector('#pmPrice').addEventListener('change', (e) => save({ price: e.target.value === '' ? null : Math.max(0, +e.target.value) }));
       s.querySelector('.ck-chips').addEventListener('click', async (e) => {
         const b = e.target.closest('[data-ps]');
@@ -128,7 +142,10 @@ function picturesSheet(onChange) {
         btn.disabled = true;
         out.textContent = 'Painting a test picture…';
         try {
-          const { url } = await generateImage(c, { model: picModel(c), prompt: `${STYLES[picPrefs().style].words}. A quiet train platform at dusk, warm lamps, light rain. No text.` });
+          const { url } =
+            c.id === NM_ID
+              ? (await nmInfo(), await nmModels(true).catch(() => []), await nmPaint({ prompt: 'scenery, train station platform, dusk, warm lamps, light rain, no humans', overrides: { lockSeed: false } }))
+              : await generateImage(c, { model: picModel(c), prompt: `${STYLES[picPrefs().style].words}. A quiet train platform at dusk, warm lamps, light rain. No text.` });
           out.innerHTML = `<img src="${esc(url)}" alt="Test picture: a train platform at dusk"><span>It works.</span>`;
         } catch (err) {
           out.textContent = `${err.message || 'It didn’t work.'} ${err.hint || ''}`;

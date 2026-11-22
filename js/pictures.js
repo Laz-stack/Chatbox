@@ -9,6 +9,7 @@ import { textOf, named } from './store.js';
 import { uid } from './util.js';
 import { hereOf } from './worldmap.js';
 import { clockOn, hhmm, partOfDay } from './clock.js';
+import { NM_ID, NM_CONN, nmPrefs, modelLabel } from './nightmare.js';
 
 export const STYLES = {
   anime: { label: 'Anime', words: 'anime illustration, clean line art, soft cel shading, expressive faces' },
@@ -22,11 +23,13 @@ export const picPrefs = () => ({ connId: null, model: '', style: 'painterly', pr
 // The connection that paints, if one is set up and able to.
 export function picConn() {
   const p = picPrefs();
+  if (p.connId === NM_ID) return NM_CONN; // Nightmare on this phone: its own settings (nightmare.js)
   const c = p.connId ? connection(p.connId) : null;
   if (!c || PROVIDERS[c.provider]?.format === 'anthropic') return null;
   return c;
 }
-export const picModel = (c = picConn()) => picPrefs().model?.trim() || (c?.provider === 'demo' ? '' : c?.model || MODEL_HINTS[c?.provider] || '');
+export const isNm = (c = picConn()) => c?.provider === NM_ID;
+export const picModel = (c = picConn()) => (isNm(c) ? modelLabel(nmPrefs().model) : '') || picPrefs().model?.trim() || (c?.provider === 'demo' ? '' : c?.model || MODEL_HINTS[c?.provider] || '');
 export const providerName = (c = picConn()) => (c ? c.name || PROVIDERS[c.provider]?.label || 'your provider' : 'your provider');
 
 // What the moment looks like, as a short prompt for the image model.
@@ -132,13 +135,13 @@ export async function perchancePrompt({ chat, cast, m, persona, conn, style, sig
   return { prompt: prompt.trim(), cap: (cap || '').trim() };
 }
 // The picture the user brought back, kept like a painted one.
-export async function keepPicture({ chat, alt = 0, data, prompt, cap, style }) {
+export async function keepPicture({ chat, alt = 0, data, prompt, cap, style, from = 'perchance', extra = {} }) {
   const key = 'pic:' + uid();
   S.images = { ...(S.images || {}), [key]: data };
   await saveImages();
   const place = hereOf(chat);
   const when = clockOn(chat) ? `Day ${chat.clock.day} · ${hhmm(chat.clock.min)}` : '';
-  return { id: uid(), key, prompt, caption: [cap || place?.name, when].filter(Boolean).join(' · '), style, at: Date.now(), alt, from: 'perchance' };
+  return { id: uid(), key, prompt, caption: [cap || place?.name, when].filter(Boolean).join(' · '), style, at: Date.now(), alt, from, ...extra };
 }
 export const picSrc = (p) => S.images?.[p.key] || '';
 export const isDemoPics = (c = picConn()) => c?.provider === 'demo';
