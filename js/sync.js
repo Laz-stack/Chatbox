@@ -8,6 +8,7 @@
 // newer edit wins. Deletions travel as "tombstones" so a deleted chat doesn't come back.
 import * as db from './db.js';
 import { S, saveSettings, saveCharacters, saveConnections, savePersona, saveInterchanges, saveLore, saveImages } from './store.js';
+import { okId, cleanImg, cleanCharacter, cleanPersona, cleanInterchange, cleanLore, cleanChat } from './safe.js';
 
 const FILE = 'chatbox-sync.json';
 const SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
@@ -207,6 +208,15 @@ async function apply(take) {
   for (const [k, d] of take) {
     const [kind, ...rest] = k.split(':');
     const id = rest.join(':');
+    // Records from Drive are checked like a card or a backup: a usable id, safe colours and pictures.
+    if (kind !== 'settings' && !okId(id)) continue;
+    if (d && typeof d === 'object' && kind !== 'img' && kind !== 'settings') d.id = id;
+    if (d && kind === 'char') cleanCharacter(d);
+    else if (d && kind === 'persona') cleanPersona(d);
+    else if (d && kind === 'ix') cleanInterchange(d);
+    else if (d && kind === 'lore') cleanLore(d);
+    else if (d && kind === 'chat') cleanChat(d);
+    else if (d && kind === 'img' && !/^data:image\//.test(cleanImg(d) || '')) continue;
     count[kind] = (count[kind] || 0) + 1;
     if (kind === 'char') upsert(S.characters, d, id), dirty.add('char');
     else if (kind === 'persona') upsert(S.personas, d, id), dirty.add('persona');

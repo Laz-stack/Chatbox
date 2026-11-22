@@ -3,18 +3,22 @@ import { esc, inkOn, clamp, reducedMotion, EASE_OUT } from './util.js';
 import { icon, arrow } from './icons.js';
 import { avatarSVG, faceSVG } from './avatar.js';
 import { small } from './thumbs.js';
+import { safeColor, safeCss } from './safe.js';
 
 export { icon, arrow };
 
-export const bullet = (t, bg, fg, s = 40, style = '') =>
-  `<span class="bullet" style="width:${s}px;height:${s}px;background:${bg};color:${fg || inkOn(bg)};font-size:${Math.round(s * 0.5)}px;${style}">${t}</span>`;
+export const bullet = (t, bg, fg, s = 40, style = '') => {
+  bg = safeCss(bg);
+  fg = fg && safeCss(fg, null);
+  return `<span class="bullet" style="width:${s}px;height:${s}px;background:${bg};color:${fg || inkOn(bg)};font-size:${Math.round(s * 0.5)}px;${style}">${t}</span>`;
+};
 
 export const lineBullet = (ch, s = 40, style = '') => bullet(esc(ch.line?.letter || ch.name?.[0] || '?'), ch.line?.color || '#ECECEC', null, s, style);
 
 // Round badge showing the character's avatar (uploaded image, else the chibi preset) instead of a letter.
 // `av` marks it as a shared-transition spot ("line:<id>", "head:<id>", …; see main.js).
 export const avatarBullet = (ch, s = 40, style = '', av = '') => {
-  const bg = ch.line?.color || ch.color || '#2EAA67';
+  const bg = safeColor(ch.line?.color || ch.color);
   const inner = ch.avatarImage
     ? `<img src="${esc(small(ch.avatarImage))}" data-small alt="" width="${s}" height="${s}">`
     : faceSVG(ch, s, 'happy', bg);
@@ -29,7 +33,7 @@ export const groupAvatar = (ix, s = 40) => {
   const ppl = (ix.people || []).slice(0, 4);
   const cell = ppl.length > 2 ? Math.ceil(s / 2) : s;
   const face = (p) => {
-    const bg = p.line?.color || p.color || '#2EAA67';
+    const bg = safeColor(p.line?.color || p.color);
     return `<span style="background:${bg}">${p.avatarImage ? `<img src="${esc(small(p.avatarImage))}" data-small alt="">` : faceSVG(p, cell, 'happy', bg).replace('<svg ', '<svg preserveAspectRatio="xMidYMid slice" ')}</span>`;
   };
   return `<span class="gav mos n${Math.min(ppl.length, 4)}" style="width:${s}px;height:${s}px">${ppl.map(face).join('')}</span>`;
