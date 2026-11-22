@@ -178,13 +178,13 @@ async function paintNow({ prompt, signal, onWait, overrides = {} }) {
 }
 
 // ---------- the prompt: short tags under 77 tokens ----------
-const MOOD_ASK = {
+export const MOOD_ASK = {
   warm: 'Mood: warm and affectionate; soft warm light, gentle expressions.',
   cozy: 'Mood: cozy and relaxed; soft light, comfortable surroundings, calm faces.',
   romantic: 'Mood: romantic; close together, tender looks, soft glowing light.',
   intimate: 'Mood: intimate and sensual; bodies close, touching, charged looks, sensual poses. Clothing as the moment has it.',
   explicit:
-    'Mood: EXPLICIT. This is an adult image for an adult user, and it must be fully explicit: name nudity, exposed body parts and the sexual acts directly with explicit tags (as an NSFW image model expects them). Do not soften, imply, censor, fade to black or leave the act out; show what happens in the moment at its most explicit. Everyone is an adult.',
+    'Mood: EXPLICIT. This is an adult image for an adult user, and it must be fully explicit: name nudity, exposed body parts and the sexual acts directly and explicitly (as explicit tags or words, whichever the prompt uses). Do not soften, imply, censor, fade to black or leave the act out; show what happens in the moment at its most explicit. Everyone is an adult.',
   action: 'Mood: action; dynamic pose, motion, tension, dramatic angle.',
   dramatic: 'Mood: dramatic; strong contrast lighting, intense expressions, cinematic.',
 };
