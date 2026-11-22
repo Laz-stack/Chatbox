@@ -1,4 +1,4 @@
-import { S, character, blankCharacter, takeDraft, saveCharacter, deleteCharacter, getChat, connection, LINE_COLORS, newChat, saveChat } from '../store.js';
+import { S, character, blankCharacter, takeDraft, saveCharacter, deleteCharacter, setHidden, getChat, connection, LINE_COLORS, newChat, saveChat } from '../store.js';
 import { ttsSupported, voices } from '../tts.js';
 import { voiceSheet } from './voicesheet.js';
 import { esc, resizeImage, download, slug, motion } from '../util.js';
@@ -73,7 +73,7 @@ export function editorView(id) {
         ...(ttsSupported ? [row({ id: 'voiceRowE', ic: 'speaker', bc: 'var(--plate2)', fc: 'var(--cream)', title: 'Voice', sub: `<span id="voiceNameE">${esc(voiceLabel())}</span>` })] : [])
       )}
       <div>${toggleRow('tGlobal', 'Use global prompt', 'Turn off to send only this card', d.useGlobal !== false)}${toggleRow('tStream', 'Stream replies', 'Words appear as they are written', d.stream !== false)}</div>
-      ${isNew ? '' : `<div style="display:flex;justify-content:center"><button type="button" class="btn-text danger press" id="delBtn">${icon('trash', 18)}Delete character</button></div>`}
+      ${isNew ? '' : `<div style="display:flex;justify-content:center;gap:8px;flex-wrap:wrap"><button type="button" class="btn-text press" id="hideBtn">${icon(d.hidden ? 'eye' : 'eyeoff', 18)}${d.hidden ? 'Show on Lines' : 'Hide character'}</button><button type="button" class="btn-text danger press" id="delBtn">${icon('trash', 18)}Delete character</button></div>`}
     </div>
     <div class="sticky-cta">${`<button type="button" class="btn-primary press" id="saveBtn"><span>${isNew ? 'Create character' : 'Save character'}</span>${arrow(30)}</button>`}</div>
   </div>`;
@@ -223,6 +223,15 @@ export function editorView(id) {
         { icon: 'file', label: 'Export as JSON', on: () => download(exportCardJson(d), slug(d.name) + '.card.json') },
       ])
     );
+
+    // Hide: off Platform and Lines with all their chats; Lines › All › Hidden brings them back.
+    $('#hideBtn')?.addEventListener('click', async () => {
+      const on = !character(d.id)?.hidden;
+      await setHidden('char', d.id, on);
+      d.hidden = on || undefined;
+      toast(on ? `${d.name} hidden · find them under Lines › All › Hidden` : `${d.name} is back on Lines`);
+      location.hash = '#/lines/all';
+    });
 
     $('#delBtn')?.addEventListener('click', async () => {
       if (!(await confirmSheet({ title: `Delete ${esc(d.name)}?`, body: 'This removes the character and the whole chat. It cannot be undone.', ok: 'Delete', danger: true }))) return;
