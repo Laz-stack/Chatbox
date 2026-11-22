@@ -579,12 +579,14 @@ export async function setHidden(kind, id, on) {
     const chat = S.chats.get(id);
     if (!chat) return;
     chat.hidden = on || undefined;
+    chat.hiddenAt = Date.now(); // so Sync knows this change is newer
     return saveChat(chat, false);
   }
   const list = kind === 'ix' ? S.interchanges : S.characters;
   const o = list.find((x) => x.id === id);
   if (!o) return;
   o.hidden = on || undefined;
+  o.hiddenAt = Date.now();
   return kind === 'ix' ? saveInterchange(o) : saveCharacter(o);
 }
 

@@ -28,8 +28,9 @@ const badge = (c) => (!c.avatarImage && (c.preset === 'initial' || !c.preset) ? 
 
 // Swipe a row left to reveal Hide and Delete. kind: 'chat' (a row under Recent), 'char' or 'ix'
 // (a character or group under All). The buttons can't be reached until the row is open.
-const sw = (row, kind, id, name) =>
-  `<div class="sw" data-kind="${kind}" data-id="${esc(id)}" data-name="${esc(name)}"><div class="sw-under"><button type="button" class="sw-h press" data-act="hide" tabindex="-1">${icon('eyeoff', 18)}Hide</button><button type="button" class="sw-d press" data-act="del" tabindex="-1">${icon('trash', 18)}Delete</button></div>${row}</div>`;
+// (Keyboard: the left arrow opens a row, Escape closes it.) A hidden item found by search offers Show.
+const sw = (row, kind, id, name, { hidden = false, group = false } = {}) =>
+  `<div class="sw" data-kind="${kind}" data-id="${esc(id)}" data-name="${esc(name)}"${group ? ' data-group="1"' : ''}><div class="sw-under"><button type="button" class="sw-h press" data-act="${hidden ? 'show' : 'hide'}" tabindex="-1">${icon(hidden ? 'eye' : 'eyeoff', 18)}${hidden ? 'Show' : 'Hide'}</button><button type="button" class="sw-d press" data-act="del" tabindex="-1">${icon('trash', 18)}Delete</button></div>${row}</div>`;
 // Hidden things fold away at the bottom of the list, each with Show.
 const hidRow = (kind, id, name, face, what) =>
   `<div class="hidrow">${face}<span class="hid-tx"><b>${esc(name)}</b><small>${what} · hidden</small></span><button type="button" class="hid-show press" data-show="${kind}:${esc(id)}" aria-label="Show ${esc(name)} again">Show</button></div>`;
@@ -43,17 +44,17 @@ function lineRow(c) {
   const chat = latestChat(c.id);
   const n = chatsFor(c.id).filter((x) => x.messages.some((m) => m.role === 'user')).length;
   const when = chat && chat.messages.some((m) => m.role === 'user') ? (ago(chat.updatedAt) === 'now' ? 'just now' : ago(chat.updatedAt)) : 'not started';
-  return sw(`<a class="ix press" href="#/chat/${c.id}" style="${colorVars(c)}" aria-label="Chat with ${esc(c.name)}">${badge(c)}<span class="row-tx"><span class="row-t">${esc(c.name)}</span><span class="row-s">${esc(cleanTagline(c.tagline, c.name) || 'No tagline')}${n > 1 ? ` · ${n} chats` : ''}</span></span><span class="ix-t num">${when}</span></a>`, 'char', c.id, c.name);
+  return sw(`<a class="ix press" href="#/chat/${c.id}" style="${colorVars(c)}" aria-label="Chat with ${esc(c.name)}" aria-describedby="swHint">${badge(c)}<span class="row-tx"><span class="row-t">${esc(c.name)}</span><span class="row-s">${esc(cleanTagline(c.tagline, c.name) || 'No tagline')}${n > 1 ? ` · ${n} chats` : ''}</span></span><span class="ix-t num">${when}</span></a>`, 'char', c.id, c.name, { hidden: !!c.hidden });
 }
 
 function ixRow(ix, kind = 'ix', chat = latestChat(ix.id)) {
   const when = chat && chat.messages.some((m) => m.role === 'user') ? (ago(chat.updatedAt) === 'now' ? 'just now' : ago(chat.updatedAt)) : 'not started';
-  return sw(`<a class="ix ixg press" href="#/chat/${ix.id}" aria-label="Open ${esc(ix.title)}">${groupAvatar(ix, 44)}<span class="row-tx"><span class="row-t">${esc(ix.title)}</span><span class="row-s">${ix.mode === 'scene' ? 'Carriage' : 'Interchange'} · ${ix.people.map((p) => esc(p.name)).join(', ')}</span></span><span class="ix-t num">${when}</span></a>`, kind, kind === 'chat' ? chat?.id : ix.id, ix.title);
+  return sw(`<a class="ix ixg press" href="#/chat/${ix.id}" aria-label="Open ${esc(ix.title)}" aria-describedby="swHint">${groupAvatar(ix, 44)}<span class="row-tx"><span class="row-t">${esc(ix.title)}</span><span class="row-s">${ix.mode === 'scene' ? 'Carriage' : 'Interchange'} · ${ix.people.map((p) => esc(p.name)).join(', ')}</span></span><span class="ix-t num">${when}</span></a>`, kind, kind === 'chat' ? chat?.id : ix.id, ix.title, { hidden: kind === 'ix' && !!ix.hidden, group: true });
 }
 
 function departureRow({ c, chat, ix }) {
   if (ix) return ixRow(ix, 'chat', chat);
-  return sw(`<a class="ix press" href="#/chat/${chat.id}" style="${colorVars(c)}" aria-label="Chat with ${esc(c.name)}">${badge(c)}<span class="row-tx"><span class="row-t">${esc(c.name)}</span><span class="row-s">${esc(plain(named(textOf(lastMessage(chat)), c)))}</span></span><span class="ix-t num">${ago(chat.updatedAt)}</span></a>`, 'chat', chat.id, c.name);
+  return sw(`<a class="ix press" href="#/chat/${chat.id}" style="${colorVars(c)}" aria-label="Chat with ${esc(c.name)}" aria-describedby="swHint">${badge(c)}<span class="row-tx"><span class="row-t">${esc(c.name)}</span><span class="row-s">${esc(plain(named(textOf(lastMessage(chat)), c)))}</span></span><span class="ix-t num">${ago(chat.updatedAt)}</span></a>`, 'chat', chat.id, c.name);
 }
 
 function starRow({ chat, m, q, at }) {
@@ -169,6 +170,7 @@ export function linesView(filter) {
     </div>
     <label class="search">${icon('search', 20)}<input id="q" type="search" placeholder="Name, line or something they said" aria-label="Search lines and messages" autocomplete="off" enterkeyhint="search"></label>
     <div class="chips-f" role="tablist" aria-label="Show">${FILTERS.map(([k, l]) => `<a class="press${k === filter ? ' on' : ''}" role="tab" aria-selected="${k === filter}" href="#/lines/${k}">${l}</a>`).join('')}</div>
+    <p class="vh" id="swHint">Left arrow: Hide and Delete for this row.</p>
     <div id="results"><div class="blk-tight">${body()}</div></div>
   </div>${tabbar('lines')}`;
 
@@ -180,7 +182,12 @@ export function linesView(filter) {
       const results = root.querySelector('#results');
       const chips = root.querySelector('.chips-f');
       let base = results.innerHTML;
-      const redraw = () => ((results.innerHTML = `<div class="blk-tight">${body()}</div>`), (base = results.innerHTML));
+      // After a hide, delete or show: redraw the list, or the search results if a search is showing.
+      const redraw = () => {
+        base = `<div class="blk-tight">${body()}</div>`;
+        const q = input.value.trim();
+        results.innerHTML = q ? searchResults(q) : base;
+      };
       bindSwipes(results, redraw);
       const run = debounce(() => {
         const q = input.value.trim();
@@ -217,6 +224,20 @@ function bindSwipes(box, redraw) {
   const closeAll = (except) => box.querySelectorAll('.sw.open').forEach((w) => w !== except && setOpen(w, false));
   // A link would start the browser's own drag and cancel the swipe.
   box.addEventListener('dragstart', (e) => e.target.closest?.('.sw') && e.preventDefault());
+  box.addEventListener('keydown', (e) => {
+    const row = e.target.closest('.sw > .ix');
+    const w = e.target.closest('.sw');
+    if (row && (e.key === 'ArrowLeft' || e.key === 'Delete')) {
+      e.preventDefault();
+      closeAll(w);
+      setOpen(w, true);
+      w.querySelector('.sw-under button').focus();
+    } else if (w && w.classList.contains('open') && (e.key === 'Escape' || e.key === 'ArrowRight')) {
+      e.preventDefault();
+      setOpen(w, false);
+      w.querySelector('.ix').focus();
+    }
+  });
   box.addEventListener('pointerdown', (e) => {
     const row = e.target.closest('.sw > .ix');
     if (!row || e.button > 0) return;
@@ -225,6 +246,7 @@ function bindSwipes(box, redraw) {
   });
   box.addEventListener('pointermove', (e) => {
     if (!drag || e.pointerId !== drag.id) return;
+    if (e.pointerType === 'mouse' && !e.buttons) return end();
     const dx = e.clientX - drag.x0;
     const dy = e.clientY - drag.y0;
     if (!drag.live) {
@@ -242,6 +264,7 @@ function bindSwipes(box, redraw) {
     if (!drag) return;
     if (drag.live) {
       swallow = true;
+      setTimeout(() => (swallow = false), 400); // touch often sends no click after a drag
       drag.w.classList.remove('dragging');
       setOpen(drag.w, drag.dx < OPEN / 2.4);
     }
@@ -249,6 +272,8 @@ function bindSwipes(box, redraw) {
   };
   box.addEventListener('pointerup', end);
   box.addEventListener('pointercancel', end);
+  // Only our own capture ending counts (touch moves an automatic capture over to the row first).
+  box.addEventListener('lostpointercapture', (e) => drag?.live && e.target === drag.row && end());
   // A drag, or a tap on an open row, never follows the row's link.
   box.addEventListener(
     'click',
@@ -283,35 +308,51 @@ function bindSwipes(box, redraw) {
       redraw();
       const f = box.querySelector('.ln-fold');
       if (f) f.classList.add('open'), f.querySelector('.ln-fold-b').setAttribute('aria-expanded', 'true');
+      (f?.querySelector('[data-show]') || f?.querySelector('.ln-fold-b') || box.querySelector('.sw > .ix'))?.focus();
       return toast('Back on Lines');
     }
     const b = e.target.closest('.sw-under [data-act]');
     if (!b) return;
     const w = b.closest('.sw');
     const { kind, id, name } = w.dataset;
+    // After the list redraws, focus goes to the row that took this one's place.
+    const at = [...box.querySelectorAll('.sw')].indexOf(w);
+    const refocus = () => {
+      const rows = box.querySelectorAll('.sw > .ix');
+      (rows[Math.min(at, rows.length - 1)] || box.querySelector('.ln-fold-b') || box.querySelector('a, button'))?.focus();
+    };
+    if (b.dataset.act === 'show') {
+      await setHidden(kind, id, false);
+      redraw();
+      refocus();
+      return toast(`${name} is back on Lines`);
+    }
     if (b.dataset.act === 'hide') {
       await setHidden(kind, id, true);
       await collapse(w);
       redraw();
+      refocus();
       return toast(`${name} hidden · find it under Hidden`, {
+        ms: 6500,
         action: 'Undo',
         onAction: async () => (await setHidden(kind, id, false), redraw()),
       });
     }
-    const n = kind === 'char' ? chatsFor(id).length : 0;
+    const n = kind === 'char' ? chatsFor(id).filter((c) => c.messages.some((m) => m.role === 'user')).length : 0;
     const first = esc(name.split(' ')[0]);
     const copy =
       kind === 'chat'
-        ? { title: `Delete this chat with ${esc(name)}?`, body: `Messages, notes and memory go too. Other chats with ${first} stay. This can’t be undone.`, ok: 'Delete chat' }
+        ? { title: `Delete this chat with ${esc(name)}?`, body: `Messages, notes and memory go too. ${w.dataset.group ? 'The group and its characters stay.' : `Other chats with ${first} stay.`} This can’t be undone.`, ok: 'Delete chat' }
         : kind === 'char'
           ? { title: `Delete ${esc(name)}${n ? ` and ${n === 1 ? 'their chat' : `${n} chats`}` : ''}?`, body: `The character${n ? ' and every chat with them' : ''} go for good. To keep them but tidy Lines, use Hide instead.`, ok: 'Delete' }
           : { title: `Delete ${esc(name)}?`, body: 'The group chat goes for good. Its characters stay. This can’t be undone.', ok: 'Delete' };
-    if (!(await confirmSheet({ ...copy, danger: true }))) return setOpen(w, false);
+    if (!(await confirmSheet({ ...copy, danger: true }))) return setOpen(w, false), setTimeout(() => w.querySelector('.ix').focus(), 320);
     if (kind === 'chat') await deleteChat(id);
     else if (kind === 'char') await deleteCharacter(id);
     else await deleteInterchange(id);
     await collapse(w);
     redraw();
+    refocus();
     toast(kind === 'chat' ? 'Chat deleted' : `${name} deleted`);
   });
 }

@@ -226,11 +226,16 @@ export function editorView(id) {
 
     // Hide: off Platform and Lines with all their chats; Lines › All › Hidden brings them back.
     $('#hideBtn')?.addEventListener('click', async () => {
+      // Changes only the saved character's hidden flag; whatever is being edited here stays.
+      const flip = async (on) => {
+        await setHidden('char', d.id, on);
+        d.hidden = on || undefined;
+        const b = $('#hideBtn');
+        if (b) b.innerHTML = `${icon(on ? 'eye' : 'eyeoff', 18)}${on ? 'Show on Lines' : 'Hide character'}`;
+      };
       const on = !character(d.id)?.hidden;
-      await setHidden('char', d.id, on);
-      d.hidden = on || undefined;
-      toast(on ? `${d.name} hidden · find them under Lines › All › Hidden` : `${d.name} is back on Lines`);
-      location.hash = '#/lines/all';
+      await flip(on);
+      toast(on ? `${d.name || 'Character'} hidden · find them under Lines › All › Hidden` : `${d.name || 'Character'} is back on Lines`, on ? { ms: 6500, action: 'Undo', onAction: () => flip(false) } : {});
     });
 
     $('#delBtn')?.addEventListener('click', async () => {

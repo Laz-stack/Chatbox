@@ -167,7 +167,9 @@ function merge(local, lh, remote, meta, keys) {
     const rc = r && rh !== known;
     if (l !== undefined && r) {
       if (lh.get(k) === rh) continue;
-      const remoteWins = rc && (!lc || (r.d?.updatedAt || r.at || 0) > (l.updatedAt || 0));
+      // Hiding or showing a chat counts as an edit, without moving it up the list.
+      const stamp = (o) => Math.max(o?.updatedAt || 0, o?.hiddenAt || 0);
+      const remoteWins = rc && (!lc || (stamp(r.d) || r.at || 0) > stamp(l));
       if (remoteWins) take.set(k, r.d);
       else rec[k] = { at: now, h: lh.get(k), d: l };
       delete del[k];
