@@ -9,6 +9,7 @@ import { shouldSummarize, summarize } from '../memory.js';
 import { chronicle, chronicleDue, trackingOn, changeText, markStation, undoReply } from '../chronicle.js';
 import { sortChapters, chapterSpans, chapterAt, addChapter, renameChapter, removeChapter, chapterHeadings, recapDue, writeRecap, recapFacts, recapMeta, recapFresh } from '../chapters.js';
 import { clockOn, chipText, longText, partOfDay, clockSheet } from '../clock.js';
+import { readTime } from '../storytime.js';
 import { advOn, roll, RESULT, suggestMoves, advRowText } from '../adventure.js';
 import { hereOf, untravel } from '../worldmap.js';
 import { sttSupported, listen, speakParts, stopParts } from '../voice.js';
@@ -1710,6 +1711,7 @@ export async function chatView(id, focusId = null) {
     function openClock() {
       clockSheet(chat, {
         save: () => saveChat(chat),
+        onRead: () => readTime({ chat, cast: ix ? ix.people : [ch], persona: me(), conn: connectionFor(ch) }),
         onChange: updateClock,
         onSkip: async (label, note) => {
           const m = { id: uid(), role: 'user', dir: 'time', time: label, alts: [note], alt: 0, at: Date.now() };

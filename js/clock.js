@@ -62,7 +62,7 @@ const skipsFor = (c) => SKIPS.filter((x) => x[3](c));
 const SKIP_WORDS = { hour: 'an hour later', morning: 'the next morning', tonight: 'that evening', day: 'the next day' };
 
 // The Story time sheet. onChange(): the clock changed (redraw the chip). onSkip(label, note): add the divider.
-export function clockSheet(chat, { onChange, onSkip, save }) {
+export function clockSheet(chat, { onChange, onSkip, save, onRead }) {
   const c = chat.clock || { ...newClock(), on: false };
   const skips = () => skipsFor(c).map(([k, l]) => `<button type="button" class="press" data-skip="${k}">${l}</button>`).join('');
   const rows = () => {
@@ -73,6 +73,7 @@ export function clockSheet(chat, { onChange, onSkip, save }) {
     c.on
       ? `<div class="ck-big"><button type="button" class="ck-digits press num" id="ckDigits" aria-label="Time ${hhmm(c.min)}. Change"><span>${hhmm(c.min)}</span>${icon('edit', 20)}</button><input type="time" id="ckTime" class="ck-pick" value="${hhmm(c.min)}" tabindex="-1" aria-hidden="true"><span id="ckPart">${partOfDay(c.min)} · ${weatherWord(c)}</span></div>
       <p class="tx-lbl">Day</p><div class="ck-step"><button type="button" class="press" data-day="-1" aria-label="Previous day" ${c.day <= 1 ? 'disabled' : ''}>−</button><b class="num" id="ckDay">Day ${c.day}</b><button type="button" class="press" data-day="1" aria-label="Next day">+</button></div>
+      ${onRead ? `<button type="button" class="ck-read press" id="ckRead">${icon('spark', 16)}<span>Read the time from the chat</span></button><p class="ck-why" id="ckWhy" aria-live="polite"></p>` : ''}
       <div id="ckRows">${rows()}</div>
       <p class="tx-lbl">Skip to</p><div class="ck-chips" id="ckSkips">${skips()}</div>
       <p class="tx-lbl">Weather</p><div class="ck-chips" role="radiogroup" aria-label="Weather">${Object.entries(WEATHER).map(([k, l]) => `<button type="button" class="press" role="radio" aria-checked="${c.weather === k}" data-w="${k}">${l}</button>`).join('')}</div>`
@@ -130,6 +131,29 @@ export function clockSheet(chat, { onChange, onSkip, save }) {
             inp.removeAttribute('tabindex');
             inp.focus();
           }
+          return;
+        }
+        // The helper reads the chat and sets the clock to where the story is.
+        const rd = e.target.closest('#ckRead');
+        if (rd) {
+          if (rd.disabled) return;
+          rd.disabled = true;
+          rd.querySelector('span').textContent = 'Reading the chat…';
+          try {
+            const r = await onRead();
+            c.day = r.day;
+            c.min = r.min;
+            c.weather = r.weather;
+            c.skip = 'read from the chat';
+            refresh();
+            s.querySelectorAll('[data-w]').forEach((x) => x.setAttribute('aria-checked', x.dataset.w === c.weather));
+            $('#ckWhy').textContent = r.why ? `From the chat: ${r.why}` : '';
+            await commit();
+          } catch (err) {
+            $('#ckWhy').textContent = err.message || 'Couldn’t read the time from the chat.';
+          }
+          rd.disabled = false;
+          rd.querySelector('span').textContent = 'Read the time from the chat';
           return;
         }
         const d = e.target.closest('[data-day]');

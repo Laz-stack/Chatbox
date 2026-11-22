@@ -5,7 +5,7 @@
 // Stations and bonds come from one short background AI call after every couple of replies
 // (or "Update the map"); the diary is written on request.
 import { PROVIDERS } from './providers.js';
-import { helperComplete } from './helper.js';
+import { helperComplete, helperJson } from './helper.js';
 import { clockOn, advance, hhmm, WEATHER } from './clock.js';
 import { tiesBrief, tiesAsk, applyTies, undoTies } from './ties.js';
 import { advOn, advBrief, advAsk, applyAdv, undoAdv } from './adventure.js';
@@ -133,8 +133,7 @@ async function readPart({ chat, cast, persona, conn, signal, a, b }) {
     mapAsk() +
     chaptersAsk(chat) +
     factsAsk(you);
-  const text = await helperComplete(conn, 'track', { system, messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: (cast.length > 1 ? 2000 : 1400) + (advOn(chat) ? 300 : 0) + 80 + 360, temperature: 0.4, signal });
-  return extractJson(text);
+  return helperJson(conn, 'track', { system, messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: (cast.length > 1 ? 2000 : 1400) + (advOn(chat) ? 300 : 0) + 80 + 360, temperature: 0.4, signal });
 }
 
 const pick = (b) => ({ trust: b.trust, affection: b.affection, tension: b.tension, view: b.view || '' });

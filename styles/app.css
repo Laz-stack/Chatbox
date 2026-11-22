@@ -2304,3 +2304,7 @@ html.dim.page-light.page-tex :is(.chat .log, .tx-prev) { background-image: none;
 .kr-mk-k button { width: 44px; height: 44px; border-radius: 50%; background: var(--plate2); color: var(--cream); font: 800 20px/1 var(--font); }
 .kr-mk-k button:disabled { opacity: .35; }
 .kr-mk-prev { margin: 8px 0 0; padding: 28px 14px 12px 26px; border-radius: 12px; background: var(--page, var(--bg)); color: var(--page-body, var(--cream)); font: 400 14px/1.6 var(--read-font, var(--font)); }
+.ck-read { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; margin: 14px 0 0; padding: 0 16px; border-radius: 22px; background: var(--plate2); color: var(--cream); font: 800 14px/1 var(--font); }
+.ck-read:disabled { opacity: .6; }
+.ck-why { margin: 8px 2px 0 !important; font: 600 13px/1.4 var(--font); color: var(--soft); }
+.ck-why:empty { display: none; }
