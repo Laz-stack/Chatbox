@@ -74,7 +74,22 @@ export const TRACKS = { tight: { label: 'Tight', v: '-0.015em' }, normal: { labe
 export const PARAS = { tight: { label: 'Tight', em: '.5lh', gap: '12px' }, normal: { label: 'Normal', em: '1lh', gap: '20px' }, wide: { label: 'Wide', em: '1.7lh', gap: '30px' } };
 // The space between the chat's text and the screen's left and right edges.
 export const SIDES = { normal: { label: 'Normal', px: 0 }, roomy: { label: 'Roomy', px: 26 }, wide: { label: 'Wide', px: 38 } };
-export const DEFAULT_TEXT = { choices: true, names: true, marker: true, side: 'normal', size: 'm', font: 'archivo', dialogue: 'white', narration: 'soft', bubble: 'cream', me: 'yellow', weight: 'normal', layout: 'bubbles', width: 'wide', align: 'left', track: 'normal', para: 'normal' };
+// Page colour: the colour behind the story (the chat's message area). Comfort darks with softer text
+// than pure white on black, and three light pages with dark text. Text colours follow the page.
+export const PAGES = {
+  original: { label: 'Original', pg: '#0A0A0A', note: 'The black page, as it always was.' },
+  charcoal: { label: 'Charcoal', pg: '#1C1C1E', body: '#CFCFD2', note: 'Softer than black, and softer text: less glow around letters.' },
+  graphite: { label: 'Graphite', pg: '#2A2B30', body: '#D3D4D8', note: 'A mid dark grey: the gentlest dark for long reading.' },
+  night: { label: 'Night', pg: '#131A24', body: '#CBD2DB', note: 'Deep blue-black, like a night sky.' },
+  ember: { label: 'Ember', pg: '#1F1A15', body: '#D9D0C2', note: 'Warm dark brown; easy at night.' },
+  sepia: { label: 'Sepia', pg: '#E6D9C0', body: '#3A2F25', narr: '#4F4235', light: true, note: 'A toned-down sepia, never bright. Dark text. Shows as Ember while Dim mode is on.' },
+  sage: { label: 'Sage', pg: '#DFE8DC', body: '#26332A', narr: '#46564A', light: true, note: 'Soft green paper. Dark text. Shows as Ember while Dim mode is on.' },
+  paper: { label: 'Paper', pg: '#F6F4EF', body: '#262626', narr: '#4E4E4E', light: true, note: 'Warm off-white, never pure white. Dark text. Shows as Ember while Dim mode is on.' },
+};
+// Blend a colour toward the page, so text on a softer page is softer too.
+const mixHex = (a, b, k) => '#' + [1, 3, 5].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * k + parseInt(b.slice(i, i + 2), 16) * (1 - k)).toString(16).padStart(2, '0')).join('');
+
+export const DEFAULT_TEXT = { page: 'original', choices: true, names: true, marker: true, side: 'normal', size: 'm', font: 'archivo', dialogue: 'white', narration: 'soft', bubble: 'cream', me: 'yellow', weight: 'normal', layout: 'bubbles', width: 'wide', align: 'left', track: 'normal', para: 'normal' };
 export const textPrefs = () => ({ ...DEFAULT_TEXT, ...(S.settings.text || {}) });
 
 const loaded = new Set();
@@ -114,6 +129,20 @@ export function applyText(t = textPrefs()) {
   r.setProperty('--me-act', me.dark ? '#B4B4B4' : 'rgba(10, 10, 10, .7)');
   root.toggle('me-dark', !!me.dark);
   r.setProperty('--narr-dark', (NARRATION[t.narration] || NARRATION.soft).dark);
+  // Page colour. Original changes nothing; the others set the page and the text on it.
+  const page = PAGES[t.page] || PAGES.original;
+  const dlg = DIALOGUE[t.dialogue] || DIALOGUE.white;
+  document.documentElement.dataset.page = PAGES[t.page] ? t.page : 'original';
+  root.toggle('page-light', !!page.light);
+  if (t.page && t.page !== 'original' && PAGES[t.page]) {
+    r.setProperty('--page', page.pg);
+    r.setProperty('--page-body', page.body);
+    r.setProperty('--page-narr', page.light ? page.narr : mixHex((NARRATION[t.narration] || NARRATION.soft).dark, page.pg, 0.9));
+    r.setProperty('--page-say', page.light ? dlg.cream : mixHex(dlg.dark, page.pg, 0.92));
+    // Dim mode tints the screen warm; a light page would turn bright tan, so it reads as Ember then.
+    r.setProperty('--page-say-dim', mixHex(dlg.dark, PAGES.ember.pg, 0.92));
+    r.setProperty('--page-narr-dim', mixHex((NARRATION[t.narration] || NARRATION.soft).dark, PAGES.ember.pg, 0.9));
+  } else ['--page', '--page-body', '--page-narr', '--page-say', '--page-say-dim', '--page-narr-dim'].forEach((v) => r.removeProperty(v));
   document.documentElement.classList.toggle('dlg-line', t.dialogue === 'line');
   r.setProperty('--read-track', (TRACKS[t.track] || TRACKS.normal).v);
   r.setProperty('--read-pgap', (PARAS[t.para] || PARAS.normal).em);

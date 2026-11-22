@@ -2150,3 +2150,54 @@ label:has(> input.vh:focus-visible), label:has(input.vh:focus-visible) { outline
 .sw > a:focus-visible { outline-offset: -3px; }
 .ln-grp { transition: height .3s var(--out), opacity .3s, margin .3s; }
 .ln-grp.gone { height: 0 !important; opacity: 0; margin-top: -8px; }
+
+/* ---------- Page colour (Reading text › Page colour): the page behind the story ---------- */
+/* Darks soften the text with the page; Original changes nothing. */
+:root[data-page]:not([data-page='original']) :is(.chat .log, .tx-prev) {
+  background: var(--page);
+  --white: var(--page-body);
+  --dlg-dark: var(--page-say);
+  --narr-dark: var(--page-narr);
+  --soft: var(--page-narr);
+}
+/* Light pages: everything drawn straight on the page flips to dark ink, plates to a deeper paper. */
+:root.page-light :is(.chat .log, .tx-prev) {
+  color-scheme: light;
+  --bg: var(--page);
+  --cream: #2B2B2B;
+  --plate: color-mix(in srgb, var(--page) 90%, #000);
+  --plate2: color-mix(in srgb, var(--page) 80%, #000);
+  --muted: color-mix(in srgb, var(--page-body) 70%, var(--page));
+  --inkm: var(--page-narr);
+  --hair: rgba(0, 0, 0, .12);
+}
+.tx-page { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.tx-page button { display: flex; flex-direction: column; align-items: center; gap: 7px; min-height: 76px; padding: 9px 4px 8px; border-radius: 16px; background: var(--plate); color: var(--cream); font: 700 12px/1.1 var(--font); }
+.tx-page button[aria-checked='true'] { background: var(--yellow); color: var(--bg); }
+.tx-page i { display: grid; place-items: center; width: 40px; height: 30px; border-radius: 9px; background: var(--c); color: var(--t); font: 800 13px/1 var(--font); font-style: normal; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .16); }
+.tx-page-note { margin: 8px 2px 0 !important; font: 600 12px/1.4 var(--font); color: var(--muted); }
+@media (max-width: 360px) { .tx-page { grid-template-columns: repeat(3, 1fr); } }
+/* The top fade would show the black behind a coloured page as a dark band. */
+:root[data-page]:not([data-page='original']) .chat .log { -webkit-mask-image: none; mask-image: none; }
+/* Speech in the speaker's line colour: darker on light pages (as on cream bubbles). */
+:root.page-light:not(.dim).dlg-line :is(.chat .log, .tx-prev) .scn-b:not(.you) :is(.say, .dlg, .shout) { color: color-mix(in srgb, var(--c) 45%, #0A0A0A); }
+/* Passing lines' dashed rule and tag outline follow the page. */
+:root.page-light:not(.dim) :is(.chat .log, .tx-prev) .scn-b.pass::before { border-left-color: rgba(0, 0, 0, .35); }
+:root.page-light:not(.dim) :is(.chat .log, .tx-prev) .scn-b.pass .scn-tag { box-shadow: inset 0 0 0 1.5px rgba(0, 0, 0, .4); }
+/* Under Dim mode a light page reads as Ember, with the dark-page tokens back. */
+html.dim.page-light :is(.chat .log, .tx-prev) {
+  color-scheme: dark;
+  background: #1F1A15;
+  --page: #1F1A15;
+  --white: #D9D0C2;
+  --dlg-dark: var(--page-say-dim);
+  --narr-dark: var(--page-narr-dim);
+  --soft: var(--page-narr-dim);
+  --bg: #1F1A15;
+  --cream: #ECECEC;
+  --plate: #1E1E1E;
+  --plate2: #333333;
+  --muted: #9B9B9B;
+  --inkm: #5C5C5C;
+  --hair: rgba(236, 236, 236, .1);
+}
