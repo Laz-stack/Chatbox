@@ -49,18 +49,16 @@ export function datacatView() {
   src.searchParams.set('dc_bridge_nonce', nonce);
   const html = `<div class="screen no-tab dc-screen">
     <div class="topbar">${ibtn('back', 'Back', { href: '#/' })}<h1 class="tb-title dc-tt">Datacat’s page<small>datacat.run</small></h1><a class="ibtn ghost press" href="${START}" target="_blank" rel="noopener noreferrer" aria-label="Open Datacat in your browser">${icon('link', 18)}</a></div>
-    <div class="dc-frame"><p class="dc-wait" id="dcWait">Opening Datacat…</p>
+    <div class="dc-frame" id="dcBox"><p class="dc-wait" id="dcWait">Opening Datacat…</p>
       <iframe id="dcFrame" title="Datacat’s page (datacat.run)" src="${esc(src.href)}" referrerpolicy="strict-origin-when-cross-origin"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals"></iframe></div>
-    <div class="dc-tray" id="dcTray">
-      <div class="dc-row">
-        <button type="button" class="dc-list press" id="dcList" hidden><span class="dc-stack" id="dcStack" aria-hidden="true"></span></button>
-        <p class="dc-tx" id="dcSt" role="status" aria-live="polite"><b>Connecting to Datacat…</b><small></small></p>
-        <button type="button" class="btn-primary press dc-go" id="dcGo" hidden><span>Review</span></button>
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals"></iframe>
+      <div class="dc-tray" id="dcTray">
+        <button type="button" class="dc-list press" id="dcList"><span class="dc-stack" id="dcStack" aria-hidden="true"></span><span class="dc-tx"><b id="dcT"></b><small id="dcS"></small></span></button>
+        <button type="button" class="dc-go press" id="dcGo">Review</button>
+        <a class="dc-go dc-open press" id="dcOpen" href="${START}" target="_blank" rel="noopener noreferrer" hidden>Open</a>
       </div>
-      <div class="dc-alt" id="dcAlt" hidden><a class="dc-pill press" href="${START}" target="_blank" rel="noopener noreferrer">${icon('link', 15)}Open in browser</a><label class="dc-pill press">${icon('upload', 15)}Pick a file<input type="file" class="vh" id="dcFile" multiple accept=".zip,.png,.json,.charx,application/zip,image/png,application/json"></label></div>
-      <p class="dc-warn">Never type an API key on Datacat.</p>
     </div>
+    <p class="vh" id="dcSt" role="status" aria-live="polite"></p>
   </div>`;
 
   let root = null;
@@ -70,29 +68,29 @@ export function datacatView() {
 
   // The tray is updated in place: the status line stays one element (so it's announced), focus
   // stays where it was, and only a newly arrived picture animates in.
+  // The tray slides up only when there's something in it (or Datacat isn't answering), floating
+  // at the foot of the page; the page shortens under it so Datacat's own buttons stay reachable.
+  // It's updated in place, so focus stays put, and only a newly arrived card pops in.
   const paint = (added = false) => {
     if (!root) return;
     const $ = (x) => root.querySelector(x);
     const n = tray.length;
-    const [t, sub] = n
-      ? [`${n} card${n === 1 ? '' : 's'} waiting`, tray.map((c) => c.name).join(', ')]
-      : !connected && !quiet
-        ? ['Connecting to Datacat…', '']
-        : quiet
-          ? ['Datacat isn’t answering here', 'Open it in your browser, download the card, then pick the file.']
-          : ['Open a character on Datacat', 'Then tap its import button, next to Download. It waits here until you review it.'];
-    const st = $('#dcSt');
-    if (st.querySelector('b').textContent !== t) st.querySelector('b').textContent = t;
-    st.querySelector('small').textContent = sub;
-    const list = $('#dcList');
+    const on = n > 0 || quiet;
+    $('#dcTray').classList.toggle('on', on);
+    $('#dcBox').classList.toggle('tray-on', on);
+    $('#dcT').textContent = n ? `${n} card${n === 1 ? '' : 's'} waiting` : 'Datacat isn’t answering';
+    $('#dcS').textContent = n ? tray.map((c) => c.name).join(', ') : 'Open it in your browser instead';
+    const st = n ? `${n} card${n === 1 ? '' : 's'} waiting: ${tray.at(-1).name} arrived.` : quiet ? 'Datacat isn’t answering. Open it in your browser instead.' : '';
+    if ($('#dcSt').textContent !== st) $('#dcSt').textContent = st;
     const stack = $('#dcStack');
     const shown = tray.slice(-3);
-    stack.replaceChildren(...shown.map((c, i) => Object.assign(document.createElement('img'), { src: c.url, alt: '', className: added && i === shown.length - 1 ? 'new' : '' })));
-    stack.querySelectorAll('img').forEach((im, i) => im.style.setProperty('--r', [-5, 3, -1][i] + 'deg'));
-    list.hidden = !n;
-    list.setAttribute('aria-label', `See the ${n} waiting card${n === 1 ? '' : 's'}`);
+    stack.replaceChildren(...shown.map((c, i) => Object.assign(document.createElement('img'), { src: c.url, alt: '', className: added && i === shown.length - 1 ? 'pop' : '' })));
+    stack.querySelectorAll('img').forEach((im, i) => im.style.setProperty('--r', [-6, 4, -2][i] + 'deg'));
+    stack.hidden = !n;
+    $('#dcList').disabled = !n;
+    $('#dcList').setAttribute('aria-label', n ? `See the ${n} waiting card${n === 1 ? '' : 's'}` : 'Datacat isn’t answering');
     $('#dcGo').hidden = !n;
-    $('#dcAlt').hidden = !(quiet && !n);
+    $('#dcOpen').hidden = !!n || !quiet;
   };
   const LIMIT = 20;
   const LIMIT_BYTES = 120 * 1024 * 1024;
@@ -161,7 +159,7 @@ export function datacatView() {
     setTimeout(() => {
       const a = document.activeElement;
       if (a && a !== document.body && !a.closest('[hidden]')) return;
-      (root?.querySelector('#dcList:not([hidden])') || root?.querySelector('.topbar .ibtn'))?.focus();
+      (root?.querySelector('.dc-tray.on #dcList:not(:disabled)') || root?.querySelector('.topbar .ibtn'))?.focus();
     }, 360);
   }
   // Cards stay in the tray until the import review saves them; backing out keeps them.
@@ -181,7 +179,6 @@ export function datacatView() {
       // If Datacat never says hello (changed bridge, blocked page), say so instead of waiting forever.
       quietTimer = setTimeout(() => !connected && ((quiet = true), paint()), 15000);
       paint();
-      r.querySelector('#dcFile').addEventListener('change', (e) => startImport([...e.target.files]));
       trayEl.addEventListener('click', (e) => {
         if (e.target.closest('#dcGo')) review();
         else if (e.target.closest('#dcList')) manage();
