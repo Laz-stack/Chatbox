@@ -1,4 +1,4 @@
-import { S, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, named, resetChat, recordFare, meter, interchange, isInterchangeId, chatsFor, startNewChat, deleteChat, blankCharacter, saveInterchange, personaFor, personaById, newChat, branchChat, saveImages } from '../store.js';
+import { S, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, named, resetChat, recordFare, meter, interchange, isInterchangeId, chatsFor, startNewChat, deleteChat, setHidden, blankCharacter, saveInterchange, personaFor, personaById, newChat, branchChat, saveImages } from '../store.js';
 import { textSheet } from './text.js';
 import { replyStyleSheet } from './settings.js';
 import { textPrefs } from '../textstyle.js';
@@ -1993,6 +1993,19 @@ export async function chatView(id, focusId = null) {
         } },
         { icon: 'user', label: `You: ${me().name?.trim() || 'You'}`, on: personaSheet },
         ...(ix ? [] : [{ icon: 'plus', label: 'New chat', on: newChatHere }, { icon: 'file', label: `Chats with ${ch.name}`, on: chatsSheet }]),
+        { icon: chat.hidden ? 'eye' : 'eyeoff', label: chat.hidden ? 'Show this chat on Lines' : 'Hide this chat', sub: chat.hidden ? 'It’s hidden from Platform and Lines' : 'Off Platform and Lines; nothing is deleted', on: async () => {
+          const on = !chat.hidden;
+          await setHidden('chat', chat.id, on);
+          if (!on) return toast('This chat is back on Lines');
+          location.hash = '#/lines/recent';
+          setTimeout(() => toast('Chat hidden · find it under Lines › Recent › Hidden', { action: 'Undo', onAction: () => setHidden('chat', chat.id, false).then(() => dispatchEvent(new HashChangeEvent('hashchange'))) }), 350);
+        } },
+        { icon: 'trash', label: 'Delete this chat', on: async () => {
+          if (!(await confirmSheet({ title: 'Delete this chat?', body: `Messages, notes and memory go too.${ix ? '' : ` Other chats with ${esc(ch.name.split(' ')[0])} stay.`} This can’t be undone.`, ok: 'Delete chat', danger: true }))) return;
+          await deleteChat(chat.id);
+          location.hash = '#/lines/recent';
+          setTimeout(() => toast('Chat deleted'), 350);
+        } },
         '#Story',
         { icon: 'route', label: 'Route map', sub: 'The stations so far', on: () => (location.hash = `#/route/${encodeURIComponent(chat.id)}`) },
         { icon: 'book', label: 'Chapters', on: chaptersSheet },

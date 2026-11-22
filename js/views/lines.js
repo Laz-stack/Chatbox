@@ -1,8 +1,8 @@
 // Lines: every character (and later every Interchange), all departures, the full Logbook,
 // and a search across names, taglines and every message in every chat.
-import { S, textOf, named, departures, logbook, character, lastMessage, interchange, latestChat, chatsFor } from '../store.js';
+import { S, textOf, named, departures, logbook, character, lastMessage, interchange, latestChat, chatsFor, hiddenChats, setHidden, deleteChat, deleteCharacter, deleteInterchange } from '../store.js';
 import { esc, ago, agoLong, plain, inkOn, debounce, formatMessage, cleanTagline } from '../util.js';
-import { title2, avatarBullet, tabbar, icon, groupAvatar, emptySign } from '../ui.js';
+import { title2, avatarBullet, tabbar, icon, groupAvatar, emptySign, toast, confirmSheet } from '../ui.js';
 import { startImport } from './import.js';
 
 const FILTERS = [
@@ -26,22 +26,35 @@ const colorVars = (c) => {
 // so it shows as a dark station badge instead.
 const badge = (c) => (!c.avatarImage && (c.preset === 'initial' || !c.preset) ? avatarBullet({ ...c, line: { ...c.line, color: '#0A0A0A' } }, 44, '', `line:${c.id}`) : avatarBullet(c, 44, '', `line:${c.id}`));
 
+// Swipe a row left to reveal Hide and Delete. kind: 'chat' (a row under Recent), 'char' or 'ix'
+// (a character or group under All). The buttons can't be reached until the row is open.
+// (Keyboard: the left arrow opens a row, Escape closes it.) A hidden item found by search offers Show.
+const sw = (row, kind, id, name, { hidden = false, group = false } = {}) =>
+  `<div class="sw" data-kind="${kind}" data-id="${esc(id)}" data-name="${esc(name)}"${group ? ' data-group="1"' : ''}><div class="sw-under"><button type="button" class="sw-h press" data-act="${hidden ? 'show' : 'hide'}" tabindex="-1">${icon(hidden ? 'eye' : 'eyeoff', 18)}${hidden ? 'Show' : 'Hide'}</button><button type="button" class="sw-d press" data-act="del" tabindex="-1">${icon('trash', 18)}Delete</button></div>${row}</div>`;
+// Hidden things fold away at the bottom of the list, each with Show.
+const hidRow = (kind, id, name, face, what) =>
+  `<div class="hidrow">${face}<span class="hid-tx"><b>${esc(name)}</b><small>${what} · hidden</small></span><button type="button" class="hid-show press" data-show="${kind}:${esc(id)}" aria-label="Show ${esc(name)} again">Show</button></div>`;
+const fold = (rows) =>
+  rows.length
+    ? `<div class="ln-fold"><button type="button" class="ln-fold-b press" aria-expanded="false">${icon('eyeoff', 18)}<span>Hidden · ${rows.length}</span><span class="ln-fold-c">${icon('chev', 16)}</span></button><div class="ln-fold-in"><div>${rows.join('')}</div></div></div>`
+    : '';
+const grey = (html) => html.replace('class="bullet', 'class="bullet hid-av');
+
 function lineRow(c) {
   const chat = latestChat(c.id);
   const n = chatsFor(c.id).filter((x) => x.messages.some((m) => m.role === 'user')).length;
   const when = chat && chat.messages.some((m) => m.role === 'user') ? (ago(chat.updatedAt) === 'now' ? 'just now' : ago(chat.updatedAt)) : 'not started';
-  return `<a class="ix press" href="#/chat/${c.id}" style="${colorVars(c)}" aria-label="Chat with ${esc(c.name)}">${badge(c)}<span class="row-tx"><span class="row-t">${esc(c.name)}</span><span class="row-s">${esc(cleanTagline(c.tagline, c.name) || 'No tagline')}${n > 1 ? ` · ${n} chats` : ''}</span></span><span class="ix-t num">${when}</span></a>`;
+  return sw(`<a class="ix press" href="#/chat/${c.id}" style="${colorVars(c)}" aria-label="Chat with ${esc(c.name)}" aria-describedby="swHint">${badge(c)}<span class="row-tx"><span class="row-t">${esc(c.name)}</span><span class="row-s">${esc(cleanTagline(c.tagline, c.name) || 'No tagline')}${n > 1 ? ` · ${n} chats` : ''}</span></span><span class="ix-t num">${when}</span></a>`, 'char', c.id, c.name, { hidden: !!c.hidden });
 }
 
-function ixRow(ix) {
-  const chat = latestChat(ix.id);
+function ixRow(ix, kind = 'ix', chat = latestChat(ix.id)) {
   const when = chat && chat.messages.some((m) => m.role === 'user') ? (ago(chat.updatedAt) === 'now' ? 'just now' : ago(chat.updatedAt)) : 'not started';
-  return `<a class="ix ixg press" href="#/chat/${ix.id}" aria-label="Open ${esc(ix.title)}">${groupAvatar(ix, 44)}<span class="row-tx"><span class="row-t">${esc(ix.title)}</span><span class="row-s">${ix.mode === 'scene' ? 'Carriage' : 'Interchange'} · ${ix.people.map((p) => esc(p.name)).join(', ')}</span></span><span class="ix-t num">${when}</span></a>`;
+  return sw(`<a class="ix ixg press" href="#/chat/${ix.id}" aria-label="Open ${esc(ix.title)}" aria-describedby="swHint">${groupAvatar(ix, 44)}<span class="row-tx"><span class="row-t">${esc(ix.title)}</span><span class="row-s">${ix.mode === 'scene' ? 'Carriage' : 'Interchange'} · ${ix.people.map((p) => esc(p.name)).join(', ')}</span></span><span class="ix-t num">${when}</span></a>`, kind, kind === 'chat' ? chat?.id : ix.id, ix.title, { hidden: kind === 'ix' && !!ix.hidden, group: true });
 }
 
 function departureRow({ c, chat, ix }) {
-  if (ix) return ixRow(ix);
-  return `<a class="ix press" href="#/chat/${chat.id}" style="${colorVars(c)}" aria-label="Chat with ${esc(c.name)}">${badge(c)}<span class="row-tx"><span class="row-t">${esc(c.name)}</span><span class="row-s">${esc(plain(named(textOf(lastMessage(chat)), c)))}</span></span><span class="ix-t num">${ago(chat.updatedAt)}</span></a>`;
+  if (ix) return ixRow(ix, 'chat', chat);
+  return sw(`<a class="ix press" href="#/chat/${chat.id}" style="${colorVars(c)}" aria-label="Chat with ${esc(c.name)}" aria-describedby="swHint">${badge(c)}<span class="row-tx"><span class="row-t">${esc(c.name)}</span><span class="row-s">${esc(plain(named(textOf(lastMessage(chat)), c)))}</span></span><span class="ix-t num">${ago(chat.updatedAt)}</span></a>`, 'chat', chat.id, c.name);
 }
 
 function starRow({ chat, m, q, at }) {
@@ -118,17 +131,23 @@ function searchResults(q) {
 export function linesView(filter) {
   // Lines opens on Recent; with nothing started yet, on All.
   if (!FILTERS.some(([k]) => k === filter)) filter = departures().length ? 'recent' : 'all';
-  const sorted = S.characters.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const sorted = S.characters.filter((c) => !c.hidden).sort((a, b) => a.name.localeCompare(b.name));
+  const groupsShown = () => S.interchanges.filter((x) => !x.hidden).map((x) => interchange(x.id)).filter(Boolean);
+  const hiddenLines = () => [
+    ...S.characters.filter((c) => c.hidden).map((c) => hidRow('char', c.id, c.name, grey(avatarBullet(c, 40)), 'Character')),
+    ...S.interchanges.filter((x) => x.hidden).map((x) => interchange(x.id)).filter(Boolean).map((ix) => hidRow('ix', ix.id, ix.title, `<span class="hid-av">${groupAvatar(ix, 40)}</span>`, 'Group')),
+  ];
   const body = () => {
     if (filter === 'recent') {
       const deps = departures();
-      return deps.length
+      const hid = hiddenChats().map(({ c, chat, ix }) => hidRow('chat', chat.id, ix ? ix.title : c.name, ix ? `<span class="hid-av">${groupAvatar(ix, 40)}</span>` : grey(avatarBullet(c, 40)), 'Chat'));
+      return (deps.length
         ? section('Recent', deps.length, deps.map(departureRow).join('')) + (deps.length < 4 ? `<a class="ln-all press" href="#/lines/all">All lines${icon('chev', 16)}</a>` : '')
-        : emptySign('No departures yet', 'Pick a line under All and say hello.', `<a class="pill press" href="#/lines/all">All lines${icon('chev', 15)}</a>`, 'Lines · Recent');
+        : emptySign('No departures yet', 'Pick a line under All and say hello.', `<a class="pill press" href="#/lines/all">All lines${icon('chev', 15)}</a>`, 'Lines · Recent')) + fold(hid);
     }
     if (filter === 'interchanges') {
-      const all = S.interchanges.map((x) => interchange(x.id)).filter(Boolean);
-      return `<div class="index">${all.map(ixRow).join('')}<a class="ix ix-new press" href="#/interchange/new"><span class="bullet ix-new-b" style="width:44px;height:44px">${icon('track', 22)}</span><span class="row-tx"><span class="row-t">New interchange</span><span class="row-s">Let 2–5 lines meet in one chat</span></span></a></div>`;
+      const all = groupsShown();
+      return `<div class="index">${all.map((ix) => ixRow(ix)).join('')}<a class="ix ix-new press" href="#/interchange/new"><span class="bullet ix-new-b" style="width:44px;height:44px">${icon('track', 22)}</span><span class="row-tx"><span class="row-t">New interchange</span><span class="row-s">Let 2–5 lines meet in one chat</span></span></a></div>`;
     }
     if (filter === 'narrators') {
       const list = sorted.filter(isNarrator);
@@ -138,10 +157,10 @@ export function linesView(filter) {
       const log = logbook();
       return log.length ? `<div class="roll">${log.map(starRow).join('')}</div>` : emptySign('Nothing starred yet', 'Long-press a message in a chat and tap Star. It lands here.', '', 'Lines · Starred');
     }
-    const groups = S.interchanges.map((x) => interchange(x.id)).filter(Boolean);
+    const groups = groupsShown();
     const chars = sorted.filter((c) => !isNarrator(c));
     const narr = sorted.filter(isNarrator);
-    return section('Characters', chars.length, chars.map(lineRow).join('')) + section('One narrator', narr.length, `<p class="ln-note">Cards with several characters, played by one narrator who voices them all.</p>` + narr.map(lineRow).join('')) + section('Interchanges', groups.length, groups.map(ixRow).join('')) + `<div class="index" style="margin-top:12px"><a class="ix ix-new press" href="#/edit/new">${`<span class="bullet ix-new-b" style="width:44px;height:44px">${icon('track', 22)}</span>`}<span class="row-tx"><span class="row-t">New line</span><span class="row-s">Create a character</span></span></a></div>`;
+    return section('Characters', chars.length, chars.map(lineRow).join('')) + section('One narrator', narr.length, `<p class="ln-note">Cards with several characters, played by one narrator who voices them all.</p>` + narr.map(lineRow).join('')) + section('Interchanges', groups.length, groups.map((ix) => ixRow(ix)).join('')) + `<div class="index" style="margin-top:12px"><a class="ix ix-new press" href="#/edit/new">${`<span class="bullet ix-new-b" style="width:44px;height:44px">${icon('track', 22)}</span>`}<span class="row-tx"><span class="row-t">New line</span><span class="row-s">Create a character</span></span></a></div>` + fold(hiddenLines());
   };
 
   const html = `<div class="screen">
@@ -151,6 +170,7 @@ export function linesView(filter) {
     </div>
     <label class="search">${icon('search', 20)}<input id="q" type="search" placeholder="Name, line or something they said" aria-label="Search lines and messages" autocomplete="off" enterkeyhint="search"></label>
     <div class="chips-f" role="tablist" aria-label="Show">${FILTERS.map(([k, l]) => `<a class="press${k === filter ? ' on' : ''}" role="tab" aria-selected="${k === filter}" href="#/lines/${k}">${l}</a>`).join('')}</div>
+    <p class="vh" id="swHint">Left arrow: Hide and Delete for this row.</p>
     <div id="results"><div class="blk-tight">${body()}</div></div>
   </div>${tabbar('lines')}`;
 
@@ -161,7 +181,14 @@ export function linesView(filter) {
       const input = root.querySelector('#q');
       const results = root.querySelector('#results');
       const chips = root.querySelector('.chips-f');
-      const base = results.innerHTML;
+      let base = results.innerHTML;
+      // After a hide, delete or show: redraw the list, or the search results if a search is showing.
+      const redraw = () => {
+        base = `<div class="blk-tight">${body()}</div>`;
+        const q = input.value.trim();
+        results.innerHTML = q ? searchResults(q) : base;
+      };
+      bindSwipes(results, redraw);
       const run = debounce(() => {
         const q = input.value.trim();
         chips.hidden = q.length > 0;
@@ -179,4 +206,161 @@ export function linesView(filter) {
       });
     },
   };
+}
+
+// ---------- Swipe to hide or delete ----------
+// A row moves only once the finger clearly goes sideways (vertical scrolling stays the browser's),
+// one row is open at a time, and a drag never opens the chat underneath.
+const OPEN = -168;
+function bindSwipes(box, redraw) {
+  let drag = null;
+  let swallow = false;
+  const setOpen = (w, on) => {
+    w.classList.toggle('open', on);
+    const row = w.querySelector('.ix');
+    row.style.transform = on ? `translateX(${OPEN}px)` : '';
+    w.querySelectorAll('.sw-under button').forEach((b) => (b.tabIndex = on ? 0 : -1));
+  };
+  const closeAll = (except) => box.querySelectorAll('.sw.open').forEach((w) => w !== except && setOpen(w, false));
+  // A link would start the browser's own drag and cancel the swipe.
+  box.addEventListener('dragstart', (e) => e.target.closest?.('.sw') && e.preventDefault());
+  box.addEventListener('keydown', (e) => {
+    const row = e.target.closest('.sw > .ix');
+    const w = e.target.closest('.sw');
+    if (row && (e.key === 'ArrowLeft' || e.key === 'Delete')) {
+      e.preventDefault();
+      closeAll(w);
+      setOpen(w, true);
+      w.querySelector('.sw-under button').focus();
+    } else if (w && w.classList.contains('open') && (e.key === 'Escape' || e.key === 'ArrowRight')) {
+      e.preventDefault();
+      setOpen(w, false);
+      w.querySelector('.ix').focus();
+    }
+  });
+  box.addEventListener('pointerdown', (e) => {
+    const row = e.target.closest('.sw > .ix');
+    if (!row || e.button > 0) return;
+    const w = row.parentElement;
+    drag = { w, row, x0: e.clientX, y0: e.clientY, base: w.classList.contains('open') ? OPEN : 0, dx: 0, live: false, id: e.pointerId };
+  });
+  box.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    if (e.pointerType === 'mouse' && !e.buttons) return end();
+    const dx = e.clientX - drag.x0;
+    const dy = e.clientY - drag.y0;
+    if (!drag.live) {
+      if (Math.abs(dy) > 10 && Math.abs(dy) > Math.abs(dx)) return (drag = null);
+      if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+      drag.live = true;
+      closeAll(drag.w);
+      drag.w.classList.add('dragging');
+      drag.row.setPointerCapture?.(e.pointerId);
+    }
+    drag.dx = Math.min(0, Math.max(OPEN - 24, drag.base + dx));
+    drag.row.style.transform = `translateX(${drag.dx}px)`;
+  });
+  const end = () => {
+    if (!drag) return;
+    if (drag.live) {
+      swallow = true;
+      setTimeout(() => (swallow = false), 400); // touch often sends no click after a drag
+      drag.w.classList.remove('dragging');
+      setOpen(drag.w, drag.dx < OPEN / 2.4);
+    }
+    drag = null;
+  };
+  box.addEventListener('pointerup', end);
+  box.addEventListener('pointercancel', end);
+  // Only our own capture ending counts (touch moves an automatic capture over to the row first).
+  box.addEventListener('lostpointercapture', (e) => drag?.live && e.target === drag.row && end());
+  // A drag, or a tap on an open row, never follows the row's link.
+  box.addEventListener(
+    'click',
+    (e) => {
+      const row = e.target.closest('.sw > .ix');
+      if (!row) return;
+      if (swallow || row.parentElement.classList.contains('open')) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!swallow) setOpen(row.parentElement, false);
+      }
+      swallow = false;
+    },
+    true
+  );
+  const outside = (e) => {
+    if (!box.isConnected) return document.removeEventListener('pointerdown', outside);
+    if (!box.contains(e.target)) closeAll();
+  };
+  document.addEventListener('pointerdown', outside, { passive: true });
+
+  box.addEventListener('click', async (e) => {
+    const fb = e.target.closest('.ln-fold-b');
+    if (fb) {
+      const on = fb.parentElement.classList.toggle('open');
+      return fb.setAttribute('aria-expanded', on);
+    }
+    const show = e.target.closest('[data-show]');
+    if (show) {
+      const [kind, id] = show.dataset.show.split(/:(.*)/);
+      await setHidden(kind, id, false);
+      redraw();
+      const f = box.querySelector('.ln-fold');
+      if (f) f.classList.add('open'), f.querySelector('.ln-fold-b').setAttribute('aria-expanded', 'true');
+      (f?.querySelector('[data-show]') || f?.querySelector('.ln-fold-b') || box.querySelector('.sw > .ix'))?.focus();
+      return toast('Back on Lines');
+    }
+    const b = e.target.closest('.sw-under [data-act]');
+    if (!b) return;
+    const w = b.closest('.sw');
+    const { kind, id, name } = w.dataset;
+    // After the list redraws, focus goes to the row that took this one's place.
+    const at = [...box.querySelectorAll('.sw')].indexOf(w);
+    const refocus = () => {
+      const rows = box.querySelectorAll('.sw > .ix');
+      (rows[Math.min(at, rows.length - 1)] || box.querySelector('.ln-fold-b') || box.querySelector('a, button'))?.focus();
+    };
+    if (b.dataset.act === 'show') {
+      await setHidden(kind, id, false);
+      redraw();
+      refocus();
+      return toast(`${name} is back on Lines`);
+    }
+    if (b.dataset.act === 'hide') {
+      await setHidden(kind, id, true);
+      await collapse(w);
+      redraw();
+      refocus();
+      return toast(`${name} hidden · find it under Hidden`, {
+        ms: 6500,
+        action: 'Undo',
+        onAction: async () => (await setHidden(kind, id, false), redraw()),
+      });
+    }
+    const n = kind === 'char' ? chatsFor(id).filter((c) => c.messages.some((m) => m.role === 'user')).length : 0;
+    const first = esc(name.split(' ')[0]);
+    const copy =
+      kind === 'chat'
+        ? { title: `Delete this chat with ${esc(name)}?`, body: `Messages, notes and memory go too. ${w.dataset.group ? 'The group and its characters stay.' : `Other chats with ${first} stay.`} This can’t be undone.`, ok: 'Delete chat' }
+        : kind === 'char'
+          ? { title: `Delete ${esc(name)}${n ? ` and ${n === 1 ? 'their chat' : `${n} chats`}` : ''}?`, body: `The character${n ? ' and every chat with them' : ''} go for good. To keep them but tidy Lines, use Hide instead.`, ok: 'Delete' }
+          : { title: `Delete ${esc(name)}?`, body: 'The group chat goes for good. Its characters stay. This can’t be undone.', ok: 'Delete' };
+    if (!(await confirmSheet({ ...copy, danger: true }))) return setOpen(w, false), setTimeout(() => w.querySelector('.ix').focus(), 320);
+    if (kind === 'chat') await deleteChat(id);
+    else if (kind === 'char') await deleteCharacter(id);
+    else await deleteInterchange(id);
+    await collapse(w);
+    redraw();
+    refocus();
+    toast(kind === 'chat' ? 'Chat deleted' : `${name} deleted`);
+  });
+}
+// The row folds its height away before the list redraws.
+function collapse(w) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return Promise.resolve();
+  w.style.height = w.offsetHeight + 'px';
+  w.getBoundingClientRect();
+  w.classList.add('gone');
+  return new Promise((r) => setTimeout(r, 300));
 }

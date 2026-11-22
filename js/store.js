@@ -558,7 +558,36 @@ export function departures() {
     .map((x) => interchange(x.id))
     .filter(Boolean)
     .map((ix) => ({ ix, c: ix.people[0], chat: latestChat(ix.id) }));
-  return [...lines, ...groups].filter((x) => hasStarted(x.chat)).sort((a, b) => b.chat.updatedAt - a.chat.updatedAt);
+  return [...lines, ...groups].filter((x) => hasStarted(x.chat) && !isHidden(x)).sort((a, b) => b.chat.updatedAt - a.chat.updatedAt);
+}
+
+// Hidden: off Platform and Lines (nothing is deleted); Lines lists them in a fold to bring back.
+// A chat can be hidden on its own; hiding a character or group hides all its chats with it.
+const isHidden = (x) => !!(x.chat?.hidden || (x.ix ? x.ix.hidden : x.c?.hidden));
+// Started chats hidden on their own (their character or group still showing), newest first.
+export function hiddenChats() {
+  const lines = S.characters.filter((c) => !c.hidden).flatMap((c) => chatsFor(c.id).map((chat) => ({ c, chat })));
+  const groups = S.interchanges
+    .filter((x) => !x.hidden)
+    .map((x) => interchange(x.id))
+    .filter(Boolean)
+    .flatMap((ix) => chatsFor(ix.id).map((chat) => ({ ix, c: ix.people[0], chat })));
+  return [...lines, ...groups].filter((x) => x.chat.hidden && hasStarted(x.chat)).sort((a, b) => b.chat.updatedAt - a.chat.updatedAt);
+}
+export async function setHidden(kind, id, on) {
+  if (kind === 'chat') {
+    const chat = S.chats.get(id);
+    if (!chat) return;
+    chat.hidden = on || undefined;
+    chat.hiddenAt = Date.now(); // so Sync knows this change is newer
+    return saveChat(chat, false);
+  }
+  const list = kind === 'ix' ? S.interchanges : S.characters;
+  const o = list.find((x) => x.id === id);
+  if (!o) return;
+  o.hidden = on || undefined;
+  o.hiddenAt = Date.now();
+  return kind === 'ix' ? saveInterchange(o) : saveCharacter(o);
 }
 
 // The Logbook: every starred message across all chats, newest star first: [{ chat, m }].

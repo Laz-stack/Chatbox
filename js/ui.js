@@ -333,7 +333,8 @@ export function confirmSheet({ title, body = '', ok = 'Confirm', danger = false 
   return new Promise((res) => {
     let done = false;
     openSheet({
-      label: title,
+      // The title is markup (names in it are escaped); the label is read out as plain words.
+      label: title.replace(/<[^>]*>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/&amp;/g, '&'),
             // A destructive confirm starts on Cancel, so Enter never destroys by accident.
       html: `<h2 class="sheet-title">${title}</h2>${body ? `<p class="sheet-p">${body}</p>` : ''}<div class="sheet-actions"><button type="button" class="btn-primary plate press" data-v="0" ${danger ? 'data-autofocus' : ''}><span>Cancel</span></button><button type="button" class="btn-primary press ${danger ? 'danger' : ''}" data-v="1" ${danger ? '' : 'data-autofocus'}><span>${ok}</span></button></div>`,
       onMount(s, close) {

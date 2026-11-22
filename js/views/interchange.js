@@ -1,5 +1,5 @@
 // Create or edit an Interchange: 2 or 3 lines take turns, or up to 5 share one scene.
-import { S as store, interchange, saveInterchange, deleteInterchange, getChat, saveChat, newChat } from '../store.js';
+import { S as store, interchange, saveInterchange, deleteInterchange, setHidden, getChat, saveChat, newChat } from '../store.js';
 import { uid, esc, inkOn, resizeImage } from '../util.js';
 import { topbar, avatarBullet, field, area, icon, arrow, toast, confirmSheet, toggleRow, bindSwitch, groupAvatar } from '../ui.js';
 
@@ -27,7 +27,7 @@ export function interchangeView(id) {
   };
 
   const html = `<div class="screen no-tab">
-    ${topbar({ back: existing ? `#/chat/${existing.id}` : '#/', backIcon: 'x', backLabel: 'Close', title: isNew ? 'New interchange' : 'Interchange', right: existing ? `<button type="button" class="ibtn press" id="delIx" aria-label="Delete interchange">${icon('trash')}</button>` : '' })}
+    ${topbar({ back: existing ? `#/chat/${existing.id}` : '#/', backIcon: 'x', backLabel: 'Close', title: isNew ? 'New interchange' : 'Interchange', right: existing ? `<span style="display:flex;gap:8px"><button type="button" class="ibtn press" id="hideIx" aria-label="${existing.hidden ? 'Show on Lines' : 'Hide from Platform and Lines'}">${icon(existing.hidden ? 'eye' : 'eyeoff')}</button><button type="button" class="ibtn press" id="delIx" aria-label="Delete interchange">${icon('trash')}</button></span>` : '' })}
     <div class="stack" style="gap:18px">
       <div class="field"><div class="flabel"><span>Picture</span><span class="small">${cover ? 'Imported cover unless you upload one' : 'Their faces unless you upload one'}</span></div><div class="ixpic" id="ixPic">${picHTML()}</div><p class="fhint" id="ixPicErr" hidden></p></div>
       <div class="field"><div class="flabel"><span>How they talk</span></div>
@@ -103,6 +103,15 @@ export function interchangeView(id) {
         if (isNew) await saveChat(newChat(d.id), false);
         else await getChat(d.id);
         location.hash = `#/chat/${d.id}`;
+      });
+      $('#hideIx')?.addEventListener('click', async () => {
+        const raw = store.interchanges.find((x) => x.id === d.id);
+        const on = !raw?.hidden;
+        await setHidden('ix', d.id, on);
+        const b = $('#hideIx');
+        b.innerHTML = icon(on ? 'eye' : 'eyeoff');
+        b.setAttribute('aria-label', on ? 'Show on Lines' : 'Hide from Platform and Lines');
+        toast(on ? 'Hidden · find it under Lines › All › Hidden' : 'Back on Lines', on ? { ms: 6500, action: 'Undo', onAction: () => $('#hideIx')?.click() } : {});
       });
       $('#delIx')?.addEventListener('click', async () => {
         if (!(await confirmSheet({ title: 'Delete this interchange?', body: 'This removes the group chat. The characters themselves stay.', ok: 'Delete', danger: true }))) return;

@@ -9,7 +9,7 @@ import { railHTML, mountRail } from '../herotrain.js';
 export function homeView() {
   const conn = activeConnection();
   const started = departures();
-  const featured = started.find((x) => !x.ix)?.c || S.characters[0];
+  const featured = started.find((x) => !x.ix)?.c || S.characters.find((c) => !c.hidden) || S.characters[0];
 
   let hero;
   if (featured) {
