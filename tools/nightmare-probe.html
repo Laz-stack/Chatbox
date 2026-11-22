@@ -19,7 +19,10 @@ input:focus-visible, button:focus-visible { outline: 3px solid var(--yellow); ou
 button { flex: 1; min-height: 52px; border: 0; border-radius: 20px; font: 800 15px/1 system-ui, sans-serif; cursor: pointer; }
 #go, #run { background: var(--red); color: #fff; }
 h2 { margin: 26px 0 6px; font: 800 18px/1.2 system-ui, sans-serif; }
-#pic { display: block; width: 100%; margin-top: 14px; border-radius: 14px; }
+#pics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; }
+#pics figure { margin: 0; }
+#pics img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; }
+#pics figcaption { margin-top: 4px; font: 700 12px/1.3 system-ui, sans-serif; color: var(--cream); }
 #run:disabled { opacity: .45; cursor: default; }
 #copy { background: var(--plate2); color: var(--cream); }
 #copy:disabled, #go:disabled { opacity: .45; cursor: default; }
@@ -45,9 +48,9 @@ li pre { margin: 6px 0 0; white-space: pre-wrap; word-break: break-word; font: 1
     <div class="row"><button type="submit" id="go">Probe</button><button type="button" id="copy" disabled>Copy results</button></div>
   </form>
   <h2>Step 2: test a picture</h2>
-  <p>Paints one test picture (a mountain lake at dawn) with your first installed model, and records how Nightmare answers so Chatbox can do the same.</p>
+  <p>Paints six small test pictures of a red car on a beach, each sending the prompt a different way, to find the way Nightmare reads it. Takes about a minute.</p>
   <div class="row"><button type="button" id="run">Paint a test picture</button></div>
-  <img id="pic" alt="The test picture from Nightmare" hidden>
+  <div id="pics"></div>
   <div id="status" role="status"></div>
   <ol id="out"></ol>
 </main>
@@ -131,6 +134,9 @@ function log(path, body, res, method = 'POST') {
   $('#out').appendChild(li);
   report += `\n${method} ${path}${method === 'GET' ? '' : ' ' + JSON.stringify(body)} → ${res.status} ${res.type}\n${res.text}\n`;
 }
+// Step 2: /run paints and answers at once ({run, results:[{url}]}). Find which field carries the prompt:
+// each try paints with a prompt nothing like the flow's own, and the pictures are shown side by side.
+const PROMPT = 'a red sports car parked on a sunny beach, blue sea, palm trees, bright daylight';
 $('#run').addEventListener('click', async () => {
   const base = $('#addr').value.trim().replace(/\/+$/, '');
   const tok = $('#tok').value.trim();
@@ -138,70 +144,45 @@ $('#run').addEventListener('click', async () => {
   $('#run').disabled = true;
   $('#copy').disabled = true;
   $('#out').innerHTML = '';
-  $('#pic').hidden = true;
-  report = `Nightmare test picture (${base})\n`;
+  $('#pics').innerHTML = '';
+  report = `Nightmare prompt test v4 (${base})\n`;
   try {
-    let model = '';
-    try {
-      const m = await (await fetch(base + '/models', { headers: { Authorization: 'Bearer ' + tok } })).json();
-      model = m.models?.[0]?.id || '';
-    } catch {}
-    const prompt = 'a quiet mountain lake at dawn, mist over the water, pine trees, soft light, landscape painting';
-    // What /flows holds besides the recipes (saved flows have ids too).
-    const fl = await call(base, tok, '/flows', null, 'GET');
-    const fj = fl.json || {};
-    const lists = Object.entries(fj).filter(([, v]) => Array.isArray(v));
-    report += `\n/flows keys: ${Object.keys(fj).join(', ')}\n` + lists.map(([k, v]) => `${k}: ${v.map((x) => x?.id ?? x?.name ?? '?').join(', ')}`).join('\n') + '\n';
-    const saved = lists.filter(([k]) => k !== 'recipes').flatMap(([, v]) => v).find((x) => x?.id && /txt|text|t2i|generate/i.test(JSON.stringify(x)));
-    const flow = 'txt2img';
+    // The flow itself, if Nightmare describes it: its inputs name the prompt field.
+    for (const w of ['/flows/txt2img', '/flows?id=txt2img', '/flow/txt2img']) {
+      const res = await call(base, tok, w, null, 'GET');
+      log(w, null, res, 'GET');
+      if (res.status < 300) break;
+    }
     const tries = [
-      { flow },
-      { flow, prompt },
-      { flow, prompt, model },
-      { flow, inputs: { prompt, model } },
-      { flow, params: { prompt, model } },
-      ...(saved ? [{ flow: saved.id, prompt }] : []),
+      ['A', { flow: 'txt2img', prompt: PROMPT }],
+      ['B', { flow: 'txt2img', inputs: { prompt: PROMPT } }],
+      ['C', { flow: 'txt2img', params: { prompt: PROMPT } }],
+      ['D', { flow: 'txt2img', set: { prompt: PROMPT } }],
+      ['E', { flow: 'txt2img', values: { prompt: PROMPT } }],
+      ['F', { flow: 'txt2img', positive: PROMPT }],
     ];
-    let last;
-    for (const [k, body] of tries.entries()) {
-      $('#status').textContent = `Trying /run (${k + 1} of ${tries.length})… a picture may take a minute`;
-      last = await call(base, tok, '/run', body);
-      log('/run', body, last);
-      if (last.status < 300) break;
+    for (const [k, [tag, body]] of tries.entries()) {
+      $('#status').textContent = `Painting try ${tag} (${k + 1} of ${tries.length})…`;
+      const res = await call(base, tok, '/run', body);
+      log('/run', body, res);
+      report = report.replace(/\n(POST \/run [^\n]*)$/m, `\n[${tag}] $1`);
+      const url = res.json?.results?.find((x) => x.kind === 'image')?.url;
+      const fig = document.createElement('figure');
+      fig.innerHTML = '<figcaption></figcaption>';
+      fig.querySelector('figcaption').textContent = `${tag}: ${Object.keys(body).filter((x) => x !== 'flow').join(', ')}${res.json?.warnings?.length ? ' (warnings)' : ''}`;
+      if (url) {
+        const r = await fetch(base + url, { headers: { Authorization: 'Bearer ' + tok } });
+        if (r.ok) {
+          const img = document.createElement('img');
+          img.src = URL.createObjectURL(await r.blob());
+          img.alt = `Try ${tag}`;
+          fig.prepend(img);
+        }
+      } else fig.querySelector('figcaption').textContent += ' — no picture';
+      $('#pics').appendChild(fig);
     }
-    let pic = last.pic || findPic(last.json);
-    const j = last.json || {};
-    const key = ID_KEYS.find((k) => j[k] != null) || Object.keys(j).find((k) => /id$/i.test(k) && typeof j[k] !== 'object');
-    if (!pic && last.status < 300 && key) {
-      const id = encodeURIComponent(j[key]);
-      // Find where the result lives, then ask it until the picture is there (up to 4 minutes).
-      const where = [`/results/${id}`, `/results?${key}=${id}`, `/results?id=${id}`, `/run/${id}`, `/jobs/${id}`];
-      let found = '';
-      for (const w of where) {
-        const res = await call(base, tok, w, null, 'GET');
-        log(w, null, res, 'GET');
-        pic = res.pic || findPic(res.json);
-        if (res.status < 300) { found = w; break; }
-      }
-      for (let t = 0; !pic && found && t < 80; t++) {
-        $('#status').textContent = `Painting… asking for the result (${t * 3}s)`;
-        await new Promise((r) => setTimeout(r, 3000));
-        const res = await call(base, tok, found, null, 'GET');
-        pic = res.pic || findPic(res.json);
-        if (t < 2 || pic || res.status >= 400 || /done|error|fail|finish/i.test(res.text)) log(found, null, res, 'GET');
-        if (res.status >= 400 || (!pic && /error|fail/i.test(res.text))) break;
-      }
-    }
-    // A path inside Nightmare: fetch it with the token.
-    if (pic && pic.startsWith('/')) {
-      const r = await fetch(base + pic, { headers: { Authorization: 'Bearer ' + tok } });
-      const blob = await r.blob();
-      report += `\nGET ${pic} → ${r.status} ${blob.type} (${blob.size} bytes)\n`;
-      pic = r.ok && blob.type.startsWith('image/') ? URL.createObjectURL(blob) : null;
-    }
-    if (pic) ($('#pic').src = pic.startsWith('data:') || pic.startsWith('blob:') || pic.startsWith('http') ? pic : 'data:image/png;base64,' + pic), ($('#pic').hidden = false);
-    report += `\nPicture found: ${pic ? 'yes' : 'no'}\n`;
-    $('#status').textContent = (pic ? 'Painted. ' : 'Done (no picture seen yet). ') + 'Tap Copy results and paste them to Claude.';
+    report += '\nLook at the pictures: which letters show a red car on a beach?\n';
+    $('#status').textContent = 'Done. Which letters show a red car on a beach? Tap Copy results, paste them to Claude and say the letters.';
   } catch (err) {
     $('#status').textContent = 'Couldn’t reach Nightmare: ' + err.message;
   }
