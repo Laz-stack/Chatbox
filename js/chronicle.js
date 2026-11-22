@@ -113,7 +113,8 @@ async function readPart({ chat, cast, persona, conn, signal, a, b }) {
     ...factsBrief(chat),
     ...(cast.length > 1 ? { cast_ties_now: tiesBrief(chat, cast) } : {}),
     ...(advOn(chat) ? advBrief(chat) : {}),
-    ...(mapOn(chat) ? mapBrief(chat) : {}),
+    // Where the scene is: asked every time, so an empty map fills itself as the story names places.
+    ...(mapOn(chat) ? mapBrief(chat) : { places_known: [], place_at_start: '' }),
     ...(clockOn(chat) ? { story_time_at_start: `Day ${chat.clock.day}, ${hhmm(chat.clock.min)}, ${chat.clock.weather}` } : {}),
     story_part: transcript(chat, a, b, cast, persona),
   };
@@ -129,10 +130,10 @@ async function readPart({ chat, cast, persona, conn, signal, a, b }) {
       : '') +
     (cast.length > 1 ? tiesAsk(cast.map((p) => p.name)) : '') +
     (advOn(chat) ? advAsk(you) : '') +
-    (mapOn(chat) ? mapAsk() : '') +
+    mapAsk() +
     chaptersAsk(chat) +
     factsAsk(you);
-  const text = await helperComplete(conn, 'track', { system, messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: (cast.length > 1 ? 2000 : 1400) + (advOn(chat) ? 300 : 0) + (mapOn(chat) ? 80 : 0) + 360, temperature: 0.4, signal });
+  const text = await helperComplete(conn, 'track', { system, messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: (cast.length > 1 ? 2000 : 1400) + (advOn(chat) ? 300 : 0) + 80 + 360, temperature: 0.4, signal });
   return extractJson(text);
 }
 
@@ -165,7 +166,8 @@ function apply(chat, res, cast, a, b, out, whole = false) {
   if (facts.length) (out.facts ||= []).push(...facts.map((f) => ({ id: f.id, text: f.text })));
   const lastId = chat.messages[b - 1]?.id;
   // World map: where the scene is now (the last part read wins).
-  if (mapOn(chat) && !whole && res?.place) {
+  if (!whole && res?.place?.name) {
+    chat.map ||= { places: [], here: null, removed: [], suggest: [] };
     const m = applyMap(chat, res.place);
     if (m) out.place = m;
   }

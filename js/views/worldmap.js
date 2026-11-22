@@ -2,7 +2,7 @@
 // nothing overlaps), a card for the chosen place with Travel here, and an edit mode (rename,
 // scene, remove, add).
 import { S, getChat, saveChat, character, interchange, isInterchangeId, connectionFor, personaFor } from '../store.js';
-import { MAX_PLACES, MAP_SCENES, mapOn, hereOf, loreFor, makeMap, addPlace, removePlace, travel, normName } from '../worldmap.js';
+import { MAX_PLACES, MAP_SCENES, mapOn, hereOf, loreFor, makeMap, findHere, addPlace, removePlace, travel, normName } from '../worldmap.js';
 import { soundsLikeName } from '../scenepicker.js';
 import { esc, inkOn, agoLong } from '../util.js';
 import { readLine } from '../chronicle.js';
@@ -74,9 +74,12 @@ export async function worldMapView(id) {
       ${cur ? `<p class="wm-at">You are here</p>` : `<button type="button" class="wm-go press" data-go="${p.id}">${icon('route', 17)}Travel here</button>`}</div>`;
   };
 
+  // The helper reads the recent chat and puts where you are on the map.
+  const findBtn = () => `<button type="button" class="wm-make press" id="wmFind">${icon('route', 17)}<span>Find where we are</span></button>`;
   const empty = () => {
     const lore = loreFor(ids).length;
     return `<div class="wm-empty"><b>No map yet</b><p>${lore ? `Chatbox can pick the places out of this story’s lorebook (${lore} entr${lore === 1 ? 'y' : 'ies'}).` : 'Places will appear as the story moves around. You can also add them yourself.'}</p>
+      ${chat.messages.length > 1 ? findBtn() : ''}
       ${lore ? `<button type="button" class="wm-make press" id="wmMake">${icon('spark', 17)}Make the map from the lorebook</button>` : ''}
       <button type="button" class="ad-add press" data-addp>${icon('plus', 17)}Add a place</button></div>`;
   };
@@ -89,7 +92,7 @@ export async function worldMapView(id) {
       <button type="button" class="ad-add press" data-addp ${chat.map.places.length >= MAX_PLACES ? `disabled aria-describedby="wmFull"` : ''}>${icon('plus', 17)}Add a place</button>
       ${chat.map.places.length >= MAX_PLACES ? `<p class="ad-none" id="wmFull">The map holds ${MAX_PLACES} places. Remove one to add another.${chat.map.suggest?.length ? ` The story also found: ${esc(chat.map.suggest.join(', '))}.` : ''}</p>` : ''}</section>`;
 
-  const body = () => (editing && mapOn(chat) ? editRows() : mapOn(chat) ? `${plate()}${map()}<div id="wmCard">${card()}</div>` : empty());
+  const body = () => (editing && mapOn(chat) ? editRows() : mapOn(chat) ? `${plate()}${map()}<div id="wmCard">${card()}</div><div class="wm-find">${findBtn()}</div>` : empty());
   const editBtn = () => (mapOn(chat) ? `<button type="button" class="wm-edit press" id="wmEdit" aria-pressed="${editing}">${editing ? 'Done' : 'Edit'}</button>` : '<span class="ibtn-spacer"></span>');
 
   const html = `<div class="screen no-tab cr-screen">
@@ -154,6 +157,28 @@ export async function worldMapView(id) {
         }
         if (sc) return sceneSheet(chat.map.places.find((x) => x.id === sc.dataset.scene));
         if (e.target.closest('[data-addp]')) return addSheet();
+        if (e.target.closest('#wmFind')) {
+          if (busy) return;
+          busy = true;
+          const b = $('#wmFind');
+          b.classList.add('busy');
+          b.disabled = true;
+          b.querySelector('span').textContent = 'Reading the chat…';
+          try {
+            const r = await findHere({ chat, cast, persona: personaFor(chat), conn: connectionFor(room) });
+            await saveChat(chat);
+            picked = r.here?.id || picked;
+            toast(r.here ? `You’re at ${r.here.name}${r.added > 1 ? ` · ${r.added} places added` : ''}` : r.added ? `${r.added} place${r.added === 1 ? '' : 's'} added; where you are now isn’t clear yet.` : 'The chat doesn’t say where you are yet. Add the place yourself, or try again later.');
+            dispatchEvent(new HashChangeEvent('hashchange'));
+          } catch (err) {
+            toast(err.message || 'Could not read the chat.', { kind: 'err' });
+            b.classList.remove('busy');
+            b.disabled = false;
+            b.querySelector('span').textContent = 'Find where we are';
+          }
+          busy = false;
+          return;
+        }
         if (e.target.closest('#wmMake')) {
           if (busy) return;
           busy = true;

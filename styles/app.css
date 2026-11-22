@@ -2275,3 +2275,5 @@ html.dim.page-light.page-tex :is(.chat .log, .tx-prev) { background-image: none;
 @media (prefers-reduced-motion: reduce) { .kr-tog > i::after { transition: none; } }
 .kr-ov .scrim { background: rgba(0, 0, 0, .12); backdrop-filter: none; -webkit-backdrop-filter: none; }
 .kr-ov .sheet { max-height: 62dvh; }
+.wm-find { margin-top: 12px; }
+.wm-empty .wm-make + .wm-make { margin-top: 8px; }

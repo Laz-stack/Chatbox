@@ -1,7 +1,7 @@
 // World map (per chat): places from the lorebook and the story, shown as stations on a line.
 // Travelling to one leaves a divider in the log, tells the AI where the next scene starts, changes
 // the chat's background, and moves Story time on. Background tracking notes where the scene is.
-import { S } from './store.js';
+import { S, textOf } from './store.js';
 import { PROVIDERS } from './providers.js';
 import { extractJson } from './blueprint.js';
 import { helperComplete } from './helper.js';
@@ -20,6 +20,32 @@ export const findPlace = (chat, name) => (chat.map?.places || []).find((p) => no
 // The lorebook entries this chat can see.
 export function loreFor(ids) {
   return S.lore.filter((e) => e.on !== false && e.text?.trim() && !(S.settings.booksOff || []).includes(e.book || '') && (e.scope !== 'lines' || (e.lines || []).some((id) => ids.includes(id))));
+}
+
+// Find where we are now: the helper reads the recent chat (what the narrator or the characters say
+// about the place) and returns the current location plus other places named. Adds what's new.
+export async function findHere({ chat, cast, persona, conn, signal }) {
+  if (!conn || PROVIDERS[conn.provider]?.format === 'demo') throw new Error('Finding places needs an AI connection (Depot › Connections).');
+  const you = persona?.name?.trim() || 'the user';
+  const nameOf = (m) => (m.role === 'user' ? you : cast.find((p) => p.id === m.speaker)?.name || cast[0]?.name || 'Narrator');
+  const recent = chat.messages
+    .filter((m) => !m.error && !m.dir)
+    .slice(-14)
+    .map((m) => `${nameOf(m)}: ${str(textOf(m)).replace(/!\[[^\]]*\]\([^)]*\)/g, '').slice(0, 900)}`)
+    .join('\n\n');
+  const brief = { cast: cast.map((p) => p.name), user: you, places_known: (chat.map?.places || []).map((p) => p.name), story_so_far: str(chat.summary?.text).slice(0, 1200), recent_chat: recent };
+  const ask =
+    `From recent_chat, work out WHERE the scene is right now, as the narrator or the characters describe it, and which other real locations were named or visited (buildings, rooms, districts, streets, landmarks; not people, objects or factions). ` +
+    `Return {"here":{"name":"...","note":"..."},"places":[{"name":"...","note":"..."}]}. Use a name from places_known when it is the same place. name: 1 to 4 words. note: one sentence under 16 words about the place. places: at most 5, not including here. here: {} if it really can't be told.`;
+  const text = await helperComplete(conn, 'map', { system: 'You track locations in an interactive story. Reply with ONE JSON object and nothing else.', messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: 500, temperature: 0.2, signal });
+  const res = extractJson(text);
+  chat.map ||= { places: [], here: null, removed: [], suggest: [] };
+  let added = 0;
+  for (const p of Array.isArray(res?.places) ? res.places.slice(0, 5) : []) if (str(p?.name) && !findPlace(chat, p.name) && !chat.map.removed.includes(normName(p.name)) && addPlace(chat, { name: p.name, note: p.note, from: 'story' })) added++;
+  const before = chat.map.places.length;
+  const m = str(res?.here?.name) ? applyMap(chat, res.here) : null;
+  if (chat.map.places.length > before) added++;
+  return { here: hereOf(chat), added, moved: !!m };
 }
 
 // First pass: pick the places out of the lorebook.
@@ -96,7 +122,7 @@ export function untravel(chat, m) {
 // ---------- background tracking ----------
 export const mapBrief = (chat) => ({ places_known: chat.map.places.map((p) => p.name), place_at_start: hereOf(chat)?.name || '' });
 export const mapAsk = () =>
-  `\nMap: also return "place":{"name":"...","note":"..."}: where the scene is at the end of this part. Use a name from places_known when it is one of them; a new name only for a real new location (1 to 4 words, note under 16 words). "" if unclear.`;
+  `\nMap: also return "place":{"name":"...","note":"..."}: where the scene is at the end of this part, as the narrator or the characters say or show it (a tavern, a guild hall, a square, a room). Use a name from places_known when it is one of them; a new name only for a real new location (1 to 4 words, note under 16 words). "" if unclear.`;
 export function applyMap(chat, place) {
   const name = str(place?.name);
   if (!name) return null;
