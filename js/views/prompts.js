@@ -45,7 +45,7 @@ export function promptsView() {
       <ol class="stack-line">${steps
         .map(
           ([t, s, k], i) =>
-            `<li style="animation-delay:${0.1 + i * 0.06}s" class="${k === 'global' && !S.settings.globalOn ? 'off' : ''}" data-k="${k}">${bullet(String(i + 1), LAYER_COLORS[k][0], LAYER_COLORS[k][1], 36)}<div style="padding-top:3px"><div class="t" ${k === 'global' ? 'style="color:var(--yellow)"' : ''}>${t}</div><div class="s">${s}</div></div></li>`
+            `<li style="animation-delay:${0.1 + i * 0.06}s" class="${k === 'global' && !S.settings.globalOn ? 'off' : ''}" data-k="${k}">${bullet(String(i + 1), 'var(--plate2)', 'var(--cream)', 36)}<div style="padding-top:3px"><div class="t" ${k === 'global' ? 'style="color:var(--yellow)"' : ''}>${t}</div><div class="s">${s}</div></div></li>`
         )
         .join('')}</ol></div>
     </div>

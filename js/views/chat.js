@@ -1932,8 +1932,42 @@ export async function chatView(id, focusId = null) {
     }
 
     // ---------- header menu ----------
-    root.querySelector('#moreBtn').addEventListener('click', (e) =>
-      openMenu(e.currentTarget, [
+    function chatMenu(items) {
+      const quick = items.filter((x) => x && x.quick);
+      let html = `<h2 class="vh">Chat options</h2><div class="cm-quick">${quick.map((x) => `<button type="button" class="cm-q press" data-k="${items.indexOf(x)}">${icon(x.icon, 22)}<b>${esc(x.label)}</b></button>`).join('')}</div>`;
+      let open = false;
+      for (const [k, x] of items.entries()) {
+        if (!x || x.quick) continue;
+        if (typeof x === 'string') {
+          if (open) html += '</div>';
+          html += `<h3 class="cm-h">${esc(x.slice(1))}</h3><div class="cm-grp">`;
+          open = true;
+        } else html += `<button type="button" class="cm-row press${x.danger ? ' danger' : ''}" data-k="${k}"><span class="cm-ic">${icon(x.icon, 17)}</span><span class="cm-tx"><b>${esc(x.label)}</b>${x.sub ? `<small>${esc(x.sub)}</small>` : ''}</span>${x.danger ? '' : `<span class="cm-ch">${icon('chev', 15)}</span>`}</button>`;
+      }
+      if (open) html += '</div>';
+      openSheet({
+        label: 'Chat options',
+        html: `<div class="cm">${html}</div>`,
+        onMount(s, close) {
+          s.addEventListener('click', (e) => {
+            const b = e.target.closest('[data-k]');
+            if (!b) return;
+            close();
+            setTimeout(() => items[+b.dataset.k].on(), 60);
+          });
+          setTimeout(() => s.querySelector('.cm-q')?.focus({ preventScroll: true }), 80);
+        },
+      });
+    }
+    // The ⋯ menu (Station board): a sheet from the bottom with the four most-used actions as big buttons,
+    // then everything else in labelled groups. '#Name' starts a group; quick items become the buttons.
+    root.querySelector('#moreBtn').addEventListener('click', () =>
+      chatMenu([
+        { quick: true, icon: 'search', label: 'Find', on: openFind },
+        { quick: true, icon: 'pin', label: (chat.marks || []).length ? `Bookmarks ${chat.marks.length}` : 'Bookmarks', on: bookmarksSheet },
+        { quick: true, icon: 'bell', label: 'Sound', on: () => soundSheet({ chat, ch, ix, onChange: updSnd }) },
+        { quick: true, icon: 'sliders', label: 'Text', on: textSheet },
+        '#This chat',
         ...(ix
           ? [
               { icon: 'card', label: scene ? 'Edit carriage' : 'Edit interchange', on: () => (location.hash = `#/interchange/${ix.id}`) },
@@ -1941,44 +1975,35 @@ export async function chatView(id, focusId = null) {
             ]
           : [{ icon: 'card', label: 'Edit character', on: () => (location.hash = `#/edit/${ch.id}`) }]),
         ...(ix ? [] : [{ icon: 'image', label: 'Window', on: sceneSheet }]),
-        // The window and its station sign can be hidden for this chat, for more room to read.
         { icon: chat.winOff ? 'eye' : 'eyeoff', label: chat.winOff ? 'Show the station sign' : 'Hide the station sign', on: async () => {
           chat.winOff = !chat.winOff;
           root.querySelector('#win').hidden = chat.winOff;
           await saveChat(chat);
           toast(chat.winOff ? 'Station sign hidden. ⋯ › Show the station sign brings it back.' : 'Station sign shown');
         } },
-        { icon: 'layers', label: scenesOf(chat).length ? `Scenes (${scenesOf(chat).length})` : 'Scenes', on: () => scenesSheet(chat, { title: ch.name, onWindow: () => setScene() }) },
-        { icon: 'spark', label: 'Memory and notes', on: () => (location.hash = `#/memory/${encodeURIComponent(chat.id)}`) },
-        { icon: 'layers', label: 'Final prompt', on: () => (location.hash = `#/final/${encodeURIComponent(chat.id)}`) },
-        ...(ix ? [] : [{ icon: 'download', label: 'Export card (PNG)', on: async () => download(await exportCardPng(ch), slug(ch.name) + '.card.png') }]),
-        { icon: 'clock', label: clockOn(chat) ? `Story time: ${longText(chat.clock)}` : 'Story time', on: openClock },
-        ...(sttSupported && ttsSupported ? [{ icon: 'mic', label: 'Voice mode (hands-free)', on: () => vmStart() }] : []),
-        ...(ttsSupported ? [{ icon: 'speaker', label: ix ? 'Voices' : `${ch.name}’s voice`, on: voicesMenu }] : []),
-        { icon: 'route', label: hereOf(chat) ? `World map: ${hereOf(chat).name}` : 'World map', on: () => (location.hash = `#/map/${encodeURIComponent(chat.id)}`) },
-        { icon: 'dice', label: advOn(chat) ? 'Quests and items' : 'Adventure mode', on: () => (location.hash = `#/adventure/${encodeURIComponent(chat.id)}`) },
-        { icon: 'route', label: 'Route map', on: () => (location.hash = `#/route/${encodeURIComponent(chat.id)}`) },
+        { icon: 'user', label: `You: ${me().name?.trim() || 'You'}`, on: personaSheet },
+        ...(ix ? [] : [{ icon: 'plus', label: 'New chat', on: newChatHere }, { icon: 'file', label: `Chats with ${ch.name}`, on: chatsSheet }]),
+        '#Story',
+        { icon: 'route', label: 'Route map', sub: 'The stations so far', on: () => (location.hash = `#/route/${encodeURIComponent(chat.id)}`) },
         { icon: 'book', label: 'Chapters', on: chaptersSheet },
         ...(chat.messages.filter((m) => !m.dir).length >= 2 ? [{ icon: 'restart', label: 'Recap so far', on: () => showRecap(true) }] : []),
         { icon: 'heart', label: 'Bonds', on: () => (location.hash = `#/bonds/${encodeURIComponent(chat.id)}`) },
-        { icon: 'book', label: 'Diary', on: () => (location.hash = `#/diary/${encodeURIComponent(chat.id)}`) },
-        '-',
-        { icon: 'user', label: `You: ${me().name?.trim() || 'You'}`, on: personaSheet },
+        { icon: 'edit', label: 'Diary', on: () => (location.hash = `#/diary/${encodeURIComponent(chat.id)}`) },
+        { icon: 'home', label: hereOf(chat) ? `World map: ${hereOf(chat).name}` : 'World map', sub: 'The places in this story', on: () => (location.hash = `#/map/${encodeURIComponent(chat.id)}`) },
+        { icon: 'dice', label: advOn(chat) ? 'Quests and items' : 'Adventure mode', on: () => (location.hash = `#/adventure/${encodeURIComponent(chat.id)}`) },
+        { icon: 'clock', label: clockOn(chat) ? `Story time: ${longText(chat.clock)}` : 'Story time', on: openClock },
+        '#Memory',
+        { icon: 'spark', label: 'Memory and notes', on: () => (location.hash = `#/memory/${encodeURIComponent(chat.id)}`) },
+        { icon: 'layers', label: scenesOf(chat).length ? `Scenes (${scenesOf(chat).length})` : 'Scenes', on: () => scenesSheet(chat, { title: ch.name, onWindow: () => setScene() }) },
+        { icon: 'receipt', label: 'Final prompt', on: () => (location.hash = `#/final/${encodeURIComponent(chat.id)}`) },
+        ...(ttsSupported ? ['#Voice', ...(sttSupported ? [{ icon: 'mic', label: 'Voice mode (hands-free)', on: () => vmStart() }] : []), { icon: 'speaker', label: ix ? 'Voices' : `${ch.name}’s voice`, on: voicesMenu }] : []),
+        '#Replies',
+        { icon: 'asterisk', label: 'Reply style', on: () => replyStyleSheet(() => updateTokens()) },
+        '#Share',
         { icon: 'download', label: 'Export as story', on: exportStory },
-        { icon: 'search', label: 'Find in this chat', on: openFind },
-        { icon: 'pin', label: `Bookmarks${(chat.marks || []).length ? ` (${chat.marks.length})` : ''}`, on: bookmarksSheet },
-        { icon: 'speaker', label: 'Sound', on: () => soundSheet({ chat, ch, ix, onChange: updSnd }) },
-        { icon: 'sliders', label: 'Reading text', on: textSheet },
-        { icon: 'talk', label: 'Reply style', on: () => replyStyleSheet(() => updateTokens()) },
-        '-',
-        ...(ix
-          ? []
-          : [
-              { icon: 'plus', label: 'New chat', on: newChatHere },
-              { icon: 'file', label: `Chats with ${ch.name}`, on: chatsSheet },
-            ]),
+        ...(ix ? [] : [{ icon: 'box', label: 'Export card (PNG)', on: async () => download(await exportCardPng(ch), slug(ch.name) + '.card.png') }]),
         ...(!ix ? [] : [{
-          icon: 'restart',
+          icon: 'trash',
           label: 'Start a new chat',
           danger: true,
           on: async () => {

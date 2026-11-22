@@ -1,5 +1,5 @@
 // The Build sheet, opened from the red stop in the bar: lay down a new line (character)
-// or start an Interchange (a group chat where 2–3 lines meet).
+// or start an Interchange (2 or 3 lines take turns, or up to 5 share one scene).
 import { S } from './store.js';
 import { openSheet, icon, arrow, avatarBullet } from './ui.js';
 import { startImport } from './views/import.js';
@@ -19,7 +19,7 @@ export function openBuildSheet() {
       <a class="bopt red press" href="#/edit/new" data-close><span class="bo-ic">${icon('track', 30)}</span><span class="bo-tx"><b>New line</b><span>Create a character</span></span>${arrow(28, 'currentColor')}</a>
       ${
         canMeet
-          ? `<a class="bopt yel press" href="#/interchange/new" data-close>${meet}<span class="bo-tx"><b>Interchange</b><span>A group chat where 2–5 lines meet</span></span>${arrow(28, 'currentColor')}</a>`
+          ? `<a class="bopt yel press" href="#/interchange/new" data-close>${meet}<span class="bo-tx"><b>Interchange</b><span>A group chat: 2 or 3 lines take turns, or up to 5 in one scene</span></span>${arrow(28, 'currentColor')}</a>`
           : `<div class="bopt off">${meet}<span class="bo-tx"><b>Interchange</b><span>Make at least two lines first, then let them meet.</span></span></div>`
       }
       <label class="bopt imp press"><span class="bo-ic">${icon('image', 28)}</span><span class="bo-tx"><b>From a picture</b><span>The AI writes a character from an image</span></span>${arrow(28, 'currentColor')}<input type="file" class="vh" id="buildPic" accept="image/*"></label>

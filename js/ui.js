@@ -117,7 +117,7 @@ export const area = (id, label, value, { right = '', ph = '', rows = 5, attrs = 
 
 export const group = (...rows) => `<div class="group">${rows.join('')}</div>`;
 
-export function row({ ic, title, sub = '', href, id, right, bc = 'var(--yellow)', fc = '#0A0A0A', lead }) {
+export function row({ ic, title, sub = '', href, id, right, bc = 'var(--plate2)', fc = 'var(--cream)', lead }) {
   const L = lead || `<span class="row-ic" style="background:${bc};color:${fc}">${icon(ic, 19)}</span>`;
   const T = `<span class="row-tx"><span class="row-t">${title}</span>${sub ? `<span class="row-s">${sub}</span>` : ''}</span>`;
   const R = right ?? `<span class="row-chev">${icon('chev', 18)}</span>`;

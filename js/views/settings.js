@@ -80,22 +80,22 @@ export function settingsView() {
     <a class="rider press" href="#/persona" style="margin-top:16px">${avatarTile(S.persona, 62, { radius: 18, rot: -3 })}<span class="nm">${esc(S.persona.name || 'You')}<small>${S.personas.length > 1 ? `Default · ${S.personas.length} personas` : 'Your persona in every chat'}</small></span>${bullet(arrow(20, '#ECECEC'), '#0A0A0A', '#ECECEC', 44)}</a>
     <h2 class="sec">AI</h2>
     ${group(
-      row({ href: '#/connections', ic: 'link', title: 'Connections', sub: conn ? `${esc(conn.name)} · ${esc(conn.provider === 'demo' ? 'demo replies' : conn.model)}` : 'None yet' }),
-      row({ href: '#/lore', ic: 'book', bc: 'var(--orange)', fc: '#0A0A0A', title: 'Lorebook', sub: !S.lore.length ? 'World info for your chats' : S.lore.length === 1 ? `1 entry · ${S.lore[0].on ? 'on' : 'off'}` : `${S.lore.filter((e) => e.on).length} of ${S.lore.length} entries on` }),
-      row({ href: '#/prompts', ic: 'file', bc: 'var(--red)', fc: '#fff', title: 'Prompts', sub: `Global ${S.settings.globalOn ? 'on' : 'off'} · ${S.connections.filter((c) => c.prompt?.trim()).length} connection prompt${S.connections.filter((c) => c.prompt?.trim()).length === 1 ? '' : 's'}` })
+      row({ href: '#/connections', ic: 'link', bc: 'var(--plate2)', fc: 'var(--cream)', title: 'Connections', sub: conn ? `${esc(conn.name)} · ${esc(conn.provider === 'demo' ? 'demo replies' : conn.model)}` : 'None yet' }),
+      row({ href: '#/lore', ic: 'book', bc: 'var(--plate2)', fc: 'var(--cream)', title: 'Lorebook', sub: !S.lore.length ? 'World info for your chats' : S.lore.length === 1 ? `1 entry · ${S.lore[0].on ? 'on' : 'off'}` : `${S.lore.filter((e) => e.on).length} of ${S.lore.length} entries on` }),
+      row({ href: '#/prompts', ic: 'file', bc: 'var(--plate2)', fc: 'var(--cream)', title: 'Prompts', sub: `Global ${S.settings.globalOn ? 'on' : 'off'} · ${S.connections.filter((c) => c.prompt?.trim()).length} connection prompt${S.connections.filter((c) => c.prompt?.trim()).length === 1 ? '' : 's'}` })
     )}
     <h2 class="sec">Chat</h2>
     ${group(
-      row({ href: '#/text', ic: 'edit', bc: 'var(--cream)', fc: '#0A0A0A', title: 'Reading text', sub: textSummary() }),
+      row({ href: '#/text', ic: 'edit', bc: 'var(--plate2)', fc: 'var(--cream)', title: 'Reading text', sub: textSummary() }),
       row({ id: 'dimRow', ic: 'eye', bc: 'var(--plate2)', fc: 'var(--cream)', title: 'Dim mode', sub: `<span id="dimSub">${dimSummary()}</span>` }),
-      row({ id: 'styleRow', ic: 'sliders', bc: 'var(--pink)', fc: '#0A0A0A', title: 'Reply style', sub: `<span id="styleSub">${styleSummary()}</span>` }),
-      row({ id: 'soundRow', ic: 'speaker', bc: 'var(--lilac)', fc: '#0A0A0A', title: 'Sound', sub: 'Ambience, music and signal sounds' }),
-      `<div class="row">${'<span class="row-ic" style="background:var(--green2);color:#0A0A0A">' + icon('spark', 19) + '</span>'}<span class="row-tx"><span class="row-t">Auto-summary</span><span class="row-s">Condense long chats so they keep fitting</span></span>${sw('tAuto', S.settings.autoSummary, 'Auto-summary')}</div>`,
-      `<div class="row"><span class="row-ic" style="background:var(--orange);color:#0A0A0A">${icon('bell', 19)}</span><span class="row-tx"><span class="row-t">While you were away</span><span class="row-s">After a long gap, characters sometimes leave you a message (uses one reply)</span></span>${sw('tAway', S.settings.awayNotes !== false, 'While you were away')}</div>`,
-      `<div class="row"><span class="row-ic" style="background:var(--orange);color:#0A0A0A">${icon('restart', 19)}</span><span class="row-tx"><span class="row-t">Recap when you come back</span><span class="row-s">After six hours or more away, a short “Previously” at the end of the chat (uses one small Helper request)</span></span>${sw('tRecap', S.settings.recaps !== false, 'Recap when you come back')}</div>`,
-      `<div class="row"><span class="row-ic" style="background:var(--lilac);color:#0A0A0A">${icon('layers', 19)}</span><span class="row-tx"><span class="row-t">Token counter</span><span class="row-s">Show the estimate in the chat header</span></span>${sw('tCounter', S.settings.showCounter, 'Token counter')}</div>`,
+      row({ id: 'styleRow', ic: 'sliders', bc: 'var(--plate2)', fc: 'var(--cream)', title: 'Reply style', sub: `<span id="styleSub">${styleSummary()}</span>` }),
+      row({ id: 'soundRow', ic: 'speaker', bc: 'var(--plate2)', fc: 'var(--cream)', title: 'Sound', sub: 'Ambience, music and signal sounds' }),
+      `<div class="row">${'<span class="row-ic" style="background:var(--plate2);color:var(--cream)">' + icon('spark', 19) + '</span>'}<span class="row-tx"><span class="row-t">Auto-summary</span><span class="row-s">Condense long chats so they keep fitting</span></span>${sw('tAuto', S.settings.autoSummary, 'Auto-summary')}</div>`,
+      `<div class="row"><span class="row-ic" style="background:var(--plate2);color:var(--cream)">${icon('bell', 19)}</span><span class="row-tx"><span class="row-t">While you were away</span><span class="row-s">After a long gap, characters sometimes leave you a message (uses one reply)</span></span>${sw('tAway', S.settings.awayNotes !== false, 'While you were away')}</div>`,
+      `<div class="row"><span class="row-ic" style="background:var(--plate2);color:var(--cream)">${icon('restart', 19)}</span><span class="row-tx"><span class="row-t">Recap when you come back</span><span class="row-s">After six hours or more away, a short “Previously” at the end of the chat (uses one small Helper request)</span></span>${sw('tRecap', S.settings.recaps !== false, 'Recap when you come back')}</div>`,
+      `<div class="row"><span class="row-ic" style="background:var(--plate2);color:var(--cream)">${icon('layers', 19)}</span><span class="row-tx"><span class="row-t">Token counter</span><span class="row-s">Show the estimate in the chat header</span></span>${sw('tCounter', S.settings.showCounter, 'Token counter')}</div>`,
       ttsSupported
-        ? `<div class="row"><span class="row-ic" style="background:var(--pink);color:#0A0A0A">${icon('speaker', 19)}</span><span class="row-tx"><span class="row-t">Read replies aloud</span><span class="row-s">Uses your browser’s voices</span></span>${sw('tRead', S.settings.readAloud, 'Read replies aloud')}</div>` +
+        ? `<div class="row"><span class="row-ic" style="background:var(--plate2);color:var(--cream)">${icon('speaker', 19)}</span><span class="row-tx"><span class="row-t">Read replies aloud</span><span class="row-s">Uses your browser’s voices</span></span>${sw('tRead', S.settings.readAloud, 'Read replies aloud')}</div>` +
             row({ id: 'voiceRow', ic: 'user', bc: 'var(--plate2)', fc: 'var(--cream)', title: 'Voice', sub: `<span id="voiceName">${esc(v?.name || 'Browser default')}</span>` })
         : ''
     )}
@@ -104,8 +104,7 @@ export function settingsView() {
       `<div class="row"><span class="row-ic" style="background:var(--plate2);color:var(--cream)">${icon('shield', 19)}</span><span class="row-tx"><span class="row-t">18+ content</span><span class="row-s" id="matureSub">${matureSub()}</span></span>${sw('tAdult', S.settings.mature, '18+ content')}</div>`
     )}
     <h2 class="sec">Data</h2>
-    ${group(row({ href: '#/scenes', ic: 'layers', bc: 'var(--plate2)', fc: 'var(--cream)', title: 'Scenes', sub: (() => { const n = sceneCount(); return n ? `${n} painted ${n === 1 ? 'scene' : 'scenes'}, kept from every chat` : 'Every scene you paint is kept here'; })() }))}
-    ${group(row({ href: '#/sync', ic: 'refresh', bc: 'var(--cream)', fc: '#0A0A0A', title: 'Sync', sub: esc(syncSummary()) }), row({ href: '#/backup', ic: 'box', bc: 'var(--blue)', fc: '#fff', title: 'Backup and cards', sub: S.settings.lastBackup ? `Last backup ${new Date(S.settings.lastBackup).toLocaleDateString()}` : 'No backup yet' }))}
+    ${group(row({ href: '#/scenes', ic: 'layers', bc: 'var(--plate2)', fc: 'var(--cream)', title: 'Scenes', sub: (() => { const n = sceneCount(); return n ? `${n} painted ${n === 1 ? 'scene' : 'scenes'}, kept from every chat` : 'Every scene you paint is kept here'; })() }), row({ href: '#/sync', ic: 'refresh', bc: 'var(--plate2)', fc: 'var(--cream)', title: 'Sync', sub: esc(syncSummary()) }), row({ href: '#/backup', ic: 'box', bc: 'var(--plate2)', fc: 'var(--cream)', title: 'Backup and cards', sub: S.settings.lastBackup ? `Last backup ${new Date(S.settings.lastBackup).toLocaleDateString()}` : 'No backup yet' }))}
     <div class="note" style="margin-top:18px">${icon('shield', 18)}<span>${isPersistent() ? (S.settings.sync?.connected ? 'Saved in this browser and synced to your own Google Drive. Nothing goes to a server of ours.' : 'Everything is saved in this browser only. Nothing goes to a server of ours.') : 'This browser is blocking storage (private mode?), so changes will be lost when you close the tab.'}</span></div>
     <p class="credits">Faces: Open Peeps by Pablo Stanley (CC0). Icons: Phosphor (MIT). Platform train: OpenMoji high-speed train, recoloured (CC BY-SA 4.0).</p>
   </div>${tabbar('settings')}`;
@@ -270,8 +269,8 @@ export function backupView() {
         <label class="drop" id="drop">${bullet(arrow(18, '#0A0A0A', -45), '#FDCD15', '#0A0A0A', 40)}<b>Drop a backup file here</b><span class="pill">Choose file</span><input type="file" accept=".json,application/json" id="restoreIn" class="vh"></label></div>
       <div><div class="hrow"><h2 class="h">Character cards</h2></div>
         ${group(
-          `<label class="row press" style="cursor:pointer"><span class="row-ic" style="background:var(--yellow);color:#0A0A0A">${icon('upload', 19)}</span><span class="row-tx"><span class="row-t">Import a card</span><span class="row-s">PNG or JSON from other sites</span></span><span class="row-chev">${icon('chev', 18)}</span><input type="file" accept=".zip,.png,.json,application/zip,image/png,application/json" id="cardIn" class="vh" multiple></label>`,
-          row({ id: 'exportCards', ic: 'download', bc: 'var(--cream)', title: 'Export all cards', sub: 'Every character in one JSON file' })
+          `<label class="row press" style="cursor:pointer"><span class="row-ic" style="background:var(--plate2);color:var(--cream)">${icon('upload', 19)}</span><span class="row-tx"><span class="row-t">Import a card</span><span class="row-s">PNG or JSON from other sites</span></span><span class="row-chev">${icon('chev', 18)}</span><input type="file" accept=".zip,.png,.json,application/zip,image/png,application/json" id="cardIn" class="vh" multiple></label>`,
+          row({ id: 'exportCards', ic: 'download', bc: 'var(--plate2)', fc: 'var(--cream)', title: 'Export all cards', sub: 'Every character in one JSON file' })
         )}
         <p class="fhint">To export one character as a PNG card, open it and use the export button.</p>
       </div>

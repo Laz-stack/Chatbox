@@ -1,4 +1,4 @@
-// Create or edit an Interchange: pick 2–3 lines to meet in one chat, set the scene.
+// Create or edit an Interchange: 2 or 3 lines take turns, or up to 5 share one scene.
 import { S as store, interchange, saveInterchange, deleteInterchange, getChat, saveChat, newChat } from '../store.js';
 import { uid, esc, inkOn, resizeImage } from '../util.js';
 import { topbar, avatarBullet, field, area, icon, arrow, toast, confirmSheet, toggleRow, bindSwitch, groupAvatar } from '../ui.js';
