@@ -1,6 +1,6 @@
 // Depot › Reading text: size, font and colours for chat messages, with live previews of both layouts.
 import { S, saveSettings } from '../store.js';
-import { SIZES, FONTS, WEIGHTS, DIALOGUE, NARRATION, BUBBLES, MY_BUBBLES, LAYOUTS, WIDTHS, ALIGNS, TRACKS, PARAS, SIDES, DEFAULT_TEXT, textPrefs, applyText } from '../textstyle.js';
+import { PAGES, SIZES, FONTS, WEIGHTS, DIALOGUE, NARRATION, BUBBLES, MY_BUBBLES, LAYOUTS, WIDTHS, ALIGNS, TRACKS, PARAS, SIDES, DEFAULT_TEXT, textPrefs, applyText } from '../textstyle.js';
 import { esc, formatMessage } from '../util.js';
 import { topbar, title2, icon, openSheet, toggleRow, bindSwitch } from '../ui.js';
 
@@ -29,6 +29,14 @@ const swatches = (name, list, cur) =>
   `<div class="tx-sw" role="radiogroup" aria-label="${name} colour">${Object.entries(list)
     .map(([k, c]) => `<button type="button" class="press${k === 'line' ? ' line' : ''}" role="radio" aria-checked="${cur === k}" data-${name}="${k}" aria-label="${esc(c.label)}" title="${esc(c.label)}" style="--c:${c.dark}"><i></i><span>${esc(c.label)}</span></button>`)
     .join('')}</div>`;
+
+// Page colour: a chip of each page with "Aa" in its text colour, and a line about the chosen one.
+const pages = (t) => {
+  const cur = PAGES[t.page] ? t.page : 'original';
+  return `<p class="tx-lbl">Page colour <span>behind the story</span></p><div class="tx-page" role="radiogroup" aria-label="Page colour">${Object.entries(PAGES)
+    .map(([k, p]) => `<button type="button" class="press" role="radio" aria-checked="${cur === k}" data-page="${k}"><i aria-hidden="true" style="--c:${p.pg};--t:${p.body || '#ECECEC'}">Aa</i>${esc(p.label)}</button>`)
+    .join('')}</div><p class="tx-page-note" aria-live="polite">${esc(PAGES[cur].note)}</p>`;
+};
 
 // Bubble colours: each swatch is a small bubble in that colour, with an "Aa" in its text colour.
 const bubbles = (name, list, cur, label) =>
@@ -62,11 +70,12 @@ const shapeRows = (t, all = true) =>
 // Mark the chosen option in a group (the page and the quick sheet both use this).
 function bindPrefs(root, after = () => {}) {
   root.addEventListener('click', async (e) => {
-    const b = e.target.closest('[data-size],[data-font],[data-dialogue],[data-narration],[data-bubble],[data-me],[data-weight],[data-layout],[data-width],[data-align],[data-track],[data-para],[data-side]');
+    const b = e.target.closest('[data-page],[data-size],[data-font],[data-dialogue],[data-narration],[data-bubble],[data-me],[data-weight],[data-layout],[data-width],[data-align],[data-track],[data-para],[data-side]');
     if (!b) return;
-    const k = ['size', 'font', 'dialogue', 'narration', 'bubble', 'me', 'weight', 'layout', 'width', 'align', 'track', 'para', 'side'].find((x) => b.dataset[x] != null);
+    const k = ['page', 'size', 'font', 'dialogue', 'narration', 'bubble', 'me', 'weight', 'layout', 'width', 'align', 'track', 'para', 'side'].find((x) => b.dataset[x] != null);
     await setPref(k, b.dataset[k]);
     b.parentElement.querySelectorAll('[role=radio]').forEach((x) => x.setAttribute('aria-checked', x === b));
+    if (k === 'page') b.parentElement.nextElementSibling.textContent = PAGES[b.dataset.page]?.note || '';
     after();
   });
 }
@@ -85,6 +94,7 @@ export function textView() {
     </div>
     <p class="tx-lbl">Chat layout <span>one-on-one chats; group chats are always Story</span></p>${layoutRow(t)}
     <p class="tx-lbl">Size</p>${sizeRow(t)}
+    ${pages(t)}
     <p class="tx-lbl">Font</p>${fontGrid(t)}
     ${shapeRows(t)}
     ${bubbleRows(t)}
@@ -116,7 +126,7 @@ export function textSheet() {
   const t = textPrefs();
   openSheet({
     label: 'Text size',
-    html: `<h2 class="sheet-title">Text</h2><p class="tx-lbl" style="margin-top:0">Chat layout</p>${layoutRow(t)}<p class="tx-lbl">Size</p>${sizeRow(t)}<p class="tx-lbl">Font</p>${fontGrid(t)}${bubbleRows(t)}<p class="tx-lbl">Speech colour</p>${swatches('dialogue', DIALOGUE, t.dialogue)}${shapeRows(t, false)}
+    html: `<h2 class="sheet-title">Text</h2>${pages(t).replace('class="tx-lbl"', 'class="tx-lbl" style="margin-top:0"')}<p class="tx-lbl">Chat layout</p>${layoutRow(t)}<p class="tx-lbl">Size</p>${sizeRow(t)}<p class="tx-lbl">Font</p>${fontGrid(t)}${bubbleRows(t)}<p class="tx-lbl">Speech colour</p>${swatches('dialogue', DIALOGUE, t.dialogue)}${shapeRows(t, false)}
       <a class="dashed press" href="#/text" data-close style="margin-top:14px">${icon('sliders', 20)}More text options</a>`,
     onMount(s, close) {
       // Switching layout redraws the chat underneath.
