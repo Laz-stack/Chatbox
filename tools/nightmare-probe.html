@@ -108,12 +108,12 @@ function shrinkJson(v, d = 0) {
   return v;
 }
 function findPic(v) {
-  if (typeof v === 'string') return /^data:image|^https?:\/\/.+\.(png|jpe?g|webp)/i.test(v) || (v.length > 2000 && /^[A-Za-z0-9+/=]+$/.test(v.slice(0, 200))) ? v : null;
+  if (typeof v === 'string') return /^data:image|^(https?:\/\/|\/).+\.(png|jpe?g|webp)(\?|$)/i.test(v) || (v.length > 2000 && /^[A-Za-z0-9+/=]+$/.test(v.slice(0, 200))) ? v : null;
   if (v && typeof v === 'object') for (const x of Object.values(v)) { const f = findPic(x); if (f) return f; }
   return null;
 }
-async function call(base, tok, path, body) {
-  const r = await fetch(base + path, { method: 'POST', headers: { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+async function call(base, tok, path, body, method = 'POST') {
+  const r = await fetch(base + path, method === 'GET' ? { headers: { Authorization: 'Bearer ' + tok } } : { method, headers: { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const type = r.headers.get('content-type') || '';
   if (type.startsWith('image/')) { const blob = await r.blob(); return { status: r.status, type, pic: URL.createObjectURL(blob), text: `(${type} picture, ${blob.size} bytes)` }; }
   const text = (await r.text()).split(tok).join('[token]');
@@ -121,15 +121,15 @@ async function call(base, tok, path, body) {
   try { json = JSON.parse(text); } catch {}
   return { status: r.status, type, json, text: json ? JSON.stringify(shrinkJson(json)) : text.slice(0, 1500) };
 }
-function log(path, body, res) {
+function log(path, body, res, method = 'POST') {
   const li = document.createElement('li');
   if (res.status >= 200 && res.status < 300) li.className = 'hit';
   li.innerHTML = '<span class="code"></span><b></b><pre></pre>';
   li.querySelector('.code').textContent = res.status;
-  li.querySelector('b').textContent = 'POST ' + path + ' ' + JSON.stringify(body);
+  li.querySelector('b').textContent = method + ' ' + path + (method === 'GET' ? '' : ' ' + JSON.stringify(body));
   li.querySelector('pre').textContent = res.text;
   $('#out').appendChild(li);
-  report += `\nPOST ${path} ${JSON.stringify(body)} → ${res.status} ${res.type}\n${res.text}\n`;
+  report += `\n${method} ${path}${method === 'GET' ? '' : ' ' + JSON.stringify(body)} → ${res.status} ${res.type}\n${res.text}\n`;
 }
 $('#run').addEventListener('click', async () => {
   const base = $('#addr').value.trim().replace(/\/+$/, '');
@@ -147,29 +147,57 @@ $('#run').addEventListener('click', async () => {
       model = m.models?.[0]?.id || '';
     } catch {}
     const prompt = 'a quiet mountain lake at dawn, mist over the water, pine trees, soft light, landscape painting';
-    const steps = [
-      ['/run', {}],
-      ['/results', {}],
-      ['/run', { recipe: 'txt2img' }],
-      ['/run', { recipe: 'txt2img', model, prompt }],
+    // What /flows holds besides the recipes (saved flows have ids too).
+    const fl = await call(base, tok, '/flows', null, 'GET');
+    const fj = fl.json || {};
+    const lists = Object.entries(fj).filter(([, v]) => Array.isArray(v));
+    report += `\n/flows keys: ${Object.keys(fj).join(', ')}\n` + lists.map(([k, v]) => `${k}: ${v.map((x) => x?.id ?? x?.name ?? '?').join(', ')}`).join('\n') + '\n';
+    const saved = lists.filter(([k]) => k !== 'recipes').flatMap(([, v]) => v).find((x) => x?.id && /txt|text|t2i|generate/i.test(JSON.stringify(x)));
+    const flow = 'txt2img';
+    const tries = [
+      { flow },
+      { flow, prompt },
+      { flow, prompt, model },
+      { flow, inputs: { prompt, model } },
+      { flow, params: { prompt, model } },
+      ...(saved ? [{ flow: saved.id, prompt }] : []),
     ];
     let last;
-    for (const [k, [path, body]] of steps.entries()) {
-      $('#status').textContent = `Step ${k + 1} of ${steps.length}…`;
-      last = await call(base, tok, path, body);
-      log(path, body, last);
+    for (const [k, body] of tries.entries()) {
+      $('#status').textContent = `Trying /run (${k + 1} of ${tries.length})… a picture may take a minute`;
+      last = await call(base, tok, '/run', body);
+      log('/run', body, last);
+      if (last.status < 300) break;
     }
-    // A job id in the answer: ask /results for it until a picture comes back (up to 4 minutes).
     let pic = last.pic || findPic(last.json);
     const j = last.json || {};
     const key = ID_KEYS.find((k) => j[k] != null) || Object.keys(j).find((k) => /id$/i.test(k) && typeof j[k] !== 'object');
-    for (let t = 0; !pic && key && t < 80; t++) {
-      $('#status').textContent = `Painting… asking for the result (${t * 3}s)`;
-      await new Promise((r) => setTimeout(r, 3000));
-      const res = await call(base, tok, '/results', { [key]: j[key] });
-      if (t < 3 || res.pic || findPic(res.json) || res.status >= 400) log('/results', { [key]: j[key] }, res);
-      pic = res.pic || findPic(res.json);
-      if (res.status >= 400) break;
+    if (!pic && last.status < 300 && key) {
+      const id = encodeURIComponent(j[key]);
+      // Find where the result lives, then ask it until the picture is there (up to 4 minutes).
+      const where = [`/results/${id}`, `/results?${key}=${id}`, `/results?id=${id}`, `/run/${id}`, `/jobs/${id}`];
+      let found = '';
+      for (const w of where) {
+        const res = await call(base, tok, w, null, 'GET');
+        log(w, null, res, 'GET');
+        pic = res.pic || findPic(res.json);
+        if (res.status < 300) { found = w; break; }
+      }
+      for (let t = 0; !pic && found && t < 80; t++) {
+        $('#status').textContent = `Painting… asking for the result (${t * 3}s)`;
+        await new Promise((r) => setTimeout(r, 3000));
+        const res = await call(base, tok, found, null, 'GET');
+        pic = res.pic || findPic(res.json);
+        if (t < 2 || pic || res.status >= 400 || /done|error|fail|finish/i.test(res.text)) log(found, null, res, 'GET');
+        if (res.status >= 400 || (!pic && /error|fail/i.test(res.text))) break;
+      }
+    }
+    // A path inside Nightmare: fetch it with the token.
+    if (pic && pic.startsWith('/')) {
+      const r = await fetch(base + pic, { headers: { Authorization: 'Bearer ' + tok } });
+      const blob = await r.blob();
+      report += `\nGET ${pic} → ${r.status} ${blob.type} (${blob.size} bytes)\n`;
+      pic = r.ok && blob.type.startsWith('image/') ? URL.createObjectURL(blob) : null;
     }
     if (pic) ($('#pic').src = pic.startsWith('data:') || pic.startsWith('blob:') || pic.startsWith('http') ? pic : 'data:image/png;base64,' + pic), ($('#pic').hidden = false);
     report += `\nPicture found: ${pic ? 'yes' : 'no'}\n`;
