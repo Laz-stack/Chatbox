@@ -105,12 +105,17 @@ export async function squareOf(url, size = 512) {
 }
 
 // Paint: returns the picture record { id, key, prompt, caption, style, at }.
-export async function paint({ chat, cast, m, persona, textConn, style, mood, signal, onPrompt }) {
+export async function paint({ chat, cast, m, persona, textConn, style, mood, signal, onPrompt, review }) {
   const pc = picConn();
   if (!pc) throw new Error('Set up Pictures first (Connections › Pictures).');
   const raw = await describe({ chat, cast, m, persona, conn: textConn, mood, signal });
-  const [prompt, cap] = raw.split('\n§');
+  let [prompt, cap] = raw.split('\n§');
   if (!prompt?.trim()) throw new Error('The scene couldn’t be described. Try again.'); // nothing is billed for the picture
+  // Read and edit it first (Show the prompt first): nothing is billed until Paint it.
+  if (review) {
+    prompt = await review(prompt);
+    if (!prompt) throw new DOMException('Not painted', 'AbortError');
+  }
   onPrompt?.(prompt);
   const st = STYLES[style] || STYLES.painterly;
   const full = `${st.words}. ${prompt}. Wide landscape composition. No text, captions, logos or watermarks.`;

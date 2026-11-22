@@ -1096,7 +1096,7 @@ export async function chatView(id, focusId = null) {
         const res = await chronicle({ chat, cast: ix ? ix.people : [ch], persona: me(), conn, settings: S.settings });
         if (res.changes.length || res.stations.length || res.time || res.ties || res.adv || res.place || res.chapter || res.facts) target.chron = { bonds: res.changes, stations: res.stations.map((s) => s.title), ...(res.chapter ? { chapter: res.chapter } : {}), ...(res.facts ? { facts: res.facts } : {}), ...(res.time ? { time: res.time } : {}), ...(res.ties ? { ties: res.ties } : {}), ...(res.adv ? { adv: res.adv } : {}), ...(res.place ? { place: res.place } : {}) };
         if (res.place) setScene();
-        if (res.stations.length && chat.picAuto && picConn() && (!isNm() || nmPrefs().token.trim()) && !destroyed) runPaint(target, chat.picStyle || picPrefs().style);
+        if (res.stations.length && chat.picAuto && picConn() && (!isNm() || nmPrefs().token.trim()) && !destroyed) runPaint(target, chat.picStyle || picPrefs().style, { auto: true });
         await saveChat(chat, false);
         const i = chat.messages.indexOf(target);
         if (!destroyed && target.chron && i >= 0) {
@@ -1832,7 +1832,7 @@ export async function chatView(id, focusId = null) {
           <p class="sheet-p">${pc ? `Paints this moment with ${esc(who)}’s look${hereOf(chat) ? `, ${esc(hereOf(chat).name)}` : ''}${clockOn(chat) ? `, ${esc(partOfDay(chat.clock.min))}` : ''}. ${isDemoPics(pc) ? 'Demo pictures are free placeholders.' : `One picture, billed by ${esc(providerName(pc))}.`} Or paint it yourself on Perchance: Chatbox writes the scene, you pick the style there and add the picture. (The style here is for Paint it.)` : `Chatbox writes the prompt for this moment with ${esc(who)}’s look; you pick the art style on Perchance (free, in a new tab), paint it and add the picture. Or set up an image model under Connections › Pictures.`}</p>
           <p class="nm-lbl">Mood</p><div class="nm-chips" role="radiogroup" aria-label="Mood">${MOODS.map(([k, t]) => `<button type="button" class="press" role="radio" aria-checked="${picPrefs().mood === k}" data-pmood="${k}">${t}</button>`).join('')}</div>
           ${pc ? '<p class="nm-lbl">Style</p>' : ''}<div class="ck-chips" role="radiogroup" aria-label="Style"${pc ? '' : ' hidden'}>${Object.entries(STYLES).map(([k, s]) => `<button type="button" class="press" role="radio" aria-checked="${style === k}" data-style="${k}">${s.label}</button>`).join('')}</div>
-          ${pc ? `<div class="ck-tog">${toggleRow('picAuto', 'Paint each new station', 'A picture whenever the Route map gets a new station. Each one is billed.', !!chat.picAuto)}</div>` : ''}
+          ${pc ? `<div class="ck-tog">${toggleRow('picPrev', 'Show the prompt first', 'Read and edit it before it paints', !!picPrefs().preview)}</div><div class="ck-tog">${toggleRow('picAuto', 'Paint each new station', 'A picture whenever the Route map gets a new station. Each one is billed.', !!chat.picAuto)}</div>` : ''}
           <button type="button" class="pic-go press" id="picGo">${icon('image', 18)}${pc ? 'Paint it' : 'Paint on Perchance'}</button>
           <button type="button" class="pic-alt press" id="picAlt">${pc ? 'Paint on Perchance' : 'Set up Pictures'}</button>`,
         onMount(s, close) {
@@ -1851,6 +1851,8 @@ export async function chatView(id, focusId = null) {
           });
           const tog = s.querySelector('#picAuto');
           if (tog) bindSwitch(tog, async (on) => ((chat.picAuto = on), await saveChat(chat)));
+          const prev = s.querySelector('#picPrev');
+          if (prev) bindSwitch(prev, async (on) => ((S.settings.pictures = { ...picPrefs(), preview: on }), await saveSettings()));
           const go = async (perchance) => {
             close();
             chat.picStyle = style;
@@ -1862,9 +1864,30 @@ export async function chatView(id, focusId = null) {
         },
       });
     }
+    // Show the prompt first: the scene prompt in a box to change before it's painted. Resolves to the text, or null.
+    function editScenePrompt(text) {
+      const pc = picConn();
+      return new Promise((resolve) => {
+        let out = null;
+        openSheet({
+          label: 'The prompt',
+          html: `<h2 class="sheet-title">The prompt</h2><p class="sheet-p nm-p">Change anything, then paint.${isDemoPics(pc) ? '' : ` Nothing is billed by ${esc(providerName(pc))} until you tap Paint it.`}</p><textarea class="nm-ta" id="spTa" rows="8" aria-label="Prompt" data-autofocus>${esc(text)}</textarea><button type="button" class="pic-go press" id="spGo">${icon('image', 18)}Paint it</button><button type="button" class="pic-alt press" id="spX">Cancel</button>`,
+          onMount(s, close) {
+            s.querySelector('#spGo').addEventListener('click', () => {
+              const v = s.querySelector('#spTa').value.trim();
+              if (!v) return toast('The prompt can’t be empty.');
+              out = v;
+              close();
+            });
+            s.querySelector('#spX').addEventListener('click', () => close());
+          },
+          onClose: () => resolve(out),
+        });
+      });
+    }
     // The plate shows the scene being described line by line, like a departure board, then the picture.
-    async function runPaint(m, style) {
-      if (isNm()) return runNightmare(m, { auto: true });
+    async function runPaint(m, style, { auto = false } = {}) {
+      if (isNm()) return runNightmare(m, { auto });
       const el = log.querySelector(`.msg[data-id="${CSS.escape(m.id)}"] .msg-col`);
       if (!el) return;
       const ctlP = new AbortController();
@@ -1887,6 +1910,7 @@ export async function chatView(id, focusId = null) {
           style,
           mood: picPrefs().mood,
           signal: ctlP.signal,
+          review: picPrefs().preview && !auto ? (p) => (destroyed ? Promise.resolve(null) : editScenePrompt(p)) : null,
           onPrompt: (p) => {
             const words = p.toUpperCase().split(/\s+/);
             const lines = [];
