@@ -612,7 +612,8 @@ export function snapshot({ includeKeys = true } = {}) {
     app: 'chatbox',
     version: 1,
     exportedAt: new Date().toISOString(),
-    settings: S.settings,
+    // Nightmare's token unlocks the app on this phone: left out like API keys.
+    settings: includeKeys || !S.settings.nightmare ? S.settings : { ...S.settings, nightmare: { ...S.settings.nightmare, token: '' } },
     persona: S.persona,
     personas: S.personas,
     connections: S.connections.map((c) => (includeKeys ? c : { ...c, apiKey: '' })),
@@ -636,7 +637,9 @@ export async function restore(data) {
   if (!data || data.app !== 'chatbox') throw new Error('This file is not a Chatbox backup.');
   await db.clear();
   await db.set('seeded', true);
+  const nmLocal = S.settings.nightmare; // Nightmare's address and token belong to this phone
   S.settings = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };
+  if (nmLocal) S.settings.nightmare = nmLocal;
   S.persona = { ...S.persona, ...(data.persona || {}) };
   setupPersonas(data.personas);
   S.connections = data.connections || [];
