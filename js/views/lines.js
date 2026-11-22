@@ -29,13 +29,13 @@ const badge = (c) => (!c.avatarImage && (c.preset === 'initial' || !c.preset) ? 
 function lineRow(c) {
   const chat = latestChat(c.id);
   const n = chatsFor(c.id).filter((x) => x.messages.some((m) => m.role === 'user')).length;
-  const when = chat && chat.messages.some((m) => m.role === 'user') ? ago(chat.updatedAt) : 'new';
+  const when = chat && chat.messages.some((m) => m.role === 'user') ? (ago(chat.updatedAt) === 'now' ? 'just now' : ago(chat.updatedAt)) : 'not started';
   return `<a class="ix press" href="#/chat/${c.id}" style="${colorVars(c)}" aria-label="Chat with ${esc(c.name)}">${badge(c)}<span class="row-tx"><span class="row-t">${esc(c.name)}</span><span class="row-s">${esc(cleanTagline(c.tagline, c.name) || 'No tagline')}${n > 1 ? ` · ${n} chats` : ''}</span></span><span class="ix-t num">${when}</span></a>`;
 }
 
 function ixRow(ix) {
   const chat = latestChat(ix.id);
-  const when = chat && chat.messages.some((m) => m.role === 'user') ? ago(chat.updatedAt) : 'new';
+  const when = chat && chat.messages.some((m) => m.role === 'user') ? (ago(chat.updatedAt) === 'now' ? 'just now' : ago(chat.updatedAt)) : 'not started';
   return `<a class="ix ixg press" href="#/chat/${ix.id}" aria-label="Open ${esc(ix.title)}">${groupAvatar(ix, 44)}<span class="row-tx"><span class="row-t">${esc(ix.title)}</span><span class="row-s">${ix.mode === 'scene' ? 'Carriage' : 'Interchange'} · ${ix.people.map((p) => esc(p.name)).join(', ')}</span></span><span class="ix-t num">${when}</span></a>`;
 }
 
@@ -141,7 +141,7 @@ export function linesView(filter) {
     const groups = S.interchanges.map((x) => interchange(x.id)).filter(Boolean);
     const chars = sorted.filter((c) => !isNarrator(c));
     const narr = sorted.filter(isNarrator);
-    return section('Characters', chars.length, chars.map(lineRow).join('')) + section('One narrator', narr.length, narr.map(lineRow).join('')) + section('Interchanges', groups.length, groups.map(ixRow).join('')) + `<div class="index" style="margin-top:12px"><a class="ix ix-new press" href="#/edit/new">${`<span class="bullet ix-new-b" style="width:44px;height:44px">${icon('track', 22)}</span>`}<span class="row-tx"><span class="row-t">New line</span><span class="row-s">Create a character</span></span></a></div>`;
+    return section('Characters', chars.length, chars.map(lineRow).join('')) + section('One narrator', narr.length, `<p class="ln-note">Cards with several characters, played by one narrator who voices them all.</p>` + narr.map(lineRow).join('')) + section('Interchanges', groups.length, groups.map(ixRow).join('')) + `<div class="index" style="margin-top:12px"><a class="ix ix-new press" href="#/edit/new">${`<span class="bullet ix-new-b" style="width:44px;height:44px">${icon('track', 22)}</span>`}<span class="row-tx"><span class="row-t">New line</span><span class="row-s">Create a character</span></span></a></div>`;
   };
 
   const html = `<div class="screen">

@@ -74,6 +74,17 @@ document.addEventListener(
   },
   true
 );
+// On short screens the tab bar slides away while you scroll down a list and returns when you scroll up
+// (CSS only applies it below 700px tall).
+let lastY = 0;
+addEventListener('scroll', () => {
+  const y = scrollY;
+  if (Math.abs(y - lastY) < 6) return;
+  document.documentElement.classList.toggle('tb-away', y > lastY && y > 80);
+  lastY = y;
+}, { passive: true });
+addEventListener('hashchange', () => ((lastY = 0), document.documentElement.classList.remove('tb-away')));
+
 // The Platform hero's train hands over the point the chat should open from (its tunnel), after its run.
 document.addEventListener('chatbox:depart', (e) => (tap = { x: e.detail.x, y: e.detail.y, t: performance.now() }));
 const routeKind = (h) => (/^#\/chat\//.test(h) ? 'chat' : /^#?\/?$/.test(h) ? 'home' : /^#\/lines/.test(h) ? 'lines' : 'other');
@@ -118,6 +129,8 @@ async function render() {
   const view = await resolve(location.hash || '#/');
   if (my !== seq) return;
   if (!view) {
+    // A link to something that isn't here (a deleted chat, an old bookmark): say so, then go home.
+    if (location.hash && location.hash !== '#/' && location.hash !== '#') toast('That page isn’t here any more. Back to Platform.');
     location.replace('#/');
     return;
   }
