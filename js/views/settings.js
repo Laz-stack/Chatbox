@@ -1,6 +1,7 @@
 import { S, activeConnection, saveSettings, savePersona, personaById, newPersona, savePersonaEntry, setDefaultPersona, deletePersona, snapshot, restore, saveCharacter, newChat, saveChat, isPersistent } from '../store.js';
 import { syncSummary } from './sync.js';
 import { soundSheet } from './soundsheet.js';
+import { dimSheet, dimSummary } from '../dim.js';
 import { readCardFile, exportAllCardsJson } from '../cards.js';
 import { startImport } from './import.js';
 import { textSummary } from '../textstyle.js';
@@ -86,6 +87,7 @@ export function settingsView() {
     <h2 class="sec">Chat</h2>
     ${group(
       row({ href: '#/text', ic: 'edit', bc: 'var(--cream)', fc: '#0A0A0A', title: 'Reading text', sub: textSummary() }),
+      row({ id: 'dimRow', ic: 'eye', bc: 'var(--plate2)', fc: 'var(--cream)', title: 'Dim mode', sub: `<span id="dimSub">${dimSummary()}</span>` }),
       row({ id: 'styleRow', ic: 'sliders', bc: 'var(--pink)', fc: '#0A0A0A', title: 'Reply style', sub: `<span id="styleSub">${styleSummary()}</span>` }),
       row({ id: 'soundRow', ic: 'speaker', bc: 'var(--lilac)', fc: '#0A0A0A', title: 'Sound', sub: 'Ambience, music and signal sounds' }),
       `<div class="row">${'<span class="row-ic" style="background:var(--green2);color:#0A0A0A">' + icon('spark', 19) + '</span>'}<span class="row-tx"><span class="row-t">Auto-summary</span><span class="row-s">Condense long chats so they keep fitting</span></span>${sw('tAuto', S.settings.autoSummary, 'Auto-summary')}</div>`,
@@ -112,6 +114,7 @@ export function settingsView() {
     depth: 0,
     mount(root) {
       root.querySelector('#soundRow')?.addEventListener('click', () => soundSheet());
+      root.querySelector('#dimRow')?.addEventListener('click', () => dimSheet({ onChange: () => (root.querySelector('#dimSub').textContent = dimSummary()) }));
       root.querySelector('#styleRow')?.addEventListener('click', () => replyStyleSheet(() => (root.querySelector('#styleSub').textContent = styleSummary())));
       const tAdult = root.querySelector('#tAdult');
       bindSwitch(tAdult, async (on) => {
