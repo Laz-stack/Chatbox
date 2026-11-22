@@ -92,7 +92,7 @@ export const ibtn = (ic, label, { href, id, cls = '', attrs = '' } = {}) =>
     : `<button type="button" class="ibtn press ${cls}" ${id ? `id="${id}"` : ''} aria-label="${esc(label)}" ${attrs}>${icon(ic)}</button>`;
 
 export const topbar = ({ back = '#/', title = '', right = '', backIcon = 'back', backLabel = 'Back' } = {}) =>
-  `<div class="topbar">${ibtn(backIcon, backLabel, { href: back })}<span class="tb-title">${title}</span>${right || '<span class="ibtn-spacer"></span>'}</div>`;
+  `<div class="topbar">${ibtn(backIcon, backLabel, { href: back })}<h1 class="tb-title">${title}</h1>${right || '<span class="ibtn-spacer"></span>'}</div>`;
 
 export const sw = (id, on, label) =>
   `<button type="button" class="switch" role="switch" id="${id}" aria-checked="${on ? 'true' : 'false'}" aria-label="${esc(label)}"><span class="knob"></span></button>`;
@@ -117,7 +117,7 @@ export const area = (id, label, value, { right = '', ph = '', rows = 5, attrs = 
 
 export const group = (...rows) => `<div class="group">${rows.join('')}</div>`;
 
-export function row({ ic, title, sub = '', href, id, right, bc = 'var(--yellow)', fc = '#0A0A0A', lead }) {
+export function row({ ic, title, sub = '', href, id, right, bc = 'var(--plate2)', fc = 'var(--cream)', lead }) {
   const L = lead || `<span class="row-ic" style="background:${bc};color:${fc}">${icon(ic, 19)}</span>`;
   const T = `<span class="row-tx"><span class="row-t">${title}</span>${sub ? `<span class="row-s">${sub}</span>` : ''}</span>`;
   const R = right ?? `<span class="row-chev">${icon('chev', 18)}</span>`;
@@ -179,13 +179,26 @@ export function openSheet({ html, label = '', onMount, onClose }) {
   const prevFocus = document.activeElement;
   let closed = false;
   const onKey = (e) => {
-    if (e.key === 'Escape') close();
+    if (e.key === 'Escape') return close();
+    // Tab stays inside the sheet.
+    if (e.key === 'Tab' && openCount === myLevel) {
+      const f = [...sheet.querySelectorAll('button:not([disabled]), a[href], input:not([type=hidden]):not(.vh), select, textarea, summary, [tabindex]:not([tabindex="-1"]), label:has(input.vh)')].filter((x) => x.offsetParent !== null);
+      if (!f.length) return;
+      const i = f.indexOf(document.activeElement);
+      if (e.shiftKey && i <= 0) e.preventDefault(), f.at(-1).focus();
+      else if (!e.shiftKey && (i === f.length - 1 || i < 0)) e.preventDefault(), f[0].focus();
+    }
   };
+  // While a sheet is open the screen behind it can't be reached by keyboard or screen reader.
+  const behind = [document.getElementById('app'), ...document.querySelectorAll('.tabbar')].filter(Boolean);
+  behind.forEach((el) => (el.inert = true));
+  const myLevel = openCount;
   function close(v) {
     if (closed) return;
     closed = true;
     openClosers.delete(close);
     openCount--;
+    if (!openCount) behind.forEach((el) => (el.inert = false));
     document.removeEventListener('keydown', onKey);
     wrap.classList.add('closing');
     setTimeout(() => {
@@ -199,7 +212,13 @@ export function openSheet({ html, label = '', onMount, onClose }) {
   wrap.querySelector('.scrim').addEventListener('click', () => close());
   dragToDismiss(sheet, wrap.querySelector('.grab'), close);
   onMount?.(sheet, close);
-  requestAnimationFrame(() => sheet.querySelector('[data-autofocus]')?.focus({ preventScroll: true }));
+  // Focus moves into the sheet: a marked field, else its title (made focusable), else its first control.
+  requestAnimationFrame(() => {
+    if (closed || sheet.contains(document.activeElement)) return;
+    const t = sheet.querySelector('[data-autofocus]') || sheet.querySelector('.sheet-title, h2, h3');
+    if (t && !t.matches('[data-autofocus], button, a, input, textarea, select')) t.tabIndex = -1;
+    (t || sheet.querySelector('button, a[href], input, textarea'))?.focus({ preventScroll: true });
+  });
   return close;
 }
 
@@ -286,6 +305,8 @@ export function openMenu(anchor, items, { onClose, spotlight } = {}) {
     document.removeEventListener('keydown', onKey);
     wrap.classList.add('closing');
     setTimeout(() => wrap.remove(), 200);
+    // Focus goes back to what opened the menu (unless the chosen action moved it somewhere).
+    setTimeout(() => (!document.activeElement || document.activeElement === document.body) && anchor?.isConnected && anchor.focus?.({ preventScroll: true }), 120);
     onClose?.();
   }
   openClosers.add(close);

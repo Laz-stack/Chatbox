@@ -65,10 +65,11 @@ export function editorView(id) {
       ${blueprintHTML(d)}
       ${area('fFirst', 'First message', d.firstMessage, { rows: 3, ph: 'How they open the chat. *Actions* go in asterisks.' })}
       ${d.greetings?.length ? `<p class="fhint">Plus ${d.greetings.length} more opening${d.greetings.length === 1 ? '' : 's'} from the imported card. In a new chat, swipe the first message to pick one.</p>` : ''}
-      <div><div class="hrow"><h2 class="h">Expressions</h2><span class="small">Swap with the reply's mood</span></div><div id="exprRow">${exprRow()}</div></div>
+      <div id="exprSec"${d.avatarImage ? ' hidden' : ''}><div class="hrow"><h2 class="h">Expressions</h2><span class="small">Swap with the reply's mood</span></div><div id="exprRow">${exprRow()}</div></div>
+      <div class="hrow"><h2 class="h">In chat</h2><span class="small">Window, connection and voice</span></div>
       ${group(
         row({ id: 'sceneRow', lead: `<span class="row-ic" style="overflow:hidden;background:var(--plate2)" id="sceneThumb">${icon('image', 19)}</span>`, title: 'Window', sub: `<span id="sceneName">${winLabel(d)}</span>` }),
-        row({ id: 'connRow', ic: 'link', bc: 'var(--cream)', title: 'Connection', sub: `<span id="connName">${connLabel()}</span>` }),
+        row({ id: 'connRow', ic: 'link', bc: 'var(--plate2)', fc: 'var(--cream)', title: 'Connection', sub: `<span id="connName">${connLabel()}</span>` }),
         ...(ttsSupported ? [row({ id: 'voiceRowE', ic: 'speaker', bc: 'var(--plate2)', fc: 'var(--cream)', title: 'Voice', sub: `<span id="voiceNameE">${esc(voiceLabel())}</span>` })] : [])
       )}
       <div>${toggleRow('tGlobal', 'Use global prompt', 'Turn off to send only this card', d.useGlobal !== false)}${toggleRow('tStream', 'Stream replies', 'Words appear as they are written', d.stream !== false)}</div>
@@ -109,6 +110,7 @@ export function editorView(id) {
       $('#heroAv').innerHTML = avatarTile(d, 112, { radius: 30, rot: -3 });
       motion($('#heroAv').firstElementChild, [{ transform: 'scale(.9) rotate(-8deg)', opacity: 0.6 }, { transform: 'rotate(-3deg)', opacity: 1 }], { duration: 320, easing: 'cubic-bezier(.16,1,.3,1)' });
       $('#exprRow').innerHTML = exprRow();
+      $('#exprSec').hidden = !!d.avatarImage;
     };
     const count = () => {
       const n = $('#fPersona').value.length;

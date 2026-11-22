@@ -7,7 +7,8 @@ import { picPrefs, picConn, picModel, MODEL_HINTS, STYLES, isDemoPics, picStats,
 import { saveChat } from '../store.js';
 import { PROVIDERS as P2, generateImage } from '../providers.js';
 
-const LETTER_BG = { anthropic: '#FDCD15', openai: '#ECECEC', openrouter: '#B8ACFE', custom: '#2EAA67', demo: '#333333' };
+// Provider letters on a neutral plate (colour is kept for meaning: yellow = active).
+const LETTER_BG = { anthropic: '#333333', openai: '#333333', openrouter: '#333333', custom: '#333333', demo: '#333333' };
 
 export function connectionsView(open = null) {
   const active = activeConnection();
@@ -27,10 +28,10 @@ export function connectionsView(open = null) {
     <div class="stack" style="margin-top:18px;gap:12px" role="radiogroup" aria-label="Active connection">${S.connections.map(card).join('')}</div>
     <a class="dashed press" href="#/connection/new" style="margin-top:12px">${icon('plus', 20)}Add a connection</a>
     <h2 class="sec" style="margin-top:26px">Helper</h2>
-    <div class="group">${row({ id: 'helperRow', ic: 'spark', bc: 'var(--lilac)', fc: '#0A0A0A', title: 'Background jobs', sub: `<span id="helperSub">${helperSub()}</span>` })}</div>
+    <div class="group">${row({ id: 'helperRow', ic: 'spark', bc: 'var(--plate2)', fc: 'var(--cream)', title: 'Background jobs', sub: `<span id="helperSub">${helperSub()}</span>` })}</div>
     <p class="fhint">Runs Route map and Bonds, summaries, diaries, Lorebook Enhance, the character builder and card import. A cheaper, faster model here saves money; chats still reply with their own connection.</p>
     <h2 class="sec" style="margin-top:22px">Pictures</h2>
-    <div class="group">${row({ id: 'picRow', ic: 'image', bc: 'var(--pink)', fc: '#0A0A0A', title: 'Scene pictures', sub: `<span id="picSub">${picSub()}</span>` })}</div>
+    <div class="group">${row({ id: 'picRow', ic: 'image', bc: 'var(--plate2)', fc: 'var(--cream)', title: 'Scene pictures', sub: `<span id="picSub">${picSub()}</span>` })}</div>
     <p class="fhint">Paints moments from your chats (long-press a reply › Picture this). Needs an image model: OpenAI (gpt-image-1) or OpenRouter (an image model). Each picture is billed by that provider.</p>
     <div class="note" style="margin-top:18px">${icon('shield', 18)}<span>The active connection answers every chat unless a character picks its own. Keys stay in this browser and go only to the provider you choose.</span></div>
   </div>`;
