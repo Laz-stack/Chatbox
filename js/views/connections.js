@@ -7,7 +7,8 @@ import { picPrefs, picConn, picModel, MODEL_HINTS, STYLES, isDemoPics, picStats,
 import { saveChat } from '../store.js';
 import { PROVIDERS as P2, generateImage } from '../providers.js';
 
-const LETTER_BG = { anthropic: '#FDCD15', openai: '#ECECEC', openrouter: '#B8ACFE', custom: '#2EAA67', demo: '#333333' };
+// Provider letters on a neutral plate (colour is kept for meaning: yellow = active).
+const LETTER_BG = { anthropic: '#333333', openai: '#333333', openrouter: '#333333', custom: '#333333', demo: '#333333' };
 
 export function connectionsView(open = null) {
   const active = activeConnection();

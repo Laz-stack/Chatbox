@@ -2016,3 +2016,14 @@ html.bub-dark .msg.ai:not(.scene) .bubble .who, html.bub-dark .tx-prev-bubble .w
 .cm-row.danger { color: #FF8A80; }
 .cm-row.danger .cm-ic { background: rgba(231, 4, 4, .18); color: #FF8A80; }
 .cm-q:focus-visible, .cm-row:focus-visible { outline: 3px solid var(--yellow); outline-offset: -3px; }
+/* ---------- Accessibility ---------- */
+/* Page titles are headings now (topbar h1) */
+h1.tb-title { margin: 0; }
+/* Upload buttons hide their file input: show the focus ring on the label instead */
+label:has(> input.vh:focus-visible), label:has(input.vh:focus-visible) { outline: 3px solid var(--yellow); outline-offset: 3px; }
+/* Small buttons keep their look but get a 44px touch area */
+.composer .ibtn, .composer .send, .chips-f a, .acc-roll, .lockb, .nextbar button { position: relative; }
+.composer .ibtn::after, .composer .send::after, .acc-roll::after, .lockb::after { content: ''; position: absolute; inset: -3px; border-radius: 50%; }
+.chips-f a::after, .nextbar button::after { content: ''; position: absolute; inset: -4px 0; }
+.cm-row[aria-checked='true'] .switch::before { background: var(--yellow); }
+.cm-row[aria-checked='true'] .switch .knob { transform: translateX(28px); background: var(--bg); }

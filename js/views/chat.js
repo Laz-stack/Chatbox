@@ -152,7 +152,7 @@ export async function chatView(id, focusId = null) {
   const connText = (c) => (!c ? 'No connection' : c.provider === 'demo' ? 'Demo replies' : String(c.model || c.name).split('/').pop());
   // Short placeholder: a long name would wrap the composer onto several lines.
   const callName = scene ? 'the scene' : ix ? 'the interchange' : ch.name.length > 14 ? ch.name.split(/\s+/)[0].slice(0, 14) : ch.name;
-  const html = `<div class="chat" id="chat" style="--accent:${lineAccent(ch.line?.color)}">
+  const html = `<div class="chat" id="chat" style="--accent:${lineAccent(ch.line?.color)}"><h1 class="vh">${ix ? 'Group chat' : 'Chat with'}: ${esc(ch.name)}</h1>
     <header class="chat-head">
       ${ibtn('back', 'Back to home', { href: '#/' })}
       <button type="button" class="chat-who press" id="whoBtn" aria-haspopup="dialog" aria-label="${esc(ch.name)}: chat details">${ix ? groupAvatar(ix, 36) : avatarBullet(ch, 36, '', `head:${ch.id}`)}<span class="who-tx"><span class="who-n">${esc(ch.name)}</span><span class="who-s"><span class="who-meta" id="meta"><span class="dot${conn0?.provider === 'demo' ? ' demo' : ''}" id="connDot"></span><span class="ell" id="connName">${esc(connText(conn0))}</span><span id="tokPill" ${S.settings.showCounter ? '' : 'hidden'}>· <span class="num" id="tokN">…</span></span><span id="noteWrap" ${!ix && chat.notes.length ? '' : 'hidden'}>· ${icon('pin', 12)}<span id="noteN">${chat.notes.length}</span></span></span><span id="status" hidden></span></span></span></button>
@@ -1940,9 +1940,13 @@ export async function chatView(id, focusId = null) {
         if (!x || x.quick) continue;
         if (typeof x === 'string') {
           if (open) html += '</div>';
-          html += `<h3 class="cm-h">${esc(x.slice(1))}</h3><div class="cm-grp">`;
+          const hid = 'cmh' + k;
+          html += x === '#' ? `<div class="cm-grp" role="group" aria-label="Chat reset" style="margin-top:18px">` : `<h3 class="cm-h" id="${hid}">${esc(x.slice(1))}</h3><div class="cm-grp" role="group" aria-labelledby="${hid}">`;
           open = true;
-        } else html += `<button type="button" class="cm-row press${x.danger ? ' danger' : ''}" data-k="${k}"><span class="cm-ic">${icon(x.icon, 17)}</span><span class="cm-tx"><b>${esc(x.label)}</b>${x.sub ? `<small>${esc(x.sub)}</small>` : ''}</span>${x.danger ? '' : `<span class="cm-ch">${icon('chev', 15)}</span>`}</button>`;
+        } else {
+          const isToggle = typeof x.toggle === 'boolean';
+          html += `<button type="button" class="cm-row press${x.danger ? ' danger' : ''}" data-k="${k}"${isToggle ? ` role="switch" aria-checked="${x.toggle}"` : ''}><span class="cm-ic">${icon(x.icon, 17)}</span><span class="cm-tx"><b>${esc(x.label)}</b>${x.sub ? `<small>${esc(x.sub)}</small>` : ''}</span>${isToggle ? `<span class="switch" aria-hidden="true"><span class="knob"></span></span>` : x.danger ? '' : `<span class="cm-ch">${icon('chev', 15)}</span>`}</button>`;
+        }
       }
       if (open) html += '</div>';
       openSheet({
@@ -1975,7 +1979,7 @@ export async function chatView(id, focusId = null) {
             ]
           : [{ icon: 'card', label: 'Edit character', on: () => (location.hash = `#/edit/${ch.id}`) }]),
         ...(ix ? [] : [{ icon: 'image', label: 'Window', on: sceneSheet }]),
-        { icon: chat.winOff ? 'eye' : 'eyeoff', label: chat.winOff ? 'Show the station sign' : 'Hide the station sign', on: async () => {
+        { toggle: !chat.winOff, icon: chat.winOff ? 'eye' : 'eyeoff', label: 'Station sign', sub: chat.winOff ? 'Hidden in this chat' : 'Shown above the chat', on: async () => {
           chat.winOff = !chat.winOff;
           root.querySelector('#win').hidden = chat.winOff;
           await saveChat(chat);
@@ -2002,6 +2006,7 @@ export async function chatView(id, focusId = null) {
         '#Share',
         { icon: 'download', label: 'Export as story', on: exportStory },
         ...(ix ? [] : [{ icon: 'box', label: 'Export card (PNG)', on: async () => download(await exportCardPng(ch), slug(ch.name) + '.card.png') }]),
+        ...(ix ? ['#'] : []),
         ...(!ix ? [] : [{
           icon: 'trash',
           label: 'Start a new chat',
