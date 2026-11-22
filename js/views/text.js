@@ -1,8 +1,8 @@
 // Depot › Reading text: size, font and colours for chat messages, with live previews of both layouts.
 import { S, saveSettings } from '../store.js';
-import { SIZES, FONTS, WEIGHTS, DIALOGUE, NARRATION, BUBBLES, MY_BUBBLES, LAYOUTS, WIDTHS, ALIGNS, TRACKS, PARAS, DEFAULT_TEXT, textPrefs, applyText } from '../textstyle.js';
+import { SIZES, FONTS, WEIGHTS, DIALOGUE, NARRATION, BUBBLES, MY_BUBBLES, LAYOUTS, WIDTHS, ALIGNS, TRACKS, PARAS, SIDES, DEFAULT_TEXT, textPrefs, applyText } from '../textstyle.js';
 import { esc, formatMessage } from '../util.js';
-import { topbar, title2, icon, openSheet } from '../ui.js';
+import { topbar, title2, icon, openSheet, toggleRow, bindSwitch } from '../ui.js';
 
 const SAMPLE_SCENE = '*The first corpse coughs when Lumi Quill opens its chest.* “Remember what it looks like.” *She holds the vial out to you.*';
 const SAMPLE_BUBBLE = '*looks up from the counter* “Oh! You came back. Same window seat?”\n\n*slides a menu across before you can answer* “The soup is still warm, if you want it.”';
@@ -46,6 +46,7 @@ const PICS = {
   track: (k) => `<span class="tx-pic t" aria-hidden="true" style="letter-spacing:${{ tight: '-0.07em', normal: '0', wide: '0.22em' }[k]}">Aa</span>`,
   weight: (k) => `<span class="tx-pic t" aria-hidden="true" style="font-weight:${WEIGHTS[k].b + 100}">Aa</span>`,
   para: (k) => `<span class="tx-pic p ${k}" aria-hidden="true"><i></i><i></i><i></i><i></i></span>`,
+  side: (k) => `<span class="tx-pic s ${k}" aria-hidden="true"><i></i><i></i><i></i></span>`,
 };
 const seg = (name, label, list, cur) =>
   `<div class="tx-seg" role="radiogroup" aria-label="${label}">${Object.entries(list)
@@ -61,9 +62,9 @@ const shapeRows = (t, all = true) =>
 // Mark the chosen option in a group (the page and the quick sheet both use this).
 function bindPrefs(root, after = () => {}) {
   root.addEventListener('click', async (e) => {
-    const b = e.target.closest('[data-size],[data-font],[data-dialogue],[data-narration],[data-bubble],[data-me],[data-weight],[data-layout],[data-width],[data-align],[data-track],[data-para]');
+    const b = e.target.closest('[data-size],[data-font],[data-dialogue],[data-narration],[data-bubble],[data-me],[data-weight],[data-layout],[data-width],[data-align],[data-track],[data-para],[data-side]');
     if (!b) return;
-    const k = ['size', 'font', 'dialogue', 'narration', 'bubble', 'me', 'weight', 'layout', 'width', 'align', 'track', 'para'].find((x) => b.dataset[x] != null);
+    const k = ['size', 'font', 'dialogue', 'narration', 'bubble', 'me', 'weight', 'layout', 'width', 'align', 'track', 'para', 'side'].find((x) => b.dataset[x] != null);
     await setPref(k, b.dataset[k]);
     b.parentElement.querySelectorAll('[role=radio]').forEach((x) => x.setAttribute('aria-checked', x === b));
     after();
@@ -87,6 +88,9 @@ export function textView() {
     <p class="tx-lbl">Font</p>${fontGrid(t)}
     ${shapeRows(t)}
     ${bubbleRows(t)}
+    <p class="tx-lbl">Side margins <span>space at the left and right of the chat</span></p>${seg('side', 'Side margins', SIDES, t.side)}
+    <h2 class="sec tx-sec">Help with reading</h2>
+    <div class="group tx-help">${toggleRow('txChoices', 'Choices as cards', 'Numbered options at the end of a reply become cards. Tap one to pick it, then Send.', t.choices)}${toggleRow('txNames', 'Names in colour', 'The first time a character is named in a paragraph, the name wears their line colour.', t.names)}${toggleRow('txMarker', 'Place marker', 'Tap a paragraph of a reply to mark your place. Tap it again to clear it.', t.marker)}</div>
     <p class="tx-lbl">Speech colour</p>${swatches('dialogue', DIALOGUE, t.dialogue)}
     <p class="tx-lbl">Narration colour <span>on black; cream bubbles keep dark text</span></p>${swatches('narration', NARRATION, t.narration)}
     <button type="button" class="tx-reset press" id="txReset">${icon('restart', 16)}Reset to Signboard</button>
@@ -96,6 +100,7 @@ export function textView() {
     depth: 2,
     mount(root) {
       bindPrefs(root.querySelector('.screen') || root, () => (root.querySelector('.tx-prev').dataset.layout = textPrefs().layout));
+      for (const [id, k] of [['txChoices', 'choices'], ['txNames', 'names'], ['txMarker', 'marker']]) bindSwitch(root.querySelector('#' + id), (on) => setPref(k, on));
       root.querySelector('#txReset').addEventListener('click', async () => {
         S.settings.text = { ...DEFAULT_TEXT };
         applyText();

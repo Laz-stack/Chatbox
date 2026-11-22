@@ -1962,3 +1962,37 @@ html.dim { --white: #F3F0EA; }
 .dim-times label { flex: 1; display: flex; flex-direction: column; gap: 6px; font: 700 13px var(--font); color: var(--muted); }
 .dim-skip { margin: 10px 0 4px; }
 @media (prefers-reduced-motion: reduce) { .dim-layer { transition: none; } }
+
+/* ---------- Help with reading (js/reading.js) ---------- */
+/* Side margins: more room between the chat's text and the screen edges */
+.log { padding-left: max(14px, var(--read-side, 0px)); padding-right: max(14px, var(--read-side, 0px)); }
+.log.story { padding-left: max(16px, var(--read-side, 0px)); padding-right: max(16px, var(--read-side, 0px)); }
+/* Choices as cards: tinted from the text colour, so they suit any bubble or the story layout */
+.choices { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; text-align: left; hyphens: manual; }
+.choice { display: grid; grid-template-columns: 26px 1fr; gap: 3px 10px; align-items: start; width: 100%; padding: 11px 12px; border-radius: 14px; background: color-mix(in srgb, currentColor 9%, transparent); color: inherit; font: inherit; text-align: left; }
+.choice .c-n { grid-row: span 2; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; box-shadow: inset 0 0 0 2.5px currentColor; font: 900 13px/1 var(--font); color: inherit; }
+.choice .c-t { font-weight: 700; line-height: 1.4; }
+.choice .c-a { font-size: .87em; line-height: 1.45; opacity: .8; }
+.choice .act { font-style: normal; color: inherit; }
+.choice .say { color: inherit; }
+.choices.live .choice { cursor: pointer; }
+.choice[aria-pressed='true'] { background: var(--yellow); color: #0A0A0A; }
+.choice[aria-pressed='true'] .c-n { background: #0A0A0A; color: var(--yellow); box-shadow: none; }
+.choice[aria-pressed='true'] .who { color: #0A0A0A !important; text-decoration: underline; text-underline-offset: 2px; }
+.choice:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
+.c-send { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 48px; margin-top: 8px; padding: 0 12px 0 16px; border-radius: 16px; background: var(--red); color: #fff; font: 800 15px/1 var(--font); animation: popIn .25s var(--out) both; }
+.c-send .arrow { flex: none; }
+/* Names in colour: lighter on dark grounds, darker in light bubbles */
+.who { color: var(--nl); font-weight: 700; white-space: nowrap; }
+.msg.ai:not(.scene) .bubble .who, .tx-prev-bubble .who { color: var(--nd); }
+html.bub-dark .msg.ai:not(.scene) .bubble .who, html.bub-dark .tx-prev-bubble .who { color: var(--nl); }
+/* Place marker: a soft band behind the paragraph you tapped */
+.para.here { background: color-mix(in srgb, currentColor 14%, transparent); border-radius: 5px; box-decoration-break: clone; -webkit-box-decoration-break: clone; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 14%, transparent); transition: background .25s ease; }
+@media (prefers-reduced-motion: reduce) { .c-send { animation: none; } }
+.tx-pic.s { align-items: center; }
+.tx-pic.s i { opacity: .7; width: 100%; }
+.tx-pic.s.roomy i { width: 70%; }
+.tx-pic.s.wide i { width: 46%; }
+.tx-sec { margin-top: 26px; }
+.tx-help { margin-bottom: 8px; padding: 4px 0; }
+.tx-help .trow { padding: 10px 14px; }

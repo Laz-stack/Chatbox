@@ -15,6 +15,7 @@ import { sttSupported, listen, speakParts, stopParts } from '../voice.js';
 import { voiceSheet } from './voicesheet.js';
 import { STYLES, picConn, picPrefs, providerName, paint, picSrc, altOf, squareOf, isDemoPics, gcPictures, keepScene, scenesOf, removeScene } from '../pictures.js';
 import { scenesSheet } from './scenes.js';
+import { parseChoices, choicesHTML, colourNames, wrapParas } from '../reading.js';
 import { esc, uid, formatMessage, markProse, fmtNum, estimateTokens, inkOn, ago, plain, detectMood, copyText, download, slug, reducedMotion, motion, lineAccent, EASE_OUT } from '../util.js';
 import { avatarTile } from '../avatar.js';
 import { windowSheet as openWindowSheet, pale } from '../scenepicker.js';
@@ -224,14 +225,27 @@ export async function chatView(id, focusId = null) {
     const proseOn = () => (S.settings.replyStyle?.format || 'asterisks') === 'asterisks';
     const showAi = (t) => (proseOn() ? markProse(t) : t);
     const fillS = (t, who) => named(t, who || (ix ? ix.people[0] : ch), 'you', me());
+    // Reading text › Help with reading: names in colour and paragraphs that can be marked (AI text only).
+    const castAll = () => (ix ? [...ix.people, ...(chat.passengers || []).filter((p) => p.line)] : [ch]);
+    const enhance = (html) => {
+      const t = textPrefs();
+      let h = html;
+      if (t.names) h = colourNames(h, castAll());
+      if (t.marker) h = wrapParas(h);
+      return h;
+    };
+    // The trailing numbered options of a reply, as cards (null when off or there are none).
+    let streamingId = null; // a reply being rewritten: no cards until it's done
+    const choicesOf = (m) => (textPrefs().choices && m.role === 'assistant' && !m.dir && m.id !== streamingId ? parseChoices(textOf(m)) : null);
+    const isLive = (i) => i === chat.messages.length - 1;
     // One block's markup; data-k lets the streamer update a block in place instead of rebuilding it.
     function blockHTML(r, text, { by = false, save = false } = {}) {
-      if (r.kind === 'narr') return `<p class="scn-narr" data-k="narr">${formatMessage(showAi(fillS(text)))}</p>`;
+      if (r.kind === 'narr') return `<p class="scn-narr" data-k="narr">${enhance(formatMessage(showAi(fillS(text))))}</p>`;
       if (r.kind === 'passenger')
-        return `<div class="scn-b pass" data-k="p:${esc(r.name.toLowerCase())}"><span class="scn-tag">${esc(r.name)}</span><div class="scn-t">${formatMessage(showAi(fillS(text)))}</div>${save ? `<button type="button" class="scn-save press" data-pass="${esc(r.name)}">${icon('plus', 14)}Save as a line</button>` : ''}</div>`;
+        return `<div class="scn-b pass" data-k="p:${esc(r.name.toLowerCase())}"><span class="scn-tag">${esc(r.name)}</span><div class="scn-t">${enhance(formatMessage(showAi(fillS(text))))}</div>${save ? `<button type="button" class="scn-save press" data-pass="${esc(r.name)}">${icon('plus', 14)}Save as a line</button>` : ''}</div>`;
       const who = r.kind === 'you' ? youWho() : r.who;
       const col = who.line?.color || '#2EAA67';
-      return `<div class="scn-b${r.kind === 'you' ? ' you' : ''}" data-k="${r.kind === 'you' ? 'you' : 'l:' + who.id}" style="--c:${col};--ink:${inkOn(col)}"><span class="scn-tag">${avatarBullet(who, 20)}${esc(r.kind === 'you' ? 'You' : who.name)}${by ? '<small>· you wrote</small>' : ''}</span><div class="scn-t">${formatMessage(r.kind === 'you' || by ? fillS(text, r.who) : showAi(fillS(text, r.who)))}</div></div>`;
+      return `<div class="scn-b${r.kind === 'you' ? ' you' : ''}" data-k="${r.kind === 'you' ? 'you' : 'l:' + who.id}" style="--c:${col};--ink:${inkOn(col)}"><span class="scn-tag">${avatarBullet(who, 20)}${esc(r.kind === 'you' ? 'You' : who.name)}${by ? '<small>· you wrote</small>' : ''}</span><div class="scn-t">${r.kind === 'you' || by ? formatMessage(fillS(text, r.who)) : enhance(formatMessage(showAi(fillS(text, r.who))))}</div></div>`;
     }
     function sceneParts(text, m, streaming = false) {
       const shown = new Set();
@@ -286,7 +300,10 @@ export async function chatView(id, focusId = null) {
         if (m.dir) inner = dirSign(m);
         else if (m.as) inner = blockHTML({ kind: 'line', who: speakerOf({ speaker: m.as }) }, textOf(m), { by: true });
         else inner = blockHTML({ kind: 'you' }, textOf(m));
-      } else inner = sceneParts(textOf(m), m).join('');
+      } else {
+        const cx = choicesOf(m);
+        inner = sceneParts(cx ? cx.body : textOf(m), m).join('') + (cx ? choicesHTML(cx.items.map((x) => ({ ...x, text: fillS(x.text), after: fillS(x.after) })), isLive(i)) : '');
+      }
       return `<div class="msg scene ${m.role === 'user' ? 'mine' : 'ai'}${m.dir ? ' dir' : ''}${enter ? ' enter' : ''}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="msg-col">${m.role === 'assistant' ? thinkHTML(m) : ''}<div class="bubble scn">${ribbon(m)}${inner}${star}</div>${m.role === 'assistant' ? picsHTML(m) + chronHTML(m) + toolsHTML(m, i) : ''}</div></div>${m.role === 'user' ? rollHTML(m, enter) : movesHTML(m, i)}`;
     }
     function renderAboard() {
@@ -312,7 +329,11 @@ export async function chatView(id, focusId = null) {
       if (m.role === 'user') return `<div class="${cls}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="bubble">${ribbon(m)}${formatMessage(named(textOf(m), ch, 'you', me()))}${star}</div></div>${rollHTML(m, enter)}`;
       const sp = speakerOf(m);
       const tag = ix ? `<span class="spk-tag" style="--c:${sp.line?.color || '#2EAA67'};--ink:${inkOn(sp.line?.color || '#2EAA67')}">${esc(sp.name)}</span>` : '';
-      return `<div class="${cls}${m.star || m.quotes?.length ? ' starred' : ''}" data-i="${i}" data-id="${m.id}">${avatarTile(sp, 30, { expr: m.mood || 'happy', radius: 10, cls: 'msg-av' })}<div class="msg-col">${thinkHTML(m)}<div class="bubble">${ribbon(m)}${tag}${formatMessage(showAi(named(textOf(m), sp, 'you', me())))}${star}</div>${picsHTML(m)}${chronHTML(m)}${toolsHTML(m, i)}</div></div>${movesHTML(m, i)}`;
+      return `<div class="${cls}${m.star || m.quotes?.length ? ' starred' : ''}" data-i="${i}" data-id="${m.id}">${avatarTile(sp, 30, { expr: m.mood || 'happy', radius: 10, cls: 'msg-av' })}<div class="msg-col">${thinkHTML(m)}<div class="bubble">${ribbon(m)}${tag}${(() => {
+        const cx = choicesOf(m);
+        const nm = (t) => named(t, sp, 'you', me());
+        return enhance(formatMessage(showAi(nm(cx ? cx.body : textOf(m))))) + (cx ? choicesHTML(cx.items.map((x) => ({ ...x, text: nm(x.text), after: nm(x.after) })), isLive(i)) : '');
+      })()}${star}</div>${picsHTML(m)}${chronHTML(m)}${toolsHTML(m, i)}</div></div>${movesHTML(m, i)}`;
     }
     function renderAll() {
       const cut = chat.summary?.upto || 0;
@@ -331,6 +352,14 @@ export async function chatView(id, focusId = null) {
       log.innerHTML = h;
       placeChapters();
       renderChips();
+      showMark();
+    }
+    // Put the place marker back after the log is redrawn.
+    function showMark() {
+      const pm = chat.placeMark;
+      if (!pm || !textPrefs().marker) return;
+      const el = log.querySelector(`.msg[data-id="${CSS.escape(pm.id)}"]`);
+      el?.querySelectorAll('.para')[pm.p]?.classList.add('here');
     }
     function rerenderMsg(i) {
       const el = log.querySelector(`.msg[data-i="${i}"]`);
@@ -338,6 +367,7 @@ export async function chatView(id, focusId = null) {
       // Rows that sit beside a message (its dice roll, its suggested moves) are redrawn with it.
       log.querySelectorAll(`[data-for="${CSS.escape(chat.messages[i].id)}"]`).forEach((x) => x.remove());
       el.outerHTML = msgHTML(chat.messages[i], i);
+      if (chat.placeMark?.id === chat.messages[i].id) showMark();
     }
     // ---------- Chapters: a break in the log before each chapter's first message ----------
     function placeChapters(fresh = null) {
@@ -2071,12 +2101,14 @@ export async function chatView(id, focusId = null) {
           onDelta(d) {
             out += d;
             m.alts[at] = out.replace(/^\s*\**[^*:\n]{1,30}\**:\s*/, '');
+            streamingId = m.id;
             if (!raf) raf = requestAnimationFrame(() => ((raf = 0), !destroyed && rerenderMsg(i)));
           },
         });
       } catch (e) {
         if (e.name !== 'AbortError') toast(e.message || 'Couldn’t rewrite it.', { kind: 'err' });
       }
+      streamingId = null;
       ctl = null;
       cancelAnimationFrame(raf);
       setBusy(false);
@@ -2484,6 +2516,39 @@ export async function chatView(id, focusId = null) {
         speak(textOf(chat.messages[i]));
       }
     });
+    // Choices as cards: tap a card to pick it, then Send (a stray tap never sends).
+    // Place marker: tap a paragraph of a reply to mark your place; tap it again to clear.
+    log.addEventListener('click', async (e) => {
+      const sendBtn = e.target.closest('.c-send');
+      if (sendBtn) {
+        const msgEl = sendBtn.closest('.msg');
+        const m = chat.messages[+msgEl?.dataset.i];
+        const it = m && choicesOf(m)?.items[+sendBtn.dataset.k];
+        if (it && !busy) send(false, `*${named(it.text, speakerOf(m), 'you', me())}*`);
+        return;
+      }
+      const card = e.target.closest('.choices.live .choice');
+      if (card) {
+        const list = card.parentElement;
+        const was = card.getAttribute('aria-pressed') === 'true';
+        list.querySelectorAll('.choice').forEach((c) => c.setAttribute('aria-pressed', 'false'));
+        list.nextElementSibling?.classList.contains('c-send') && list.nextElementSibling.remove();
+        if (!was) {
+          card.setAttribute('aria-pressed', 'true');
+          list.insertAdjacentHTML('afterend', `<button type="button" class="c-send press" data-k="${card.dataset.choice}">Send choice ${+card.dataset.choice + 1}${arrow(18, "currentColor")}</button>`);
+        }
+        return;
+      }
+      const para = e.target.closest('.msg.ai .para, .msg.scene.ai .para');
+      if (!para || menuOpen || swiped || e.target.closest('a,button,img') || String(getSelection?.() || '')) return;
+      const msgEl = para.closest('.msg');
+      const all = [...msgEl.querySelectorAll('.para')];
+      const on = para.classList.contains('here');
+      log.querySelectorAll('.para.here').forEach((x) => x.classList.remove('here'));
+      chat.placeMark = on ? null : { id: msgEl.dataset.id, p: all.indexOf(para) };
+      if (!on) para.classList.add('here');
+      await saveChat(chat, false);
+    });
     log.addEventListener('contextmenu', (e) => {
       const el = e.target.closest('.msg');
       if (!el) return;
@@ -2510,13 +2575,16 @@ export async function chatView(id, focusId = null) {
         press.swipe = true;
         press.dx = dx;
         press.bubble.style.transform = `translateX(${dx * 0.6}px) rotate(${dx * 0.02}deg)`;
-      } else if (Math.abs(dx) > 10) clearTimeout(press.t), (press = null);
+      } else if (Math.abs(dx) > 10) clearTimeout(press.t), (press = null), (swiped = true), setTimeout(() => (swiped = false), 400);
     });
+    let swiped = false; // a swipe or drag isn't a tap (the place marker ignores it)
     const endPress = () => {
       if (!press) return;
       clearTimeout(press.t);
       const p = press;
       press = null;
+      swiped = p.swipe || Math.abs(p.dx) > 10;
+      setTimeout(() => (swiped = false), 400);
       if (!p.swipe) return;
       p.bubble.style.transition = reducedMotion() ? '' : `transform .32s ${EASE_OUT}`;
       p.bubble.style.transform = '';
