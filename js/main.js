@@ -3,20 +3,11 @@ import { load } from './store.js';
 import { homeView } from './views/home.js';
 import { chatView } from './views/chat.js';
 import { editorView } from './views/editor.js';
-import { connectionsView, connectionEditView } from './views/connections.js';
-import { promptsView, finalView, memoryView } from './views/prompts.js';
 import { settingsView, personasView, personaView, backupView } from './views/settings.js';
 import { linesView } from './views/lines.js';
-import { faresView } from './views/fares.js';
-import { interchangeView } from './views/interchange.js';
-import { loreListView, loreEditView, loreBookView } from './views/lore.js';
 import { importView, startImport } from './views/import.js';
 import { textView } from './views/text.js';
-import { routeView, bondsView, diaryView } from './views/chronicle.js';
 import { syncView } from './views/sync.js';
-import { adventureView } from './views/adventure.js';
-import { worldMapView } from './views/worldmap.js';
-import { fromPictureView } from './views/frompicture.js';
 import { scenesView } from './views/scenes.js';
 import { startAutoSync, syncOn, signedIn, localChanges } from './sync.js';
 import { applyText } from './textstyle.js';
@@ -27,32 +18,34 @@ import { toast, closeOverlays } from './ui.js';
 
 const app = document.getElementById('app');
 
+// Screens you open less often are loaded the first time you go to them.
+const view = (mod) => import(`./views/${mod}.js`);
 const routes = [
   [/^#?\/?$/, () => homeView()],
   [/^#\/chat\/([^/]+)(?:\/m\/([^/]+))?$/, (id, m) => chatView(decodeURIComponent(id), m && decodeURIComponent(m))],
   [/^#\/lines(?:\/(\w+))?$/, (f) => linesView(f)],
-  [/^#\/fares$/, () => faresView()],
-  [/^#\/lore$/, () => loreListView()],
-  [/^#\/lore\/book\/(.+)$/, (k) => loreBookView(k)],
-  [/^#\/lore\/new\/(.+)$/, (k) => loreEditView('new', k)],
+  [/^#\/fares$/, async () => (await view('fares')).faresView()],
+  [/^#\/lore$/, async () => (await view('lore')).loreListView()],
+  [/^#\/lore\/book\/(.+)$/, async (k) => (await view('lore')).loreBookView(k)],
+  [/^#\/lore\/new\/(.+)$/, async (k) => (await view('lore')).loreEditView('new', k)],
   [/^#\/import$/, () => importView()],
   [/^#\/text$/, () => textView()],
-  [/^#\/lore\/([^/]+)$/, (id) => loreEditView(decodeURIComponent(id))],
-  [/^#\/interchange\/([^/]+)$/, (id) => interchangeView(decodeURIComponent(id))],
+  [/^#\/lore\/([^/]+)$/, async (id) => (await view('lore')).loreEditView(decodeURIComponent(id))],
+  [/^#\/interchange\/([^/]+)$/, async (id) => (await view('interchange')).interchangeView(decodeURIComponent(id))],
   [/^#\/edit\/([^/]+)$/, (id) => editorView(decodeURIComponent(id))],
   [/^#\/settings$/, () => settingsView()],
-  [/^#\/connections(?:\/(pictures))?$/, (x) => connectionsView(x)],
-  [/^#\/connection\/([^/]+)$/, (id) => connectionEditView(decodeURIComponent(id))],
-  [/^#\/prompts$/, () => promptsView()],
-  [/^#\/final\/([^/]+)$/, (id) => finalView(decodeURIComponent(id))],
-  [/^#\/memory\/([^/]+)$/, (id) => memoryView(decodeURIComponent(id))],
+  [/^#\/connections(?:\/(pictures))?$/, async (x) => (await view('connections')).connectionsView(x)],
+  [/^#\/connection\/([^/]+)$/, async (id) => (await view('connections')).connectionEditView(decodeURIComponent(id))],
+  [/^#\/prompts$/, async () => (await view('prompts')).promptsView()],
+  [/^#\/final\/([^/]+)$/, async (id) => (await view('prompts')).finalView(decodeURIComponent(id))],
+  [/^#\/memory\/([^/]+)$/, async (id) => (await view('prompts')).memoryView(decodeURIComponent(id))],
   [/^#\/sync$/, () => syncView()],
-  [/^#\/adventure\/([^/]+)$/, (id) => adventureView(decodeURIComponent(id))],
-  [/^#\/map\/([^/]+)$/, (id) => worldMapView(decodeURIComponent(id))],
-  [/^#\/from-picture$/, () => fromPictureView()],
-  [/^#\/route\/([^/]+)$/, (id) => routeView(decodeURIComponent(id))],
-  [/^#\/bonds\/([^/]+)(?:\/(them))?$/, (id, t) => bondsView(decodeURIComponent(id), t || 'you')],
-  [/^#\/diary\/([^/]+)(?:\/([^/]+))?$/, (id, e) => diaryView(decodeURIComponent(id), e && decodeURIComponent(e))],
+  [/^#\/adventure\/([^/]+)$/, async (id) => (await view('adventure')).adventureView(decodeURIComponent(id))],
+  [/^#\/map\/([^/]+)$/, async (id) => (await view('worldmap')).worldMapView(decodeURIComponent(id))],
+  [/^#\/from-picture$/, async () => (await view('frompicture')).fromPictureView()],
+  [/^#\/route\/([^/]+)$/, async (id) => (await view('chronicle')).routeView(decodeURIComponent(id))],
+  [/^#\/bonds\/([^/]+)(?:\/(them))?$/, async (id, t) => (await view('chronicle')).bondsView(decodeURIComponent(id), t || 'you')],
+  [/^#\/diary\/([^/]+)(?:\/([^/]+))?$/, async (id, e) => (await view('chronicle')).diaryView(decodeURIComponent(id), e && decodeURIComponent(e))],
   [/^#\/persona$/, () => personasView()],
   [/^#\/persona\/([^/]+)$/, (id) => personaView(decodeURIComponent(id))],
   [/^#\/backup$/, () => backupView()],

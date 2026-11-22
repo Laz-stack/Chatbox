@@ -2027,3 +2027,8 @@ label:has(> input.vh:focus-visible), label:has(input.vh:focus-visible) { outline
 .chips-f a::after, .nextbar button::after { content: ''; position: absolute; inset: -4px 0; }
 .cm-row[aria-checked='true'] .switch::before { background: var(--yellow); }
 .cm-row[aria-checked='true'] .switch .knob { transform: translateX(28px); background: var(--bg); }
+/* ---------- Speed: long chats ----------
+   Messages off screen are skipped when drawing (their size is remembered once seen), so a chat with
+   thousands of messages opens and scrolls smoothly. They stay in the page, so Find and jumps work. */
+.log > .msg { content-visibility: auto; contain-intrinsic-size: auto 140px; }
+.log > .msg:nth-last-child(-n + 12) { content-visibility: visible; }

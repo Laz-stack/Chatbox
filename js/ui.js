@@ -2,6 +2,7 @@
 import { esc, inkOn, clamp, reducedMotion, EASE_OUT } from './util.js';
 import { icon, arrow } from './icons.js';
 import { avatarSVG, faceSVG } from './avatar.js';
+import { small } from './thumbs.js';
 
 export { icon, arrow };
 
@@ -15,7 +16,7 @@ export const lineBullet = (ch, s = 40, style = '') => bullet(esc(ch.line?.letter
 export const avatarBullet = (ch, s = 40, style = '', av = '') => {
   const bg = ch.line?.color || ch.color || '#2EAA67';
   const inner = ch.avatarImage
-    ? `<img src="${esc(ch.avatarImage)}" alt="" width="${s}" height="${s}">`
+    ? `<img src="${esc(small(ch.avatarImage))}" data-small alt="" width="${s}" height="${s}">`
     : faceSVG(ch, s, 'happy', bg);
   return `<span class="bullet bullet-av"${av ? ` data-av="${esc(av)}"` : ''} style="width:${s}px;height:${s}px;background:${bg};${style}">${inner}</span>`;
 };
@@ -24,12 +25,12 @@ export const avatarBullet = (ch, s = 40, style = '', av = '') => {
 // side by side (two halves, or four quarters).
 export const groupAvatar = (ix, s = 40) => {
   const img = ix.picture || (ix.useScene ? null : ix.cover);
-  if (img) return `<span class="gav" style="width:${s}px;height:${s}px"><img src="${esc(img)}" alt="" width="${s}" height="${s}"></span>`;
+  if (img) return `<span class="gav" style="width:${s}px;height:${s}px"><img src="${esc(small(img))}" data-small alt="" width="${s}" height="${s}"></span>`;
   const ppl = (ix.people || []).slice(0, 4);
   const cell = ppl.length > 2 ? Math.ceil(s / 2) : s;
   const face = (p) => {
     const bg = p.line?.color || p.color || '#2EAA67';
-    return `<span style="background:${bg}">${p.avatarImage ? `<img src="${esc(p.avatarImage)}" alt="">` : faceSVG(p, cell, 'happy', bg).replace('<svg ', '<svg preserveAspectRatio="xMidYMid slice" ')}</span>`;
+    return `<span style="background:${bg}">${p.avatarImage ? `<img src="${esc(small(p.avatarImage))}" data-small alt="">` : faceSVG(p, cell, 'happy', bg).replace('<svg ', '<svg preserveAspectRatio="xMidYMid slice" ')}</span>`;
   };
   return `<span class="gav mos n${Math.min(ppl.length, 4)}" style="width:${s}px;height:${s}px">${ppl.map(face).join('')}</span>`;
 };
