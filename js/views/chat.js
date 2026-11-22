@@ -1421,7 +1421,7 @@ export async function chatView(id, focusId = null) {
       // A redraw of the reply (another version, an edit) draws the plate again while it's still writing.
       const live = () => log.querySelector(`[data-pcrun="${CSS.escape(m.id)}"]`) || document.createElement('figure');
       try {
-        const q = await perchancePrompt({ chat, cast: ix ? ix.people : [ch], m, persona: me(), conn: connectionFor(ch), style, signal: ctl.signal });
+        const q = await perchancePrompt({ chat, cast: ix ? ix.people : [ch], m, persona: me(), conn: connectionFor(ch), style, mood: picPrefs().mood, signal: ctl.signal });
         if (ctl.signal.aborted || !chat.messages.includes(m)) return;
         // The new prompt replaces any older one only now that it's ready.
         m.pcPending = { ...q, style, step: 'ready', alt, at: Date.now() };
@@ -1830,7 +1830,8 @@ export async function chatView(id, focusId = null) {
         label: 'Picture this',
         html: `<h2 class="sheet-title">Picture this</h2>
           <p class="sheet-p">${pc ? `Paints this moment with ${esc(who)}’s look${hereOf(chat) ? `, ${esc(hereOf(chat).name)}` : ''}${clockOn(chat) ? `, ${esc(partOfDay(chat.clock.min))}` : ''}. ${isDemoPics(pc) ? 'Demo pictures are free placeholders.' : `One picture, billed by ${esc(providerName(pc))}.`} Or paint it yourself on Perchance: Chatbox writes the scene, you pick the style there and add the picture. (The style here is for Paint it.)` : `Chatbox writes the prompt for this moment with ${esc(who)}’s look; you pick the art style on Perchance (free, in a new tab), paint it and add the picture. Or set up an image model under Connections › Pictures.`}</p>
-          <div class="ck-chips" role="radiogroup" aria-label="Style"${pc ? '' : ' hidden'}>${Object.entries(STYLES).map(([k, s]) => `<button type="button" class="press" role="radio" aria-checked="${style === k}" data-style="${k}">${s.label}</button>`).join('')}</div>
+          <p class="nm-lbl">Mood</p><div class="nm-chips" role="radiogroup" aria-label="Mood">${MOODS.map(([k, t]) => `<button type="button" class="press" role="radio" aria-checked="${picPrefs().mood === k}" data-pmood="${k}">${t}</button>`).join('')}</div>
+          ${pc ? '<p class="nm-lbl">Style</p>' : ''}<div class="ck-chips" role="radiogroup" aria-label="Style"${pc ? '' : ' hidden'}>${Object.entries(STYLES).map(([k, s]) => `<button type="button" class="press" role="radio" aria-checked="${style === k}" data-style="${k}">${s.label}</button>`).join('')}</div>
           ${pc ? `<div class="ck-tog">${toggleRow('picAuto', 'Paint each new station', 'A picture whenever the Route map gets a new station. Each one is billed.', !!chat.picAuto)}</div>` : ''}
           <button type="button" class="pic-go press" id="picGo">${icon('image', 18)}${pc ? 'Paint it' : 'Paint on Perchance'}</button>
           <button type="button" class="pic-alt press" id="picAlt">${pc ? 'Paint on Perchance' : 'Set up Pictures'}</button>`,
@@ -1840,6 +1841,13 @@ export async function chatView(id, focusId = null) {
             if (!b) return;
             style = b.dataset.style;
             s.querySelectorAll('[data-style]').forEach((x) => x.setAttribute('aria-checked', x === b));
+          });
+          s.querySelector('[data-pmood]').parentElement.addEventListener('click', async (e) => {
+            const b = e.target.closest('[data-pmood]');
+            if (!b) return;
+            s.querySelectorAll('[data-pmood]').forEach((x) => x.setAttribute('aria-checked', x === b));
+            S.settings.pictures = { ...picPrefs(), mood: b.dataset.pmood };
+            await saveSettings();
           });
           const tog = s.querySelector('#picAuto');
           if (tog) bindSwitch(tog, async (on) => ((chat.picAuto = on), await saveChat(chat)));
@@ -1877,6 +1885,7 @@ export async function chatView(id, focusId = null) {
           persona: me(),
           textConn: connectionFor(ch),
           style,
+          mood: picPrefs().mood,
           signal: ctlP.signal,
           onPrompt: (p) => {
             const words = p.toUpperCase().split(/\s+/);

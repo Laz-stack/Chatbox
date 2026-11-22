@@ -9,7 +9,7 @@ import { textOf, named } from './store.js';
 import { uid } from './util.js';
 import { hereOf } from './worldmap.js';
 import { clockOn, hhmm, partOfDay } from './clock.js';
-import { NM_ID, NM_CONN, nmPrefs, modelLabel } from './nightmare.js';
+import { NM_ID, NM_CONN, nmPrefs, modelLabel, MOOD_ASK } from './nightmare.js';
 
 export const STYLES = {
   anime: { label: 'Anime', words: 'anime illustration, clean line art, soft cel shading, expressive faces' },
@@ -19,7 +19,7 @@ export const STYLES = {
 };
 export const MODEL_HINTS = { openai: 'gpt-image-1', openrouter: 'google/gemini-2.5-flash-image', custom: 'your image model', demo: '' };
 
-export const picPrefs = () => ({ connId: null, model: '', style: 'painterly', price: null, ...(S.settings.pictures || {}) });
+export const picPrefs = () => ({ connId: null, model: '', style: 'painterly', mood: '', price: null, ...(S.settings.pictures || {}) });
 // The connection that paints, if one is set up and able to.
 export function picConn() {
   const p = picPrefs();
@@ -54,7 +54,7 @@ export function sceneFromReply(out) {
 }
 
 // What the moment looks like, as a short prompt for the image model.
-export async function describe({ chat, cast, m, persona, conn, signal }) {
+export async function describe({ chat, cast, m, persona, conn, mood = '', signal }) {
   const you = persona?.name?.trim() || 'the user';
   const place = hereOf(chat);
   const when = clockOn(chat) ? `${partOfDay(chat.clock.min)} (${hhmm(chat.clock.min)}), ${chat.clock.weather}` : '';
@@ -65,7 +65,8 @@ export async function describe({ chat, cast, m, persona, conn, signal }) {
   const ask =
     'Write a prompt for an illustration of this exact moment. Return {"prompt":"...","caption":"..."}. ' +
     'prompt: 50 to 90 words, present tense, concrete and visual: who is in frame and what they look like (hair, clothes, build, from their sheets), what they are doing, the setting, light and mood. Landscape framing. ' +
-    'No names of real artists, no text or lettering in the image. Everyone is an adult. caption: 1 to 4 words naming the place or moment.';
+    'No names of real artists, no text or lettering in the image. Everyone is an adult. caption: 1 to 4 words naming the place or moment.' +
+    (MOOD_ASK[mood] ? ' ' + MOOD_ASK[mood] : '');
   // Room to spare: models that think first spend tokens before the answer (only what's used is billed).
   const out = await helperComplete(conn, 'scene', { system: 'You write prompts for an illustrator. Reply with ONE JSON object and nothing else.', messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: 1200, temperature: 0.6, signal });
   // A reply that can't be read still paints: from the moment itself.
@@ -104,10 +105,10 @@ export async function squareOf(url, size = 512) {
 }
 
 // Paint: returns the picture record { id, key, prompt, caption, style, at }.
-export async function paint({ chat, cast, m, persona, textConn, style, signal, onPrompt }) {
+export async function paint({ chat, cast, m, persona, textConn, style, mood, signal, onPrompt }) {
   const pc = picConn();
   if (!pc) throw new Error('Set up Pictures first (Connections › Pictures).');
-  const raw = await describe({ chat, cast, m, persona, conn: textConn, signal });
+  const raw = await describe({ chat, cast, m, persona, conn: textConn, mood, signal });
   const [prompt, cap] = raw.split('\n§');
   if (!prompt?.trim()) throw new Error('The scene couldn’t be described. Try again.'); // nothing is billed for the picture
   onPrompt?.(prompt);
@@ -126,8 +127,8 @@ export async function paint({ chat, cast, m, persona, textConn, style, signal, o
 }
 // Paint on Perchance: Chatbox writes the prompt, the user paints it there and adds the picture back.
 export const PERCHANCE_URL = 'https://perchance.org/ai-character-generator';
-export async function perchancePrompt({ chat, cast, m, persona, conn, style, signal }) {
-  const raw = await describe({ chat, cast, m, persona, conn, signal });
+export async function perchancePrompt({ chat, cast, m, persona, conn, style, mood, signal }) {
+  const raw = await describe({ chat, cast, m, persona, conn, mood, signal });
   const [prompt, cap] = raw.split('\n§');
   if (!prompt?.trim()) throw new Error('The scene couldn’t be described. Try again.');
   // Only the scene: Perchance's own art style and shape pickers set the look, and "no text" style
