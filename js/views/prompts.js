@@ -4,6 +4,7 @@ import { summarize, historyTokens } from '../memory.js';
 import { esc, debounce, uid, fmtNum, copyText, reducedMotion } from '../util.js';
 import { recall, factGroups, addFact, editFact, removeFact, togglePin } from '../memorybook.js';
 import { topbar, title2, ibtn, bullet, avatarBullet, area, toggleRow, bindSwitch, icon, primary, reel, toast, openSheet, autosize } from '../ui.js';
+const HEX6 = /^#[0-9a-f]{6}$/i;
 
 const NOTE_MAX = 10000; // characters per pinned note (about 2,500 tokens, sent with every reply)
 
@@ -158,31 +159,43 @@ export async function memoryView(id) {
   // ---------- Memory book ----------
   const you = personaFor(chat);
   const youName = you?.name?.trim() || 'You';
-  const colorOfAbout = (about) => {
+  // Each person's dot wears their line colour; yours is cream (yellow means selected), the world grey.
+  const dotOf = (about) => {
     const a = (about || '').toLowerCase();
-    if (!a) return '#ECECEC';
-    if (a === youName.toLowerCase().split(/\s+/)[0] || a === youName.toLowerCase()) return '#FDCD15';
+    if (!a) return '--d:#9B9B9B';
+    if (a === youName.toLowerCase().split(/\s+/)[0] || a === youName.toLowerCase()) return '--d:#ECECEC';
     const p = cast.find((x) => x.name.toLowerCase() === a || x.name.toLowerCase().split(/\s+/)[0] === a.split(/\s+/)[0]);
-    return p?.line?.color || '#9B9B9B';
+    return `--d:${HEX6.test(p?.line?.color || '') ? p.line.color : '#9B9B9B'}`;
   };
-  let mbFilter = 'all';
+  const dotEl = (about, cls = 'mb-dot') => `<span class="${cls}" style="${dotOf(about)}" aria-hidden="true"></span>`;
+  // Folded by person: what goes with the next reply in one line (open to read it), then one row per
+  // person that opens to their facts, newest first: PAGE, then two pages more, then all of them.
+  const PAGE = 8;
+  let nowOpen = false;
+  const openG = new Set();
+  const shownG = new Map();
   const mbCount = () => `${(chat.facts || []).length} fact${(chat.facts || []).length === 1 ? '' : 's'}`;
+  const chev = () => `<span class="mb-chev" aria-hidden="true">${icon('chev', 16)}</span>`;
+  const nowHTML = () => {
+    const rec = recall(chat);
+    const faces = [...new Set(rec.map((f) => f.about || ''))].slice(0, 4).map((a) => dotEl(a, 'mb-face')).join('');
+    return `<div class="mb-now group${nowOpen ? ' open' : ''}"><button type="button" class="mb-nowbtn press" data-mbnow aria-expanded="${nowOpen}" aria-controls="mbNowList"><span class="mb-faces">${faces}</span><span class="mb-nowtx"><b>${rec.length} go${rec.length === 1 ? 'es' : ''} with the next reply</b><span>Matched to the latest messages, plus pinned ones</span></span>${chev()}</button><div class="mb-fold" id="mbNowList"><div><ol class="mb-rail">${rec.map((f) => `<li>${esc(f.text)}</li>`).join('')}</ol></div></div></div>`;
+  };
+  const row = (f) =>
+    `<div class="mb-row" data-id="${esc(f.id)}"><button type="button" class="mb-tx press" data-mbedit="${esc(f.id)}" aria-label="Edit: ${esc(f.text)}">${esc(f.text)}</button><button type="button" class="mb-pin press${f.pinned ? ' on' : ''}" data-mbpin="${esc(f.id)}" aria-pressed="${!!f.pinned}" aria-label="Always remember">${icon('pin', 15)}</button></div>`;
+  const groupHTML = (k, v) => {
+    const o = openG.has(k);
+    const n = shownG.get(k) || PAGE;
+    const list = [...v].reverse();
+    const id = `mbg-${encodeURIComponent(k || '~world').replace(/[^\w-]/g, '_')}`;
+    return `<div class="mb-g${o ? ' open' : ''}" data-g="${esc(k)}"><button type="button" class="mb-gbtn press" data-mbg="${esc(k)}" aria-expanded="${o}" aria-controls="${id}">${dotEl(k)}<b>${esc(k || 'World')}</b><em class="num">${v.length}<span class="vh"> fact${v.length === 1 ? '' : 's'}</span></em>${chev()}</button><div class="mb-fold" id="${id}"><div class="mb-facts">${list.slice(0, n).map(row).join('')}${list.length > n ? `<button type="button" class="mb-more press" data-mbmore="${esc(k)}">${n > PAGE && list.length - n > PAGE * 2 ? `Show all ${list.length}` : `Show ${Math.min(PAGE * 2, list.length - n)} more`}</button>` : ''}</div></div></div>`;
+  };
   const mbHTML = () => {
     const facts = chat.facts || [];
     const add = `<button type="button" class="mb-add press" id="mbAdd">${icon('plus', 16)}Add something to remember</button>`;
     if (!facts.length)
       return `<div class="group mb-empty"><p>Nothing yet. As the story goes on, lasting facts (names, promises, secrets, who owes whom) are written down here and remembered when they come up again${S.settings.chronicle === false ? '. Story tracking is off (Route map › Track the story), so only facts you add are kept' : ''}.</p>${add}</div>`;
-    const rec = recall(chat);
-    const groups = factGroups(chat);
-    const chips = [['all', `All ${facts.length}`], ...groups.map(([k, v]) => [k || '~world', `${k || 'World'} ${v.length}`])];
-    const shown = mbFilter === 'all' ? facts : facts.filter((f) => (f.about || '~world') === mbFilter);
-    const row = (f) =>
-      `<div class="mb-row" data-id="${esc(f.id)}"><span class="mb-dot" style="--d:${colorOfAbout(f.about)}" aria-hidden="true"></span><button type="button" class="mb-tx press" data-mbedit="${esc(f.id)}" aria-label="Edit: ${esc(f.text)}">${esc(f.text)}${f.about ? `<small>${esc(f.about)}</small>` : ''}</button><button type="button" class="mb-pin press${f.pinned ? ' on' : ''}" data-mbpin="${esc(f.id)}" aria-pressed="${!!f.pinned}" aria-label="Always remember">${icon('pin', 15)}</button></div>`;
-    return (
-      `<div class="mb-now" style="--c:${ix ? '#ECECEC' : ch.line?.color || '#2EAA67'}"><h3>Recalled for the next reply</h3><p class="mb-sub">The facts that match the last few messages; pinned ones always.</p><ol class="mb-rail">${rec.map((f) => `<li>${esc(f.text)}</li>`).join('')}</ol></div>` +
-      `<div class="mb-chips" role="radiogroup" aria-label="Whose facts">${chips.map(([k, l]) => `<button type="button" class="press" role="radio" aria-checked="${mbFilter === k}" data-mbf="${esc(k)}">${esc(l)}</button>`).join('')}</div>` +
-      `<div class="group mb-list">${[...shown].reverse().map(row).join('')}${add}</div>`
-    );
+    return nowHTML() + `<div class="group mb-list">${factGroups(chat).map(([k, v]) => groupHTML(k, v)).join('')}${add}</div>`;
   };
   const summaryHTML = () =>
     chat.summary?.text
@@ -328,13 +341,36 @@ export async function memoryView(id) {
         });
       }
       $('#mb').addEventListener('click', async (e) => {
-        const fb = e.target.closest('[data-mbf]');
-        if (fb) return (mbFilter = fb.dataset.mbf), mbRedraw();
+        // Open and close in place, so the fold animates and focus stays put.
+        const fold = e.target.closest('[data-mbnow], [data-mbg]');
+        if (fold) {
+          const host = fold.parentElement;
+          const on = host.classList.toggle('open');
+          fold.setAttribute('aria-expanded', on);
+          if (fold.dataset.mbnow != null) nowOpen = on;
+          else on ? openG.add(fold.dataset.mbg) : openG.delete(fold.dataset.mbg);
+          return;
+        }
+        const more = e.target.closest('[data-mbmore]');
+        if (more) {
+          const k = more.dataset.mbmore;
+          const box = more.parentElement;
+          const prev = box.querySelectorAll('.mb-row').length;
+          const n0 = shownG.get(k) || PAGE;
+          shownG.set(k, n0 > PAGE ? Infinity : n0 + PAGE * 2);
+          const g = factGroups(chat).find(([x]) => x === k);
+          if (g) more.closest('.mb-g').outerHTML = groupHTML(...g);
+          $('#mb').querySelectorAll('.mb-g').forEach((el) => { if (el.dataset.g === k) el.querySelectorAll('.mb-row')[prev]?.querySelector('.mb-tx')?.focus(); });
+          return;
+        }
         const pin = e.target.closest('[data-mbpin]');
         if (pin) {
           const f = togglePin(chat, pin.dataset.mbpin);
           await saveChat(chat, false);
-          mbRedraw();
+          pin.classList.toggle('on', !!f?.pinned);
+          pin.setAttribute('aria-pressed', !!f?.pinned);
+          $('#mb .mb-now').outerHTML = nowHTML();
+          refresh();
           return toast(f?.pinned ? 'Always remembered' : 'Remembered when it comes up');
         }
         const ed = e.target.closest('[data-mbedit]');
