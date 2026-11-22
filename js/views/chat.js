@@ -1776,7 +1776,15 @@ export async function chatView(id, focusId = null) {
           }
         }
         if (wrote.length) toast(`Wrote ${wrote.join(' and ')}’s look tags. Change them under Looks.`);
-        const { tags, cap } = await sceneTags({ chat, people, speaker: ix ? speakerOf(m) : ch, persona: me(), withMe, m, conn, mood: P.mood, frame: P.frame, anime, signal: ctlP.signal });
+        let tags = [];
+        let cap = '';
+        try {
+          ({ tags, cap } = await sceneTags({ chat, people, speaker: ix ? speakerOf(m) : ch, persona: me(), withMe, m, conn, mood: P.mood, frame: P.frame, anime, signal: ctlP.signal }));
+        } catch (e) {
+          // With Show the prompt first on, write the scene yourself after the look tags instead.
+          if (e.name === 'AbortError' || !(P.preview && !auto)) throw e;
+          toast(`${e.message} Write the scene after the look tags.`, { ms: 6000 });
+        }
         const looks = inPic.filter((x) => x.p?.lookTags?.trim()).map((x) => ({ tags: x.p.lookTags, color: x.color }));
         const fit = compose({ looks, frame: P.frame, tags });
         board.innerHTML = '';
