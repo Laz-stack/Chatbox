@@ -251,9 +251,12 @@ export function copyText(t) {
   ta.value = t;
   document.body.appendChild(ta);
   ta.select();
-  document.execCommand('copy');
+  let ok = false;
+  try {
+    ok = document.execCommand('copy');
+  } catch {}
   ta.remove();
-  return Promise.resolve();
+  return ok ? Promise.resolve() : Promise.reject(new Error('Copy isn’t allowed here.'));
 }
 
 // Guess an avatar expression from the reply's wording.
