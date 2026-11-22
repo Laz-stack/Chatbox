@@ -127,8 +127,9 @@ export async function perchancePrompt({ chat, cast, m, persona, conn, style, sig
   const raw = await describe({ chat, cast, m, persona, conn, signal });
   const [prompt, cap] = raw.split('\n§');
   if (!prompt?.trim()) throw new Error('The scene couldn’t be described. Try again.');
-  const st = STYLES[style] || STYLES.painterly;
-  return { prompt: `${prompt.trim().replace(/[.\s]+$/, '')}. ${st.words}. All characters are adults. Wide landscape composition. No text, captions, logos or watermarks.`, cap: (cap || '').trim() };
+  // Only the scene: Perchance's own art style and shape pickers set the look, and "no text" style
+  // negatives in a prompt tend to draw what they forbid. The writer already describes everyone as adults.
+  return { prompt: prompt.trim(), cap: (cap || '').trim() };
 }
 // The picture the user brought back, kept like a painted one.
 export async function keepPicture({ chat, alt = 0, data, prompt, cap, style }) {
