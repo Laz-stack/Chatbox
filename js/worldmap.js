@@ -4,7 +4,7 @@
 import { S, textOf } from './store.js';
 import { PROVIDERS } from './providers.js';
 import { extractJson } from './blueprint.js';
-import { helperComplete } from './helper.js';
+import { helperComplete, helperJson } from './helper.js';
 import { uid } from './util.js';
 import { clockOn, advance } from './clock.js';
 
@@ -37,8 +37,7 @@ export async function findHere({ chat, cast, persona, conn, signal }) {
   const ask =
     `From recent_chat, work out WHERE the scene is right now, as the narrator or the characters describe it, and which other real locations were named or visited (buildings, rooms, districts, streets, landmarks; not people, objects or factions). ` +
     `Return {"here":{"name":"...","note":"..."},"places":[{"name":"...","note":"..."}]}. Use a name from places_known when it is the same place. name: 1 to 4 words. note: one sentence under 16 words about the place. places: at most 5, not including here. here: {} if it really can't be told.`;
-  const text = await helperComplete(conn, 'map', { system: 'You track locations in an interactive story. Reply with ONE JSON object and nothing else.', messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: 500, temperature: 0.2, signal });
-  const res = extractJson(text);
+  const res = await helperJson(conn, 'map', { system: 'You track locations in an interactive story. Reply with ONE JSON object and nothing else.', messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: 1500, temperature: 0.2, signal });
   chat.map ||= { places: [], here: null, removed: [], suggest: [] };
   let added = 0;
   for (const p of Array.isArray(res?.places) ? res.places.slice(0, 5) : []) if (str(p?.name) && !findPlace(chat, p.name) && !chat.map.removed.includes(normName(p.name)) && addPlace(chat, { name: p.name, note: p.note, from: 'story' })) added++;
@@ -64,8 +63,7 @@ export async function makeMap({ chat, cast, ids, conn, signal }) {
     const ask =
       `Pick the PLACES from this lorebook (locations people can go to: buildings, rooms, districts, landmarks), at most ${MAX_PLACES}. Skip people, objects, factions and rules. ` +
       `Return {"places":[{"name":"...","note":"...","usual":["..."],"scene":"...","lore_title":"..."}],"here":"..."}. name: 1 to 4 words. note: one sentence under 16 words. usual: cast members who are usually found there (may be empty). scene: the closest background of ${MAP_SCENES.join(', ')}. here: the place the story is at now, if clear, else "".`;
-    const text = await helperComplete(conn, 'map', { system: 'You build a map for an interactive story. Reply with ONE JSON object and nothing else.', messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: 900, temperature: 0.3, signal });
-    res = extractJson(text);
+    res = await helperJson(conn, 'map', { system: 'You build a map for an interactive story. Reply with ONE JSON object and nothing else.', messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: 1800, temperature: 0.3, signal });
   }
   chat.map ||= { places: [], here: null, removed: [], suggest: [] };
   const byName = (n) => cast.find((p) => p.name.toLowerCase() === str(n).toLowerCase()) || cast.find((p) => p.name.split(/\s+/)[0].toLowerCase() === str(n).split(/\s+/)[0].toLowerCase());

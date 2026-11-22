@@ -28,6 +28,15 @@ export const FONTS = {
   atkinson: { g: 'Easy to read', name: 'Atkinson Hyperlegible Next', short: 'Atkinson', note: 'Every letter distinct', css: "'Atkinson Hyperlegible Next', 'Atkinson Hyperlegible', system-ui, sans-serif", url: 'Atkinson+Hyperlegible+Next:ital,wght@0,200..800;1,200..800' },
   lexend: { g: 'Easy to read', name: 'Lexend', note: 'Less strain (no italics)', css: "'Lexend', system-ui, sans-serif", url: 'Lexend:wght@300..700' },
 };
+// Place marker: four looks you can combine, each with its own colour and strength (1–5).
+export const MARK_STYLES = {
+  block: { label: 'Soft block', note: 'A faint wash behind the paragraph' },
+  bar: { label: 'Margin bar', note: 'A slim bar in the left margin' },
+  line: { label: 'Underline', note: 'A line under the paragraph' },
+  ribbon: { label: 'Bookmark ribbon', note: 'A ribbon and “You were here”' },
+};
+export const MARK_COLOURS = { cream: { label: 'Cream', c: '#ECECEC' }, copper: { label: 'Copper', c: '#D9875A' }, mint: { label: 'Mint', c: '#7FD3A8' }, sky: { label: 'Sky', c: '#86C3F0' }, rose: { label: 'Rose', c: '#F29BB3' }, lilac: { label: 'Lilac', c: '#B9A8F5' }, line: { label: 'Their line colour', c: 'line' } };
+const DEFAULT_MK = { block: { on: false, c: 'cream', k: 2 }, bar: { on: true, c: 'cream', k: 3 }, line: { on: false, c: 'sky', k: 2 }, ribbon: { on: false, c: 'copper', k: 3 } };
 // Like an e-reader: size 1–14, boldness 0–5, line spacing 1–5. Older word settings map onto them.
 export const SIZE_STEPS = [14, 15, 16, 17, 18, 19, 20, 22, 23, 25, 26, 28, 30, 32];
 export const BOLD_STEPS = [400, 450, 500, 560, 620, 700];
@@ -129,7 +138,7 @@ export const TEX_STRENGTH = [0, 0.3, 0.45, 0.6, 0.78, 0.95];
 // Blend a colour toward the page, so text on a softer page is softer too.
 const mixHex = (a, b, k) => '#' + [1, 3, 5].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * k + parseInt(b.slice(i, i + 2), 16) * (1 - k)).toString(16).padStart(2, '0')).join('');
 
-export const DEFAULT_TEXT = { tex: 'none', str: 2, upright: false, lh: 3, bold: 0, page: 'original', choices: true, names: true, marker: true, side: 'normal', size: 3, font: 'archivo', dialogue: 'white', narration: 'soft', bubble: 'cream', me: 'yellow', layout: 'bubbles', width: 'wide', align: 'left', track: 'normal', para: 'normal' };
+export const DEFAULT_TEXT = { mk: DEFAULT_MK, autoMark: true, tex: 'none', str: 2, upright: false, lh: 3, bold: 0, page: 'original', choices: true, names: true, marker: true, side: 'normal', size: 3, font: 'archivo', dialogue: 'white', narration: 'soft', bubble: 'cream', me: 'yellow', layout: 'bubbles', width: 'wide', align: 'left', track: 'normal', para: 'normal' };
 export function textPrefs() {
   const t = { ...DEFAULT_TEXT, ...(S.settings.text || {}) };
   // Older settings used words; they become the nearest numbers.
@@ -140,6 +149,10 @@ export function textPrefs() {
   t.lh = num(t.lh, 1, 5, 3);
   t.str = num(t.str, 0, 5, 2);
   if (!TEXTURES[t.tex]) t.tex = 'none';
+  t.mk = Object.fromEntries(Object.entries(DEFAULT_MK).map(([k, d]) => {
+    const v = { ...d, ...(t.mk?.[k] || {}) };
+    return [k, { on: !!v.on, c: MARK_COLOURS[v.c] ? v.c : d.c, k: num(v.k, 1, 5, d.k) }];
+  }));
   if (t.align === 'right') t.align = 'left'; // the panel offers Left and Justified
   if (!FONTS[t.font]) t.font = 'archivo';
   return t;
@@ -205,6 +218,13 @@ export function applyText(t = textPrefs()) {
     r.setProperty('--page-tex-size', `${tx.size || 256}px`);
     r.setProperty('--page-vig', tx.vig ? `inset 0 0 90px rgba(90, 60, 25, ${(0.06 * t.str * (page.light ? 1 : 0.6)).toFixed(2)})` : 'none');
   } else ['--page-tex', '--page-tex-size', '--page-vig'].forEach((v) => r.removeProperty(v));
+  // Place marker looks: a class per look that's on, and its colour (darker on light pages) and strength.
+  for (const [k, m] of Object.entries(t.mk)) {
+    root.toggle('mk-' + k, m.on);
+    const base = MARK_COLOURS[m.c].c === 'line' ? 'var(--accent, var(--c, #2EAA67))' : MARK_COLOURS[m.c].c;
+    r.setProperty(`--mk-${k}-c`, page.light ? `color-mix(in srgb, ${base} 58%, #1A1A1A)` : base);
+    r.setProperty(`--mk-${k}-k`, (m.k / 5).toFixed(2));
+  }
   document.documentElement.classList.toggle('page-tex', !!(tx?.svg && t.str > 0));
   document.documentElement.classList.toggle('page-dark-tex', !!(tx?.svg && t.str > 0 && !page.light));
   document.documentElement.classList.toggle('dlg-line', t.dialogue === 'line');

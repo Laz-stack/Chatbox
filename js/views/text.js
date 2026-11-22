@@ -4,7 +4,7 @@
 // over the chat (the story stays in view above it), and Depot › Reading text shows it as a page with
 // a preview.
 import { S, saveSettings } from '../store.js';
-import { PAGES, FONTS, DIALOGUE, NARRATION, BUBBLES, MY_BUBBLES, LAYOUTS, WIDTHS, TRACKS, PARAS, SIDES, TEXTURES, SIZE_STEPS, DEFAULT_TEXT, textPrefs, applyText } from '../textstyle.js';
+import { MARK_STYLES, MARK_COLOURS, PAGES, FONTS, DIALOGUE, NARRATION, BUBBLES, MY_BUBBLES, LAYOUTS, WIDTHS, TRACKS, PARAS, SIDES, TEXTURES, SIZE_STEPS, DEFAULT_TEXT, textPrefs, applyText } from '../textstyle.js';
 import { esc, formatMessage } from '../util.js';
 import { topbar, icon, openSheet } from '../ui.js';
 import { dimSheet, dimSummary } from '../dim.js';
@@ -121,7 +121,24 @@ function helpTab(t) {
   return (
     tog('choices', 'Choices as cards', 'Numbered options at the end of a reply become cards. Tap one to pick it, then Send.', t.choices) +
     tog('names', 'Names in colour', 'The first time a character is named in a paragraph, the name wears their line colour.', t.names) +
-    tog('marker', 'Place marker', 'Tap a paragraph of a reply to mark your place. Tap it again to clear it.', t.marker) +
+    tog('marker', 'Place marker', 'Tap a paragraph of a reply to mark your place. Long-press it to clear it.', t.marker) +
+    (t.marker
+      ? tog('autoMark', 'Mark where I stop', 'When you leave a chat after reading, the paragraph you were on gets the marker.', t.autoMark) +
+        lbl('Marker looks', 'any mix') +
+        Object.entries(MARK_STYLES)
+          .map(([k, st]) => {
+            const m = t.mk[k];
+            return `<div class="kr-mk">${tog('mk:' + k, st.label, st.note, m.on)}${
+              m.on
+                ? `<div class="kr-mk-set"><div class="kr-mk-cols" role="radiogroup" aria-label="${st.label} colour">${Object.entries(MARK_COLOURS)
+                    .map(([ck, c]) => `<button type="button" class="press${c.c === 'line' ? ' line' : ''}" role="radio" aria-checked="${m.c === ck}" aria-label="${esc(c.label)}" data-mkc="${k}:${ck}"><i style="--c:${c.c}"></i></button>`)
+                    .join('')}</div><div class="kr-mk-k"><span>Strength</span><button type="button" class="press" data-mkk="${k}:-1" aria-label="${st.label}: fainter" ${m.k <= 1 ? 'disabled' : ''}>−</button><b class="num" aria-live="polite">${m.k}</b><button type="button" class="press" data-mkk="${k}:1" aria-label="${st.label}: stronger" ${m.k >= 5 ? 'disabled' : ''}>+</button></div></div>`
+                : ''
+            }</div>`;
+          })
+          .join('') +
+        `<p class="kr-mk-prev"><span class="para here" aria-current="location"><i class="mk-rib" aria-hidden="true"></i>The marked paragraph looks like this, so you can find your place again.</span></p>`
+      : '') +
     `<button type="button" class="kr-link press" data-dim>${icon('eye', 18)}<span>Dim mode<small>${esc(dimSummary())}</small></span>${icon('chev', 16)}</button>
     <button type="button" class="kr-reset press" data-reset>${icon('restart', 16)}Reset to Signboard</button>`
   );
@@ -181,6 +198,21 @@ function bindPanel(box, after = () => {}) {
       const [a, z] = RANGES[k];
       const v = Math.max(a, Math.min(z, textPrefs()[k] + +n));
       return change(k, v, `[data-step="${d.step}"]:not(:disabled)`);
+    }
+    if (d.tog?.startsWith('mk:')) {
+      const k = d.tog.slice(3);
+      const mk = textPrefs().mk;
+      return change('mk', { ...mk, [k]: { ...mk[k], on: !mk[k].on } }, `[data-tog="${d.tog}"]`);
+    }
+    if (d.mkc) {
+      const [k, c] = d.mkc.split(':');
+      const mk = textPrefs().mk;
+      return change('mk', { ...mk, [k]: { ...mk[k], c } }, `[data-mkc="${d.mkc}"]`);
+    }
+    if (d.mkk) {
+      const [k, n] = d.mkk.split(':');
+      const mk = textPrefs().mk;
+      return change('mk', { ...mk, [k]: { ...mk[k], k: Math.max(1, Math.min(5, mk[k].k + +n)) } }, `[data-mkk="${d.mkk}"]:not(:disabled)`);
     }
     if (d.tog) return change(d.tog, !textPrefs()[d.tog], `[data-tog="${d.tog}"]`);
     if (d.dim != null) return dimSheet({ onChange: () => (redraw(), setTimeout(() => body().querySelector('[data-dim]')?.focus(), 350)) });

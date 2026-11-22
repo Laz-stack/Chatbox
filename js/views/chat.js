@@ -9,6 +9,7 @@ import { shouldSummarize, summarize } from '../memory.js';
 import { chronicle, chronicleDue, trackingOn, changeText, markStation, undoReply } from '../chronicle.js';
 import { sortChapters, chapterSpans, chapterAt, addChapter, renameChapter, removeChapter, chapterHeadings, recapDue, writeRecap, recapFacts, recapMeta, recapFresh } from '../chapters.js';
 import { clockOn, chipText, longText, partOfDay, clockSheet } from '../clock.js';
+import { readTime } from '../storytime.js';
 import { advOn, roll, RESULT, suggestMoves, advRowText } from '../adventure.js';
 import { hereOf, untravel } from '../worldmap.js';
 import { sttSupported, listen, speakParts, stopParts } from '../voice.js';
@@ -147,6 +148,8 @@ export async function chatView(id, focusId = null) {
   let watchOff = null; // set by watch mode in mount(); unmount stops it
   let busy = false;
   let destroyed = false;
+  let markOnLeave = null;
+  let markOff = null; // set in mount(): marks the paragraph you were reading when you leave
 
   const conn0 = connectionFor(ch);
   const connText = (c) => (!c ? 'No connection' : c.provider === 'demo' ? 'Demo replies' : String(c.model || c.name).split('/').pop());
@@ -162,6 +165,7 @@ export async function chatView(id, focusId = null) {
     </header>
     <div class="win${winPics().length ? ' has-pic' : ''}${chat.winFold ? ' fold' : ''}" id="win"${chat.winOff ? ' hidden' : ''} data-k="${esc(winKey())}"><div class="win-pic" id="winPic"${ix ? '' : ` data-av="win:${esc(ch.id)}"`}>${winPicHTML()}</div><button type="button" class="sign press" id="signBtn" aria-controls="winPic" aria-label="Where you are">${signHTML()}</button></div>
     <div class="log${story ? ' story' : ''}" id="log" role="log" aria-live="polite" aria-relevant="additions" aria-label="Chat with ${esc(ch.name)}"></div>
+    <div class="mk-dock"><button type="button" class="mk-back press" id="mkBack" hidden></button></div>
     <div class="chips${scene ? ' steer' : ''}" id="chips"></div>
     ${ix && !scene ? '<div class="nextbar" id="nextbar" role="radiogroup" aria-label="Who answers next"></div>' : ''}
     <form class="composer" id="composer">
@@ -356,10 +360,46 @@ export async function chatView(id, focusId = null) {
     }
     // Put the place marker back after the log is redrawn.
     function showMark() {
+      log.querySelectorAll('.para.here').forEach((x) => (x.classList.remove('here'), x.removeAttribute('aria-current'), x.querySelector(':scope > .mk-rib')?.remove()));
       const pm = chat.placeMark;
-      if (!pm || !textPrefs().marker) return;
-      const el = log.querySelector(`.msg[data-id="${CSS.escape(pm.id)}"]`);
-      el?.querySelectorAll('.para')[pm.p]?.classList.add('here');
+      const para = pm && textPrefs().marker ? log.querySelector(`.msg[data-id="${CSS.escape(pm.id)}"]`)?.querySelectorAll('.para')[pm.p] : null;
+      if (para) {
+        para.classList.add('here');
+        para.setAttribute('aria-current', 'location');
+        para.insertAdjacentHTML('afterbegin', '<i class="mk-rib" aria-hidden="true"></i>');
+      }
+      watchMark(para);
+    }
+    // "Back to your place": a chip while the marked paragraph is out of view; it says which way.
+    let markObs = null;
+    function watchMark(para) {
+      markObs?.disconnect();
+      const chip = root.querySelector('#mkBack');
+      if (!chip) return;
+      if (!para || !('IntersectionObserver' in window)) return (chip.hidden = true);
+      markObs = new IntersectionObserver(
+        ([en]) => {
+          if (en.isIntersecting) return (chip.hidden = true);
+          const up = en.boundingClientRect.top < (en.rootBounds?.top ?? 0);
+          chip.innerHTML = `${icon('chev', 14)}Back to your place`;
+          chip.querySelector('svg').style.transform = up ? 'rotate(-90deg)' : 'rotate(90deg)';
+          chip.setAttribute('aria-label', `Back to your place (${up ? 'above' : 'below'})`);
+          chip.hidden = false;
+        },
+        { root: log, threshold: 0 }
+      );
+      markObs.observe(para);
+    }
+    // Clear the marker (long-press on the marked paragraph), with Undo.
+    let clearedAt = 0;
+    async function clearMark() {
+      if (!chat.placeMark || Date.now() - clearedAt < 800) return;
+      clearedAt = Date.now();
+      const was = chat.placeMark;
+      chat.placeMark = null;
+      showMark();
+      await saveChat(chat, false);
+      toast('Place marker cleared', { action: 'Undo', onAction: async () => ((chat.placeMark = was), showMark(), await saveChat(chat, false)) });
     }
     function rerenderMsg(i) {
       const el = log.querySelector(`.msg[data-i="${i}"]`);
@@ -1671,6 +1711,7 @@ export async function chatView(id, focusId = null) {
     function openClock() {
       clockSheet(chat, {
         save: () => saveChat(chat),
+        onRead: () => readTime({ chat, cast: ix ? ix.people : [ch], persona: me(), conn: connectionFor(ch) }),
         onChange: updateClock,
         onSkip: async (label, note) => {
           const m = { id: uid(), role: 'user', dir: 'time', time: label, alts: [note], alt: 0, at: Date.now() };
@@ -2590,18 +2631,18 @@ export async function chatView(id, focusId = null) {
       }
       const para = e.target.closest('.msg.ai .para, .msg.scene.ai .para');
       if (!para || menuOpen || swiped || e.target.closest('a,button,img') || String(getSelection?.() || '')) return;
+      if (para.classList.contains('here') || Date.now() - clearedAt < 900) return; // long-press clears it (and its tap doesn't re-mark)
       const msgEl = para.closest('.msg');
       const all = [...msgEl.querySelectorAll('.para')];
-      const on = para.classList.contains('here');
-      log.querySelectorAll('.para.here').forEach((x) => x.classList.remove('here'));
-      chat.placeMark = on ? null : { id: msgEl.dataset.id, p: all.indexOf(para) };
-      if (!on) para.classList.add('here');
+      chat.placeMark = { id: msgEl.dataset.id, p: all.indexOf(para), at: Date.now() };
+      showMark();
       await saveChat(chat, false);
     });
     log.addEventListener('contextmenu', (e) => {
       const el = e.target.closest('.msg');
       if (!el) return;
       e.preventDefault();
+      if (e.target.closest('.para.here')) return clearMark();
       messageMenu(el);
     });
 
@@ -2611,7 +2652,8 @@ export async function chatView(id, focusId = null) {
       const el = e.target.closest('.msg');
       if (!el || e.target.closest('button,a') || e.button === 2) return;
       const bubble = el.querySelector('.bubble');
-      press = { el, bubble, x: e.clientX, y: e.clientY, dx: 0, swipe: false, t: setTimeout(() => (press && !press.swipe ? (messageMenu(el), (press = null)) : 0), 480) };
+      const onMark = !!e.target.closest('.para.here');
+      press = { el, bubble, x: e.clientX, y: e.clientY, dx: 0, swipe: false, t: setTimeout(() => (press && !press.swipe ? (onMark ? clearMark() : messageMenu(el), (press = null)) : 0), 480) };
     });
     log.addEventListener('pointermove', (e) => {
       if (!press) return;
@@ -2642,6 +2684,37 @@ export async function chatView(id, focusId = null) {
     };
     log.addEventListener('pointerup', endPress);
     log.addEventListener('pointercancel', endPress);
+
+    // Back to your place.
+    root.querySelector('#mkBack')?.addEventListener('click', () => {
+      const para = log.querySelector('.para.here');
+      if (para) reach(para, 'center');
+    });
+    // Mark where I stop: when you leave (or the app goes to the background) after reading, the
+    // paragraph at your reading line gets the marker. Only after you scrolled or a reply came in,
+    // so just opening a chat doesn't move it.
+    let readSome = false;
+    log.addEventListener('scroll', () => (readSome = true), { passive: true });
+    markOnLeave = () => {
+      const t = textPrefs();
+      if (!t.marker || !t.autoMark || !readSome || destroyed) return;
+      const box = log.getBoundingClientRect();
+      const line = box.top + box.height * 0.3;
+      const paras = [...log.querySelectorAll('.msg.ai .para, .msg.scene.ai .para')];
+      const at = paras.find((x) => x.getBoundingClientRect().bottom > line);
+      if (!at) return;
+      const msgEl = at.closest('.msg');
+      const p = [...msgEl.querySelectorAll('.para')].indexOf(at);
+      if (chat.placeMark?.id === msgEl.dataset.id && chat.placeMark?.p === p) return;
+      chat.placeMark = { id: msgEl.dataset.id, p, at: Date.now(), auto: true };
+      readSome = false;
+      saveChat(chat, false);
+    };
+    const onHide = () => document.visibilityState === 'hidden' && markOnLeave?.();
+    document.addEventListener('visibilitychange', onHide);
+    addEventListener('pagehide', onHide);
+    const offHide = () => (document.removeEventListener('visibilitychange', onHide), removeEventListener('pagehide', onHide), markObs?.disconnect());
+    markOff = offHide;
 
     renderAll();
     if (ix && !scene) renderNext();
@@ -2693,6 +2766,8 @@ export async function chatView(id, focusId = null) {
     depth: 1,
     mount,
     unmount() {
+      markOnLeave?.();
+      markOff?.();
       watchOff?.();
       destroyed = true;
       silence();
