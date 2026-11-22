@@ -19,7 +19,7 @@ import { toast, closeOverlays } from './ui.js';
 const app = document.getElementById('app');
 
 // Screens you open less often are loaded the first time you go to them.
-const LAZY = ['connections', 'prompts', 'fares', 'interchange', 'lore', 'chronicle', 'adventure', 'worldmap', 'frompicture'];
+const LAZY = ['connections', 'prompts', 'fares', 'interchange', 'lore', 'chronicle', 'adventure', 'worldmap', 'frompicture', 'datacat'];
 const view = (mod) =>
   import(`./views/${mod}.js`).catch((e) => {
     toast(navigator.onLine ? 'That screen didn’t load. Try again.' : 'That screen needs a connection the first time you open it.', { kind: 'err' });
@@ -57,6 +57,7 @@ const routes = [
   [/^#\/persona\/([^/]+)$/, (id) => personaView(decodeURIComponent(id))],
   [/^#\/backup$/, () => backupView()],
   [/^#\/scenes$/, () => scenesView()],
+  [/^#\/datacat$/, async () => (await view('datacat')).datacatView()],
 ];
 
 let current = null;

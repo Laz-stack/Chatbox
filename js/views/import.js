@@ -5,11 +5,13 @@ import { esc, inkOn, estimateTokens } from '../util.js';
 import { topbar, icon, arrow, toast, confirmSheet } from '../ui.js';
 
 let pending = null; // { cards, lore, errors }
+let pendingFiles = []; // the files being reviewed (Browse Datacat keeps its cards until they're saved)
 
 // Read files, then open the review screen (or report what failed).
 export async function startImport(files) {
   files = [...(files || [])];
   if (!files.length) return;
+  pendingFiles = files;
   const t = toast(`Reading ${files.length === 1 ? files[0].name : files.length + ' files'}…`, { ms: 60000 });
   try {
     pending = await readFiles(files);
@@ -142,6 +144,8 @@ export function importView() {
         }
         const n = pending.cards.length;
         pending = null;
+        dispatchEvent(new CustomEvent('chatbox:imported', { detail: { files: pendingFiles } }));
+        pendingFiles = [];
         location.hash = open || '#/lore';
         setTimeout(() => toast(`${n ? `Imported ${n === 1 ? 'the card' : n + ' cards'}` : 'Imported'}${lore ? ` and ${lore} lore entries` : ''}.${imgFail.length ? ' Some pictures couldn’t be saved and will load from the web.' : ''}`, { ms: 6000 }), 450);
       });

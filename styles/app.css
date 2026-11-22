@@ -2058,3 +2058,40 @@ label:has(> input.vh:focus-visible), label:has(input.vh:focus-visible) { outline
 .ln-note { grid-column: 1 / -1; margin: 0 4px 8px; font: 500 13px/1.45 var(--font); color: var(--muted); }
 /* Small screens: the tab bar slides away while you scroll down a list and comes back when you scroll up */
 @media (max-height: 700px) { .tabbar { transition: transform .28s var(--out); } html.tb-away .tabbar { transform: translate(-50%, calc(100% + 16px)); } }
+
+/* ---------- Browse Datacat: Datacat's page in a frame, the tray docked under it ---------- */
+.screen.dc-screen { display: flex; flex-direction: column; gap: 10px; height: 100dvh; min-height: 0; padding: calc(14px + var(--safe-t)) 12px calc(12px + var(--safe-b)); }
+.dc-screen .topbar { margin-bottom: 0; flex: none; }
+.dc-tt { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.dc-tt small { font: 700 12px/1 var(--font); color: var(--muted); }
+.dc-screen .ibtn.ghost { background: var(--plate); color: var(--cream); }
+/* Datacat's page: outlined, so it never reads as part of Chatbox. */
+.dc-frame { position: relative; flex: 1; min-height: 0; border-radius: 18px; overflow: hidden; background: var(--plate); box-shadow: 0 0 0 2px var(--plate2); }
+.dc-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: transparent; }
+.dc-wait { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; font: 700 14px/1 var(--font); color: var(--muted); }
+/* The tray: Chatbox's own, docked below the page rather than over it. */
+.dc-tray { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 10px 10px 10px 14px; border-radius: 22px; background: var(--plate); }
+.dc-row { display: flex; align-items: center; gap: 12px; min-height: 48px; }
+.dc-list { flex: none; display: grid; place-items: center; min-width: 48px; min-height: 48px; border-radius: 12px; }
+.dc-list[hidden], .dc-go[hidden], .dc-alt[hidden] { display: none; }
+.dc-tx { flex: 1; min-width: 0; display: block; margin: 0 !important; }
+.dc-tx b { display: block; font: 800 15px/1.2 var(--font); }
+.dc-tx small { display: block; margin-top: 3px; font: 600 12px/1.3 var(--font); color: var(--soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dc-tx small:empty { display: none; }
+.dc-tray:not(:has(#dcList:not([hidden]))) .dc-tx small { white-space: normal; }
+.dc-warn { margin: 0 !important; padding-top: 8px; box-shadow: 0 -1px 0 var(--hair); font: 700 12px/1.3 var(--font); color: var(--muted); }
+.dc-alt { display: flex; gap: 8px; flex-wrap: wrap; }
+.dc-pill { flex: 1 1 auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 12px; white-space: nowrap; border-radius: 22px; background: var(--plate2); color: var(--white); font: 800 14px/1 var(--font); text-decoration: none; }
+.dc-stack { display: flex; flex: none; }
+.dc-stack img { width: 32px; height: 44px; margin-left: -14px; border-radius: 7px; object-fit: cover; background: var(--plate2); box-shadow: 0 0 0 2px var(--plate); transform: rotate(var(--r)); }
+.dc-stack img:first-child { margin-left: 0; }
+.dc-stack img.new { animation: dc-in .42s var(--out) both; }
+@keyframes dc-in { from { opacity: 0; transform: translateY(10px) rotate(var(--r)); } }
+.dc-go { flex: none; width: auto; height: 48px; padding: 0 20px; border-radius: 24px; justify-content: center; font-size: 15px; }
+.dc-wl { padding: 4px 4px 4px 12px; margin-bottom: 12px; }
+.dc-wr { display: flex; align-items: center; gap: 12px; min-height: 60px; }
+.dc-wr + .dc-wr { box-shadow: 0 -1px 0 var(--hair); }
+.dc-wr img { width: 36px; height: 48px; border-radius: 8px; object-fit: cover; background: var(--plate2); }
+.dc-wr b { flex: 1; min-width: 0; font: 700 15px/1.3 var(--font); overflow-wrap: anywhere; }
+.dc-none { margin: 12px 0 !important; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .dc-stack img.new { animation: none; } }
