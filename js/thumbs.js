@@ -3,7 +3,10 @@
 // whole image is decoded and held many times over. Here each picture gets one 192px copy, made once
 // in the background and kept in memory only (nothing extra is stored or synced). Until it's ready the
 // full picture is used, then images already on screen switch over.
+// Keyed by a short fingerprint of the picture (not the picture itself), and capped.
 const cache = new Map();
+const CAP = 80;
+const key = (src) => `${src.length}:${src.slice(-48)}:${src.slice(64, 112)}`;
 const queue = new Set();
 let busy = false;
 const MAX = 192;
@@ -11,8 +14,8 @@ const MAX = 192;
 // The small copy of a picture if it's ready; otherwise the picture itself (and a copy is queued).
 export function small(src) {
   if (!src || typeof src !== 'string') return src;
-  const hit = cache.get(src);
-  if (hit) return hit;
+  const hit = cache.get(key(src));
+  if (hit !== undefined) return hit || src; // '' = no smaller copy possible, use the picture
   if (src.startsWith('data:image/') && src.length > 40000) {
     queue.add(src);
     if (!busy) setTimeout(run, 300);
@@ -39,9 +42,10 @@ async function run() {
   try {
     for (const src of [...queue]) {
       queue.delete(src);
-      if (cache.has(src)) continue;
+      if (cache.has(key(src))) continue;
       const t = await make(src).catch(() => src);
-      cache.set(src, t);
+      cache.set(key(src), t === src ? '' : t);
+      while (cache.size > CAP) cache.delete(cache.keys().next().value);
       if (t === src) continue;
       // Pictures already on screen at a small size switch to the copy.
       for (const el of document.querySelectorAll('img[data-small]')) if (el.getAttribute('src') === src) el.setAttribute('src', t);

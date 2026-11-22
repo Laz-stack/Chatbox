@@ -2037,4 +2037,4 @@ label:has(> input.vh:focus-visible), label:has(input.vh:focus-visible) { outline
 
 .ln-note { grid-column: 1 / -1; margin: 0 4px 8px; font: 500 13px/1.45 var(--font); color: var(--muted); }
 /* Small screens: the tab bar slides away while you scroll down a list and comes back when you scroll up */
-@media (max-height: 700px) { .tabbar { transition: transform .28s var(--out); } html.tb-away .tabbar { transform: translateY(calc(100% + 16px)); } }
+@media (max-height: 700px) { .tabbar { transition: transform .28s var(--out); } html.tb-away .tabbar { transform: translate(-50%, calc(100% + 16px)); } }

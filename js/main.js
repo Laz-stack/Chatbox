@@ -19,7 +19,14 @@ import { toast, closeOverlays } from './ui.js';
 const app = document.getElementById('app');
 
 // Screens you open less often are loaded the first time you go to them.
-const view = (mod) => import(`./views/${mod}.js`);
+const LAZY = ['connections', 'prompts', 'fares', 'interchange', 'lore', 'chronicle', 'adventure', 'worldmap', 'frompicture'];
+const view = (mod) =>
+  import(`./views/${mod}.js`).catch((e) => {
+    toast(navigator.onLine ? 'That screen didn’t load. Try again.' : 'That screen needs a connection the first time you open it.', { kind: 'err' });
+    throw e;
+  });
+// Once the app is idle, fetch those screens in the background so they also work offline later.
+(window.requestIdleCallback || ((f) => setTimeout(f, 3000)))(() => LAZY.forEach((m) => import(`./views/${m}.js`).catch(() => {})));
 const routes = [
   [/^#?\/?$/, () => homeView()],
   [/^#\/chat\/([^/]+)(?:\/m\/([^/]+))?$/, (id, m) => chatView(decodeURIComponent(id), m && decodeURIComponent(m))],
@@ -84,6 +91,8 @@ addEventListener('scroll', () => {
   lastY = y;
 }, { passive: true });
 addEventListener('hashchange', () => ((lastY = 0), document.documentElement.classList.remove('tb-away')));
+// Keyboard focus on the bar brings it back.
+document.addEventListener('focusin', (e) => e.target.closest?.('.tabbar') && document.documentElement.classList.remove('tb-away'));
 
 // The Platform hero's train hands over the point the chat should open from (its tunnel), after its run.
 document.addEventListener('chatbox:depart', (e) => (tap = { x: e.detail.x, y: e.detail.y, t: performance.now() }));
