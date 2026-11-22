@@ -95,10 +95,12 @@ export function linkImportSheet() {
           if (!err.blocked) return (out.innerHTML = `<p class="li-msg">${esc(err.message || 'That didn’t work.')}</p>`);
           // The two-step way through: open it there, download, pick the file here.
           const site = known(url.hostname) || url.hostname.replace(/^www\./, '');
-          out.innerHTML = `<div class="li-steps"><p><b>${esc(site)} doesn’t let other apps download its characters</b>, so it takes two taps:</p>
+          const dc = site === 'Datacat' ? `<a class="li-step press li-dc" href="#/datacat">${icon('search', 16)}<span><b>Browse Datacat in Chatbox</b><small>Tap Import on a character and it comes straight here</small></span></a><p>Or the long way:</p>` : '';
+          out.innerHTML = `<div class="li-steps">${dc}<p><b>${esc(site)} doesn’t let other apps download its characters</b>, so it takes two taps:</p>
             <ol><li><a class="li-step press" href="${esc(url.href)}" target="_blank" rel="noopener noreferrer">${icon('link', 16)}<span><b>Open on ${esc(site)}</b><small>Use its Download button (ZIP or PNG)</small></span></a></li>
             <li><label class="li-step press">${icon('upload', 16)}<span><b>Pick the downloaded file</b><small>Usually in your Downloads</small></span><input type="file" class="vh" id="liFile" multiple accept=".zip,.png,.json,.charx,application/zip,image/png,application/json"></label></li></ol>
             <p class="li-note">Running Chatbox with its local server (npm start) imports these links directly.</p></div>`;
+          out.querySelector('.li-dc')?.addEventListener('click', () => close());
           out.querySelector('#liFile').addEventListener('change', (ev) => {
             const files = [...ev.target.files];
             if (!files.length) return;

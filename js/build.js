@@ -24,6 +24,7 @@ export function openBuildSheet() {
       }
       <label class="bopt imp press"><span class="bo-ic">${icon('image', 28)}</span><span class="bo-tx"><b>From a picture</b><span>The AI writes a character from an image</span></span>${arrow(28, 'currentColor')}<input type="file" class="vh" id="buildPic" accept="image/*"></label>
       <label class="bopt imp press"><span class="bo-ic">${icon('upload', 28)}</span><span class="bo-tx"><b>Import</b><span>A card, a ZIP of cards and lorebooks, or a lorebook</span></span>${arrow(28, 'currentColor')}<input type="file" class="vh" id="buildImport" multiple accept=".zip,.png,.json,application/zip,image/png,application/json"></label>
+      <a class="bopt imp press" href="#/datacat" data-close><span class="bo-ic">${icon('search', 28)}</span><span class="bo-tx"><b>Browse Datacat</b><span>Find characters on datacat.run and import them here</span></span>${arrow(28, 'currentColor')}</a>
       <button type="button" class="bopt imp press" id="buildLink"><span class="bo-ic">${icon('link', 28)}</span><span class="bo-tx"><b>From a link</b><span>Paste a link to a card or a character page</span></span>${arrow(28, 'currentColor')}</button>`,
     onMount(s, close) {
       s.querySelectorAll('[data-close]').forEach((a) => a.addEventListener('click', () => close()));
