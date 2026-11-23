@@ -203,6 +203,9 @@ async function paintNow({ prompt, signal, onWait, overrides = {} }) {
 }
 
 // ---------- the prompt: short tags under 77 tokens ----------
+// Explicit follows Depot › Content › 18+ content: only offered (and only sent) when it's on.
+export const moodsNow = () => MOODS.filter(([k]) => k !== 'explicit' || S.settings.mature);
+export const moodAsk = (mood) => (mood === 'explicit' && !S.settings.mature ? '' : MOOD_ASK[mood] || '');
 export const MOOD_ASK = {
   warm: 'Mood: warm and affectionate; soft warm light, gentle expressions.',
   cozy: 'Mood: cozy and relaxed; soft light, comfortable surroundings, calm faces.',
@@ -241,7 +244,7 @@ export async function sceneTags({ chat, people, speaker, persona, withMe, m, con
       : `Tag this exact moment for a Stable Diffusion 1.5 image model. Reply {"tags":"...","caption":"..."}. ` +
         `tags: ${anime ? 'Danbooru-style tags' : 'short visual phrases'}, comma-separated, at most 40 tokens in all, most important first: what they are doing and their poses and expressions, interaction, then the place, then light and time. `) +
     `Only ${inFrame.join(' and ') || 'the scene'} in the picture${withMe ? '' : ` (not ${you})`}. Their looks are added separately: don't describe hair, eyes or outfits unless the moment changes them (undressed, wet, torn). ${anime ? '' : 'No character names. '}Everyone is an adult. ` +
-    `${MOOD_ASK[mood] || 'Mood: as the moment is written.'}${frame ? ` Framing: ${FRAMES.find((f) => f[0] === frame)?.[1].toLowerCase()}.` : ''} caption: 1 to 4 words naming the place or moment.`;
+    `${moodAsk(mood) || 'Mood: as the moment is written.'}${frame ? ` Framing: ${FRAMES.find((f) => f[0] === frame)?.[1].toLowerCase()}.` : ''} caption: 1 to 4 words naming the place or moment.`;
   // The sturdy reader: room for models that think first, their thinking stripped, and one more
   // ask for the JSON alone if the first reply can't be read.
   let j = null;
@@ -263,10 +266,13 @@ export async function sceneTags({ chat, people, speaker, persona, withMe, m, con
 // Count tags (1girl, 1boy) from every look are added up into one ("2girls", "1girl, 1boy") and go first,
 // and each look gets a share of the tokens so the scene always has room (at least 25).
 const COUNT = /^(\d+)\s*(girl|boy|other)s?$/i;
+// The owner's quality tags, first in every Nightmare prompt (they can still be tapped out on the prompt sheet).
+export const QUALITY = ['masterpiece', 'best quality', 'ultra-detailed', 'sharp focus', '8k'];
 export function compose({ looks, frame, tags, limit = TOKEN_LIMIT }) {
   const counts = { girl: 0, boy: 0, other: 0 };
   // Looks get under half the tokens between them, so the scene (what's happening) always fits.
-  const per = looks.length ? Math.max(6, Math.floor(Math.min(limit - 25, limit * 0.45) / looks.length)) : 0;
+  const room = limit - clipTokens(QUALITY.join(', ')) - 2;
+  const per = looks.length ? Math.max(6, Math.floor(Math.min(room - 25, room * 0.45) / looks.length)) : 0;
   // A look's tags past its share go after the scene (cut, unless tapped in on the prompt sheet).
   const lookExtra = [];
   const lookTags = looks.flatMap((l) => {
@@ -283,7 +289,7 @@ export function compose({ looks, frame, tags, limit = TOKEN_LIMIT }) {
   const all = [];
   const seen = new Set();
   const frameName = (FRAMES.find((f) => f[0] === frame)?.[1] || '').toLowerCase(); // the writer often echoes it
-  for (const t of [...countTags, ...lookTags, ...splitTags(frameTags(frame)), ...tags.filter((t) => (!countTags.length || !COUNT.test(t)) && t.toLowerCase() !== frameName), ...lookExtra]) {
+  for (const t of [...QUALITY, ...countTags, ...lookTags, ...splitTags(frameTags(frame)), ...tags.filter((t) => (!countTags.length || !COUNT.test(t)) && t.toLowerCase() !== frameName), ...lookExtra]) {
     const k = t.toLowerCase();
     if (!seen.has(k)) seen.add(k), all.push(t);
   }

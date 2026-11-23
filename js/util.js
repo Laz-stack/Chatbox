@@ -206,9 +206,16 @@ export function luminance(hex) {
 }
 // Text colour that reads on a given background.
 export const inkOn = (bg) => (luminance(bg) > 0.22 ? '#0A0A0A' : '#FFFFFF');
-// Accent for small marks (caret, status dot) drawn on the cream bubble or the black ground:
-// the character's line colour, unless it is too pale to see against cream.
-export const lineAccent = (c) => (c && luminance(c) < 0.45 ? c : '#E70404');
+// Accent for small marks (caret, status dot, face ring) drawn on the cream bubble or the black ground:
+// the character's own line colour, a darker shade of it when it is too pale to see against cream
+// (never red: red means an action).
+export function lineAccent(c) {
+  if (!c || !/^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(c)) return '#9B9B9B';
+  if (luminance(c) < 0.45) return c;
+  let s = c;
+  for (let k = 1; k < 10 && luminance(s) >= 0.3; k++) s = shade(c, -0.1 * k);
+  return s;
+}
 
 export function hashStr(s) {
   let h = 2166136261;

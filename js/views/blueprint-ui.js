@@ -285,13 +285,13 @@ export function bindBlueprint(root, d, { onName }) {
     for (const s of SECTIONS) {
       const items = s.fields.filter((f) => (matureOn(d) || !f.mature) && filled(d.sheet, f.k)).map((f) => [f.label.toUpperCase().replace('{{USER}}', '{{user}}'), d.sheet[f.k]]);
       if (s.key === 'basic' && d.name?.trim()) items.unshift(['NAME', d.name.trim()]);
-      if (items.length) rows += `<h3 class="pv-h">${esc(s.head)}</h3>` + items.map(([l, v]) => `<div class="pv-r"><span>${esc(l)}</span><span>${esc(String(v).trim())}</span></div>`).join('');
+      if (items.length) rows += `<h3 class="bpv-h">${esc(s.head)}</h3>` + items.map(([l, v]) => `<div class="bpv-r"><span>${esc(l)}</span><span>${esc(String(v).trim())}</span></div>`).join('');
     }
-    if ((d.persona || '').trim()) rows += `<h3 class="pv-h">EXTRA NOTES</h3><p class="pv-p">${esc(d.persona.trim())}</p>`;
+    if ((d.persona || '').trim()) rows += `<h3 class="bpv-h">EXTRA NOTES</h3><p class="bpv-p">${esc(d.persona.trim())}</p>`;
     openSheet({
       label: 'Persona preview',
       html: `<h2 class="sheet-title">Persona preview</h2><p class="sheet-p">Exactly what the model receives as ${esc(d.name || 'this character')}. ${text.length.toLocaleString()} characters.</p>
-        <div class="pv">${rows || '<p class="pv-p">Nothing yet. Fill the sheet, or tap Random.</p>'}</div>
+        <div class="bpv">${rows || '<p class="bpv-p">Nothing yet. Fill the sheet, or tap Random.</p>'}</div>
         <div style="height:14px"></div><button type="button" class="btn-primary plate press" id="pvCopy"><span>Copy</span>${icon('copy', 22)}</button>`,
       onMount(s) {
         s.querySelector('#pvCopy').onclick = () => navigator.clipboard?.writeText(text).then(() => toast('Persona copied'));
