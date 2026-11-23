@@ -2060,7 +2060,7 @@ export async function chatView(id, focusId = null) {
         renderAll();
         toast(`${who.name}’s portrait updated`);
       } else if (what === 'more') runNightmare(m, { reuse: { prompt: p.prompt, model: p.model || '', size: p.size, cap: String(p.caption || '').split(' · ')[0], mood: p.mood, frame: p.frame } });
-      else if (what === 'again') p.from === 'perchance' ? runPerchance(m, p.style) : p.from === 'nightmare' && isNm() ? nmSheet(m) : runPaint(m, p.style);
+      else if (what === 'again') p.from === 'perchance' ? runPerchance(m, p.style) : p.from === 'nightmare' ? nmSheet(m) : runPaint(m, p.style);
       else if (what === 'delete') {
         if (!(await confirmSheet({ title: 'Delete this picture?', body: 'It’s removed from this chat and from the app.', ok: 'Delete', danger: true }))) return;
         m.pics = m.pics.filter((x) => x !== p);
@@ -2081,7 +2081,8 @@ export async function chatView(id, focusId = null) {
         ...(who && !who.avatarImage && who.preset === 'initial' ? [{ icon: 'user', label: `Use as ${who.name}’s portrait`, on: () => picAction(pid, 'portrait') }] : []),
         { icon: 'refresh', label: p?.from === 'perchance' ? 'Paint again on Perchance' : p?.from === 'nightmare' ? 'Paint again with Nightmare' : 'Paint again (new picture)', on: () => picAction(pid, 'again') },
         // Same prompt, same model and size, new seeds (as many as Copies says).
-        ...(p?.from === 'nightmare' && isNm() && p.prompt ? [{ icon: 'layers', label: (nmPrefs().copies || 1) > 1 ? `${nmPrefs().copies} more like this` : 'More like this', on: () => picAction(pid, 'more') }] : []),
+        // Works whichever connection paints now: a Nightmare picture is remade by Nightmare.
+        ...(p?.from === 'nightmare' && p.prompt ? [{ icon: 'layers', label: (nmPrefs().copies || 1) > 1 ? `Recreate ${nmPrefs().copies} with the same prompt` : 'Recreate with the same prompt', on: () => picAction(pid, 'more') }] : []),
         { icon: 'trash', label: 'Delete picture', on: () => picAction(pid, 'delete') },
       ];
     };
