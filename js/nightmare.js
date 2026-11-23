@@ -230,6 +230,9 @@ export async function writeLooks({ name, sheet, conn, anime, signal }) {
 }
 
 // The scene as tags (the look tags of who's in it are added in front by compose()).
+// A model saying no instead of tagging ("request_declined", "I can't help with that…").
+export const declined = (s) => /\brequest[_ ]?declined\b|^\s*(i['’]?m sorry|sorry|i can(no|['’])t|i cannot|i won['’]?t|i am unable|i['’]m unable|as an ai)|\b(content|usage) polic(y|ies)\b|\bcan(no|['’])t (help|assist|comply|create|generate)\b/i.test(String(s || ''));
+
 export async function sceneTags({ chat, people, speaker, persona, withMe, m, conn, mood, frame, anime, dit = false, signal }) {
   const you = persona?.name?.trim() || 'the user';
   const place = hereOf(chat);
@@ -247,19 +250,31 @@ export async function sceneTags({ chat, people, speaker, persona, withMe, m, con
     `${moodAsk(mood) || 'Mood: as the moment is written.'}${frame ? ` Framing: ${FRAMES.find((f) => f[0] === frame)?.[1].toLowerCase()}.` : ''} caption: 1 to 4 words naming the place or moment.`;
   // The sturdy reader: room for models that think first, their thinking stripped, and one more
   // ask for the JSON alone if the first reply can't be read.
-  let j = null;
-  try {
-    j = await helperJson(conn, 'scene', { system: 'You write image-model tags. Reply with ONE JSON object and nothing else.', messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: 2000, temperature: 0.6, signal });
-  } catch (e) {
-    if (e.name === 'AbortError' || signal?.aborted) throw e;
+  const req = { system: 'You write image-model tags. Reply with ONE JSON object and nothing else.', messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: 2000, temperature: 0.6, signal };
+  const ask1 = async (direct) => {
+    let j = null;
+    try {
+      j = await helperJson(conn, 'scene', { ...req, direct });
+    } catch (e) {
+      if (e.name === 'AbortError' || signal?.aborted) throw e;
+    }
+    const raw = Array.isArray(j?.tags) ? j.tags.join(', ') : String(j?.tags || j?.prompt || '');
+    return { j, raw, tags: splitTags(raw.replace(/\\n|\n/g, ' ')) };
+  };
+  let r = await ask1(false);
+  // The Helper (often a small, stricter model) said no, or sent nothing: ask the model you chat
+  // with instead, once. A refusal is never painted as tags.
+  const helperRan = helperFor(conn, 'scene') !== conn;
+  if ((!r.tags.length || declined(r.raw)) && helperRan) r = await ask1(true);
+  if (declined(r.raw)) {
+    const who = helperRan ? conn : helperFor(conn, 'scene');
+    throw new NmError(`${who?.model || 'The text model'} declined to write this scene.`, 'That model won’t tag it. Pick a model that will for this chat (or for Connections › Helper), or turn on Show the prompt first and write the scene yourself.');
   }
-  const raw = Array.isArray(j?.tags) ? j.tags.join(', ') : String(j?.tags || j?.prompt || '');
-  const tags = splitTags(raw.replace(/\\n|\n/g, ' '));
-  if (!tags.length) {
-    const who = helperFor(conn, 'scene');
-    throw new NmError(`${who?.model ? `${who.model}` : 'The text model'} didn’t send the scene tags back.`, 'It may be a model that only thinks, or one that won’t tag this scene. Pick another model for background jobs (Connections › Helper), or turn on Show the prompt first and write the scene yourself.');
+  if (!r.tags.length) {
+    const who = helperRan ? conn : helperFor(conn, 'scene');
+    throw new NmError(`${who?.model ? `${who.model}` : 'The text model'} didn’t send the scene tags back.`, 'It may be a model that only thinks, or one that won’t tag this scene. Pick another model for this chat or for Connections › Helper, or turn on Show the prompt first and write the scene yourself.');
   }
-  return { tags, cap: String(j?.caption || '').slice(0, 40) };
+  return { tags: r.tags, cap: String(r.j?.caption || '').slice(0, 40) };
 }
 
 // Look tags first (in the order people appear), then framing, then the scene; fitted to 77 tokens.
