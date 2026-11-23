@@ -2385,3 +2385,7 @@ button.nm-tag { border: 0; cursor: pointer; text-align: left; }
 .ps-hint { margin: 8px 2px 0; text-align: center; font: 600 12px/1.3 var(--font); color: var(--muted); }
 .ps-fly { position: absolute; left: 0; right: 0; top: 0; z-index: 4; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) { .ps-fly { display: none; } }
+/* Light pages: the count and the edges follow the page (the dark page is as drawn). */
+:root.page-light .chat .log .ps-count { color: var(--bg); }
+:root.page-light .chat .log .ps-peek { background: var(--plate2); }
+:root.page-light .chat .log .ps-peek.p2 { background: var(--plate); }

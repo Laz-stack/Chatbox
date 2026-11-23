@@ -150,7 +150,8 @@ export async function chatView(id, focusId = null) {
   let watchOff = null; // set by watch mode in mount(); unmount stops it
   let busy = false;
   let destroyed = false;
-  const picTop = new Map(); // a reply's picture stack: message id -> which picture is on top (0 = newest); not saved
+  const picTop = new Map(); // a reply's picture stack: 'message id:version' -> which picture is on top (0 = newest); not saved
+  const topKey = (m) => `${m.id}:${m.alt || 0}`;
   let stackSwipedAt = 0;
   const pcRuns = new Map(); // Paint on Perchance: message id -> { ctl, alt } while its prompt is written
   let markOnLeave = null;
@@ -1374,7 +1375,7 @@ export async function chatView(id, focusId = null) {
       if (vis.length < 2) return vis.map((p) => picFig(p, m)).join('') + pcHTML(m);
       const list = vis.slice().reverse();
       const n = list.length;
-      const top = (((picTop.get(m.id) || 0) % n) + n) % n;
+      const top = (((picTop.get(topKey(m)) || 0) % n) + n) % n;
       const next = list[(top + 1) % n];
       return `<div class="pic-stack" data-stack="${esc(m.id)}"><div class="ps-peek p2" aria-hidden="true"></div><div class="ps-peek" aria-hidden="true"><img class="ps-img" src="${esc(picSrc(next))}" alt=""></div><div class="ps-top">${picFig(list[top], m, top, n)}</div></div><p class="ps-hint" aria-hidden="true">Swipe for the next picture</p>` + pcHTML(m);
     }
@@ -1386,13 +1387,15 @@ export async function chatView(id, focusId = null) {
       const old = st.querySelector('.ps-top');
       const hadFocus = st.contains(document.activeElement) ? (document.activeElement.matches('.ps-count') ? '.ps-count' : '.pic-open') : '';
       const fly = reducedMotion() ? null : old.cloneNode(true);
-      picTop.set(mid, (picTop.get(mid) || 0) + 1);
+      picTop.set(topKey(m), (picTop.get(topKey(m)) || 0) + 1);
       const tmp = document.createElement('div');
       tmp.innerHTML = picsHTML(m);
       const neu = tmp.querySelector('.pic-stack');
       st.replaceWith(neu);
       if (fly) {
+        fly.classList.remove('ps-top');
         fly.classList.add('ps-fly');
+        fly.querySelectorAll('[data-pic],[data-picid],[data-picmore],[data-psnext]').forEach((x) => ['data-pic', 'data-picid', 'data-picmore', 'data-psnext'].forEach((a) => x.removeAttribute(a)));
         fly.setAttribute('aria-hidden', 'true');
         fly.inert = true;
         neu.appendChild(fly);
@@ -1415,10 +1418,10 @@ export async function chatView(id, focusId = null) {
     log.addEventListener('pointerdown', (e) => {
       const t = e.target.closest('.ps-top');
       if (!t || e.button === 2 || e.target.closest('.pic-more, .ps-count')) return;
-      sw = { t, x0: e.clientX, y0: e.clientY, t0: performance.now(), dx: 0, horiz: null, id: e.pointerId };
+      sw = { t, mid: t.closest('[data-stack]').dataset.stack, x0: e.clientX, y0: e.clientY, t0: performance.now(), dx: 0, horiz: null, id: e.pointerId };
     });
     log.addEventListener('pointermove', (e) => {
-      if (!sw) return;
+      if (!sw || e.pointerId !== sw.id) return;
       sw.dx = e.clientX - sw.x0;
       const dy = e.clientY - sw.y0;
       if (sw.horiz == null && (Math.abs(sw.dx) > 8 || Math.abs(dy) > 8)) {
@@ -1430,19 +1433,21 @@ export async function chatView(id, focusId = null) {
       }
       if (sw.horiz) sw.t.style.transform = `translateX(${sw.dx}px) rotate(${Math.max(-4, Math.min(4, (sw.dx / sw.t.offsetWidth) * 4))}deg)`;
     });
-    const swEnd = () => {
-      if (!sw) return;
+    const swEnd = (e) => {
+      if (!sw || e.pointerId !== sw.id) return;
       const s0 = sw;
       sw = null;
-      if (!s0.horiz) return;
+      if (!s0.horiz || !s0.t.isConnected) return; // redrawn mid-drag: nothing to finish
       stackSwipedAt = Date.now();
       const v = Math.abs(s0.dx) / Math.max(1, performance.now() - s0.t0);
-      if (Math.abs(s0.dx) > s0.t.offsetWidth * 0.3 || v > 0.5) return stackNext(s0.t.closest('[data-stack]').dataset.stack, s0.dx < 0 ? 1 : -1, s0.dx);
-      s0.t.animate([{ transform: s0.t.style.transform }, { transform: 'none' }], { duration: 260, easing: 'cubic-bezier(.16,1,.3,1)' });
+      if (e.type === 'pointerup' && (Math.abs(s0.dx) > s0.t.offsetWidth * 0.3 || v > 0.5)) return stackNext(s0.mid, s0.dx < 0 ? 1 : -1, s0.dx);
+      if (!reducedMotion()) s0.t.animate([{ transform: s0.t.style.transform }, { transform: 'none' }], { duration: 260, easing: 'cubic-bezier(.16,1,.3,1)' });
       s0.t.style.transform = '';
     };
     log.addEventListener('pointerup', swEnd);
     log.addEventListener('pointercancel', swEnd);
+    // A mouse drag on the picture would start the browser's image drag instead of the swipe.
+    log.addEventListener('dragstart', (e) => e.target.closest?.('.ps-top') && e.preventDefault());
     // ---------- Paint on Perchance: the prompt on the plate, then two steps (copy & open, add the picture) ----------
     // Kept on the message (m.pcPending) so it is still there after Perchance's tab and a reload.
     function pcLines(t) {
@@ -1609,6 +1614,7 @@ export async function chatView(id, focusId = null) {
       try {
         rec = await keepPicture({ chat, alt: q.alt || 0, data, prompt: q.prompt, cap: q.cap, style: q.style });
         (m.pics ||= []).push(rec);
+        picTop.delete(topKey(m)); // the new picture comes up on top
         keepScene(chat, rec, m); // saved to this chat's Scenes too
         delete m.pcPending;
         await saveChat(chat);
@@ -1963,6 +1969,7 @@ export async function chatView(id, focusId = null) {
             });
             const rec = await keepPicture({ chat, alt, data, prompt, cap: cap || place?.name || '', style: 'nightmare', from: 'nightmare', extra: { ms: res.ms, seed: res.seed, model: res.model, size: res.size, mood: reuse?.mood ?? P.mood, frame: reuse?.frame ?? P.frame } });
             (m.pics ||= []).push(rec);
+        picTop.delete(topKey(m)); // the new picture comes up on top
             keepScene(chat, rec, m);
             await saveChat(chat);
             made.push(rec);
@@ -1974,10 +1981,10 @@ export async function chatView(id, focusId = null) {
         }
         if (destroyed) return;
         plate.remove();
+        picTop.delete(topKey(m)); // the newest picture comes up on top
         const i = chat.messages.indexOf(m);
         if (i >= 0) rerenderMsg(i);
         made.forEach((r) => log.querySelector(`[data-pic="${r.id}"]`)?.classList.add('fresh'));
-        picTop.delete(m.id); // the newest picture comes up on top
         const rec = made[made.length - 1];
         if (!auto || document.activeElement === document.body) log.querySelector(`[data-picmore="${rec.id}"]`)?.focus({ preventScroll: true });
         if (made.length === n) toast(n > 1 ? `Painted ${n} copies` : 'Painted');
@@ -2102,6 +2109,7 @@ export async function chatView(id, focusId = null) {
         });
         clearInterval(timer);
         (m.pics ||= []).push(rec);
+        picTop.delete(topKey(m)); // the new picture comes up on top
         keepScene(chat, rec, m); // saved to this chat's Scenes too
         await saveChat(chat);
         if (destroyed) return;
@@ -2145,6 +2153,9 @@ export async function chatView(id, focusId = null) {
         await saveChat(chat);
         await gcPictures();
         rerenderMsg(chat.messages.indexOf(m));
+        const at = log.querySelector(`.msg[data-id="${CSS.escape(m.id)}"]`);
+        const f = at?.querySelector('.ps-count') || at?.querySelector('[data-picmore]');
+        f ? f.focus({ preventScroll: true }) : focusReply(m);
       }
     }
     const picItems = (pid) => {
@@ -3334,7 +3345,7 @@ export async function chatView(id, focusId = null) {
     let press = null;
     log.addEventListener('pointerdown', (e) => {
       const el = e.target.closest('.msg');
-      if (!el || e.target.closest('button,a,.pic-stack') || e.button === 2) return;
+      if (!el || e.target.closest('button,a,.pic-stack,.ps-hint') || e.button === 2) return;
       const bubble = el.querySelector('.bubble');
       const onMark = !!e.target.closest('.para.here');
       press = { el, bubble, x: e.clientX, y: e.clientY, dx: 0, swipe: false, t: setTimeout(() => (press && !press.swipe ? (onMark ? clearMark() : messageMenu(el), (press = null)) : 0), 480) };
