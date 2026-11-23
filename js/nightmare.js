@@ -176,14 +176,29 @@ async function paintNow({ prompt, signal, onWait, overrides = {} }) {
     },
   };
   if (p.negative.trim()) params.prompt = { negative: p.negative.trim() };
-  const j = await nmJson('/run', { method: 'POST', body: JSON.stringify({ flow: 'txt2img', prompt, params }) }, signal);
+  let j;
+  let sizeNote = '';
+  try {
+    j = await nmJson('/run', { method: 'POST', body: JSON.stringify({ flow: 'txt2img', prompt, params }) }, signal);
+  } catch (e) {
+    // Many NPU models are built for one size only (512x512 for SD 1.5): Nightmare can't start them at another.
+    // Paint once more at the model's own size, and keep that size for next time.
+    const native = mi?.native && SIZES.includes(mi.native) ? mi.native : '';
+    if (!/did not start|backend/i.test(e.message) || !native || native === `${w}x${h}`) throw e;
+    const [nw, nh] = native.split('x');
+    params.generate.width = nw;
+    params.generate.height = nh;
+    j = await nmJson('/run', { method: 'POST', body: JSON.stringify({ flow: 'txt2img', prompt, params }) }, signal);
+    await saveNm({ size: native });
+    sizeNote = `${modelLabel(p.model)} only paints at ${native.replace('x', '×')} here, so it painted at that size (now the default).`;
+  }
   const out = (j.results || []).find((x) => x.kind === 'image' && x.url);
   if (!out) throw new NmError(j.failed?.length ? `Nightmare couldn’t paint it: ${JSON.stringify(j.failed[0]).slice(0, 160)}` : 'Nightmare didn’t send a picture back.');
   const r = await nm(out.url, {}, signal);
   if (!r.ok) throw new NmError(`Nightmare answered ${r.status} for the picture.`);
   const url = await blobToData(await r.blob());
   await saveNm({ seed });
-  return { url, ms: j.ms || 0, seed, model: p.model, size: `${w}x${h}`, warnings: j.warnings || [] };
+  return { url, ms: j.ms || 0, seed, model: p.model, size: `${params.generate.width}x${params.generate.height}`, warnings: j.warnings || [], sizeNote };
 }
 
 // ---------- the prompt: short tags under 77 tokens ----------
@@ -249,19 +264,25 @@ export async function sceneTags({ chat, people, speaker, persona, withMe, m, con
 const COUNT = /^(\d+)\s*(girl|boy|other)s?$/i;
 export function compose({ looks, frame, tags, limit = TOKEN_LIMIT }) {
   const counts = { girl: 0, boy: 0, other: 0 };
-  const per = looks.length ? Math.max(8, Math.floor((limit - 25) / looks.length)) : 0;
+  // Looks get under half the tokens between them, so the scene (what's happening) always fits.
+  const per = looks.length ? Math.max(6, Math.floor(Math.min(limit - 25, limit * 0.45) / looks.length)) : 0;
+  // A look's tags past its share go after the scene (cut, unless tapped in on the prompt sheet).
+  const lookExtra = [];
   const lookTags = looks.flatMap((l) => {
     const own = splitTags(l.tags).filter((t) => {
       const c = t.match(COUNT);
       if (c) counts[c[2].toLowerCase()] += +c[1];
       return !c;
     });
-    return fitTags(own, per).keep;
+    const f = fitTags(own, per);
+    lookExtra.push(...f.cut);
+    return f.keep;
   });
   const countTags = Object.entries(counts).filter(([, n]) => n).map(([k, n]) => `${n}${k}${n > 1 ? 's' : ''}`);
   const all = [];
   const seen = new Set();
-  for (const t of [...countTags, ...lookTags, ...splitTags(frameTags(frame)), ...tags.filter((t) => !countTags.length || !COUNT.test(t))]) {
+  const frameName = (FRAMES.find((f) => f[0] === frame)?.[1] || '').toLowerCase(); // the writer often echoes it
+  for (const t of [...countTags, ...lookTags, ...splitTags(frameTags(frame)), ...tags.filter((t) => (!countTags.length || !COUNT.test(t)) && t.toLowerCase() !== frameName), ...lookExtra]) {
     const k = t.toLowerCase();
     if (!seen.has(k)) seen.add(k), all.push(t);
   }

@@ -1639,7 +1639,9 @@ export async function chatView(id, focusId = null) {
                   const was = isDit(nmPrefs().model);
                   const patch = { model: x.id };
                   // A model of the other kind gets a size it's made for.
-                  if (x.dit !== was || !nmPrefs().model) patch.size = x.dit ? '1024x768' : '768x512';
+                  // The size the model was built for: NPU models often run at that size only.
+                  const native = SIZES.includes(x.native) ? x.native : x.dit ? '1024x1024' : '512x512';
+                  if (nmPrefs().size !== native) patch.size = native;
                   await saveNm(patch);
                   btn.querySelector('b').textContent = x.label;
                   if (patch.size) (s.querySelector('#nmSize b').textContent = sizeText(patch.size)), toast(`Size set to ${sizeText(patch.size)} for ${familyName(x.family)}`);
@@ -1650,7 +1652,8 @@ export async function chatView(id, focusId = null) {
           s.querySelector('#nmModel').addEventListener('click', (e) => pickModel(e.currentTarget));
           s.querySelector('#nmSize').addEventListener('click', (e) => {
             const btn = e.currentTarget;
-            openMenu(btn, SIZES.map((z) => ({ icon: z === nmPrefs().size ? 'check' : 'image', label: sizeText(z) + (z === '768x512' ? ' · fits the chat' : ''), on: async () => (await saveNm({ size: z }), (btn.querySelector('b').textContent = sizeText(z))) })));
+            const nat = modelInfo(nmPrefs().model)?.native;
+            openMenu(btn, SIZES.map((z) => ({ icon: z === nmPrefs().size ? 'check' : 'image', label: sizeText(z) + (z === nat ? ' · the model’s own size' : z === '768x512' ? ' · fits the chat, if the model has it' : ''), on: async () => (await saveNm({ size: z }), (btn.querySelector('b').textContent = sizeText(z))) })));
           });
           s.querySelector('#nmGo').addEventListener('click', () => (close(), runNightmare(m)));
         },
@@ -1718,34 +1721,69 @@ export async function chatView(id, focusId = null) {
       const P = nmPrefs();
       return new Promise((resolve) => {
         let out = null;
+        // Every tag in order; tapped-out ones are left out, the rest fitted to the model's tokens.
+        let order = [...fit.keep, ...fit.cut];
+        const off = new Set();
+        const calc = () => fitTags(order.filter((t) => !off.has(t)), limit);
         const lookOf = (t) => looks.find((l) => splitTags(l.tags).some((x) => x.toLowerCase() === t.toLowerCase()));
-        const chipsOf = (f) => [...f.keep.map((t) => [t, false]), ...f.cut.map((t) => [t, true])].map(([t, cut]) => {
-          const l = lookOf(t);
-          return `<span class="nm-tag${l ? ' look' : ''}${cut ? ' cut' : ''}"${l ? ` style="--c:${l.color}"` : ''}>${esc(t)}${cut ? '<span class="vh"> (cut by the model)</span>' : ''}</span>`;
-        }).join('');
         const dit = limit > 77;
         const meter = (n) => (dit ? `<span>${n} tokens · this model reads long prompts</span>` : `<span>${n} / 77 tokens</span><span class="nm-bar"><i style="width:${Math.min(100, (n / 77) * 100)}%"></i></span>`);
+        const chips = () => {
+          const f = calc();
+          return order
+            .map((t, i) => {
+              const l = lookOf(t);
+              const st = off.has(t) ? 'off' : f.keep.includes(t) ? 'keep' : 'cut';
+              const say = st === 'off' ? ' (taken out, tap to put back)' : st === 'cut' ? ' (past 77 tokens, tap to move in)' : '';
+              return `<button type="button" class="nm-tag press${l ? ' look' : ''}${st === 'cut' ? ' cut' : ''}${st === 'off' ? ' off' : ''}" data-i="${i}" aria-pressed="${st !== 'off'}"${l ? ` style="--c:${l.color}"` : ''}>${esc(t)}<span class="vh">${say}</span></button>`;
+            })
+            .join('');
+        };
         openSheet({
           label: 'The prompt',
-          html: `<h2 class="sheet-title">The prompt</h2><p class="sheet-p nm-p">${dit ? 'Look tags first, then the scene. This model reads long prompts.' : 'Look tags first. Tags past 77 tokens are cut by the model, shown struck through.'}</p>
-            <div class="nm-tags" id="pmTags">${chipsOf(fit)}</div><textarea class="nm-ta" id="pmTa" rows="6" aria-label="Prompt" hidden>${esc([...fit.keep, ...fit.cut].join(', '))}</textarea>
+          html: `<h2 class="sheet-title">The prompt</h2><p class="sheet-p nm-p">${dit ? 'Look tags first, then the scene. Tap a tag to take it out or put it back.' : 'Look tags first. Tap a tag to take it out or put it back; tap a struck tag (past 77 tokens) to move it in.'}</p>
+            <div class="nm-tags" id="pmTags">${chips()}</div><textarea class="nm-ta" id="pmTa" rows="6" aria-label="Prompt" hidden></textarea>
             <p class="nm-meter" id="pmMeter" aria-live="polite">${meter(fit.tokens)}</p>
             <button type="button" class="nm-ghost press" id="pmEdit">Edit as text</button>
             <button type="button" class="pic-go press" id="pmGo">Paint · ${sizeText(P.size)}</button>`,
           onMount(s, close) {
             const ta = s.querySelector('#pmTa');
-            const refit = () => fitTags(splitTags(ta.value), limit);
+            const box = s.querySelector('#pmTags');
+            const redraw = (focusI) => {
+              box.innerHTML = chips();
+              s.querySelector('#pmMeter').innerHTML = meter(calc().tokens);
+              if (focusI != null) box.querySelector(`[data-i="${focusI}"]`)?.focus({ preventScroll: true });
+            };
+            box.addEventListener('click', (e) => {
+              const b = e.target.closest('[data-i]');
+              if (!b) return;
+              const i = +b.dataset.i;
+              const t = order[i];
+              if (off.has(t)) off.delete(t);
+              else if (calc().keep.includes(t)) off.add(t);
+              else {
+                // Past the model's tokens: move it in, just after the look tags.
+                order.splice(i, 1);
+                let at = 0;
+                while (at < order.length && (lookOf(order[at]) || /^\d+(girl|boy|other)s?$/i.test(order[at]))) at++;
+                order.splice(at, 0, t);
+                return redraw(at);
+              }
+              redraw(i);
+            });
             ta.addEventListener('input', () => (s.querySelector('#pmMeter').innerHTML = meter(clipTokens(ta.value))));
             s.querySelector('#pmEdit').addEventListener('click', (e) => {
               const editing = ta.hidden;
+              if (editing) ta.value = order.filter((t) => !off.has(t)).join(', ');
+              else (order = splitTags(ta.value)), off.clear(), redraw();
               ta.hidden = !editing;
-              s.querySelector('#pmTags').hidden = editing;
+              box.hidden = editing;
               e.currentTarget.textContent = editing ? 'Show as tags' : 'Edit as text';
-              if (editing) ta.focus();
-              else (s.querySelector('#pmTags').innerHTML = chipsOf(refit())), (s.querySelector('#pmMeter').innerHTML = meter(refit().tokens));
+              if (editing) ta.focus(), (s.querySelector('#pmMeter').innerHTML = meter(clipTokens(ta.value)));
             });
             s.querySelector('#pmGo').addEventListener('click', () => {
-              out = ta.value.trim() || null; // sent as written: what's past 77 tokens the model ignores itself
+              // As written in the box; from the tags, the ones in the prompt (the model ignores past 77 anyway).
+              out = (ta.hidden ? calc().keep.join(', ') : ta.value.trim()) || null;
               close();
             });
           },
@@ -1821,6 +1859,7 @@ export async function chatView(id, focusId = null) {
         }
         status.textContent = `Painting · ${P.model ? modelLabel(P.model) : 'Nightmare'} · ${sizeText(P.size)}`;
         const res = await nmPaint({ prompt, signal: ctlP.signal, onWait: () => (status.textContent = 'Nightmare is busy · waiting') });
+        if (res.sizeNote) toast(res.sizeNote, { ms: 6000 });
         // Large (upscaled) pictures are kept at a size the app can hold; Nightmare keeps the full one if asked.
         const data = await resizeImage(await (await fetch(res.url)).blob(), 1600).catch(() => {
           throw new NmError('The picture came back but couldn’t be read.', 'Try again, or a smaller size or upscale.');
@@ -1846,7 +1885,8 @@ export async function chatView(id, focusId = null) {
         const cap = plate.querySelector('figcaption');
         cap.innerHTML = `<button type="button" class="pic-cancel press" data-x>Close</button><button type="button" class="pic-cancel press" data-again>Paint again</button>`;
         cap.querySelector('[data-x]').addEventListener('click', () => plate.remove());
-        cap.querySelector('[data-again]').addEventListener('click', () => (plate.remove(), runNightmare(m)));
+        // Paint again opens the sheet: change the model, size or mood first.
+        cap.querySelector('[data-again]').addEventListener('click', () => (plate.remove(), nmSheet(m)));
         if (hadFocus) cap.querySelector('[data-again]').focus({ preventScroll: true });
       }
     }
@@ -1990,7 +2030,7 @@ export async function chatView(id, focusId = null) {
         await saveCharacter(who);
         renderAll();
         toast(`${who.name}’s portrait updated`);
-      } else if (what === 'again') p.from === 'perchance' ? runPerchance(m, p.style) : p.from === 'nightmare' && isNm() ? runNightmare(m) : runPaint(m, p.style);
+      } else if (what === 'again') p.from === 'perchance' ? runPerchance(m, p.style) : p.from === 'nightmare' && isNm() ? nmSheet(m) : runPaint(m, p.style);
       else if (what === 'delete') {
         if (!(await confirmSheet({ title: 'Delete this picture?', body: 'It’s removed from this chat and from the app.', ok: 'Delete', danger: true }))) return;
         m.pics = m.pics.filter((x) => x !== p);
