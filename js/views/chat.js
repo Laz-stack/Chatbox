@@ -150,6 +150,8 @@ export async function chatView(id, focusId = null) {
   let watchOff = null; // set by watch mode in mount(); unmount stops it
   let busy = false;
   let destroyed = false;
+  const picTop = new Map(); // a reply's picture stack: message id -> which picture is on top (0 = newest); not saved
+  let stackSwipedAt = 0;
   const pcRuns = new Map(); // Paint on Perchance: message id -> { ctl, alt } while its prompt is written
   let markOnLeave = null;
   let markOff = null; // set in mount(): marks the paragraph you were reading when you leave
@@ -1362,12 +1364,85 @@ export async function chatView(id, focusId = null) {
     });
 
     // ---------- scene pictures ----------
-    function picsHTML(m) {
-      return (m.pics || [])
-        .filter((p) => (p.alt || 0) === (m.alt || 0)) // pictures belong to the version they show
-        .map((p) => (picSrc(p) ? `<figure class="pic" data-pic="${p.id}"><button type="button" class="pic-open" data-picid="${p.id}" aria-label="Open picture: ${esc(altOf(p))}"><img class="pic-img" src="${esc(picSrc(p))}" alt="${esc(altOf(p))}"></button><figcaption><span>${esc(p.caption || STYLES[p.style]?.label || 'Scene')}</span>${p.from === 'perchance' ? '<small class="pic-from">From Perchance</small>' : p.from === 'nightmare' ? `<small class="pic-from">Nightmare${p.ms ? ` · ${Math.max(1, Math.round(p.ms / 1000))} s` : ''}</small>` : ''}<button type="button" class="pic-more press" data-picmore="${p.id}" aria-label="Picture options">${icon('more', 18)}</button></figcaption></figure>` : ''))
-        .join('') + pcHTML(m);
+    // Several pictures on one reply stack up like Fares' receipts (draft v43 A): the newest on top, the next
+    // two as edges underneath; swipe the top one either way (or tap its count) to bring the next up.
+    function picFig(p, m, k = 0, n = 1) {
+      return `<figure class="pic" data-pic="${p.id}"><button type="button" class="pic-open" data-picid="${p.id}" aria-label="Open picture: ${esc(altOf(p))}"><img class="pic-img" src="${esc(picSrc(p))}" alt="${esc(altOf(p))}"></button><figcaption><span>${esc(p.caption || STYLES[p.style]?.label || 'Scene')}</span>${n > 1 ? `<button type="button" class="ps-count press" data-psnext="${esc(m.id)}" aria-label="Picture ${k + 1} of ${n}. Show the next one">${k + 1} / ${n}</button>` : ''}${p.from === 'perchance' ? '<small class="pic-from">From Perchance</small>' : p.from === 'nightmare' ? `<small class="pic-from">Nightmare${p.ms ? ` · ${Math.max(1, Math.round(p.ms / 1000))} s` : ''}</small>` : ''}<button type="button" class="pic-more press" data-picmore="${p.id}" aria-label="Picture options">${icon('more', 18)}</button></figcaption></figure>`;
     }
+    function picsHTML(m) {
+      const vis = (m.pics || []).filter((p) => (p.alt || 0) === (m.alt || 0) && picSrc(p)); // pictures belong to the version they show
+      if (vis.length < 2) return vis.map((p) => picFig(p, m)).join('') + pcHTML(m);
+      const list = vis.slice().reverse();
+      const n = list.length;
+      const top = (((picTop.get(m.id) || 0) % n) + n) % n;
+      const next = list[(top + 1) % n];
+      return `<div class="pic-stack" data-stack="${esc(m.id)}"><div class="ps-peek p2" aria-hidden="true"></div><div class="ps-peek" aria-hidden="true"><img class="ps-img" src="${esc(picSrc(next))}" alt=""></div><div class="ps-top">${picFig(list[top], m, top, n)}</div></div><p class="ps-hint" aria-hidden="true">Swipe for the next picture</p>` + pcHTML(m);
+    }
+    // Bring the next picture up: the top one flies off and tucks behind, the one beneath rises.
+    function stackNext(mid, dir = 1, fromX = 0) {
+      const m = chat.messages.find((x) => x.id === mid);
+      const st = log.querySelector(`[data-stack="${CSS.escape(mid)}"]`);
+      if (!m || !st) return;
+      const old = st.querySelector('.ps-top');
+      const hadFocus = st.contains(document.activeElement) ? (document.activeElement.matches('.ps-count') ? '.ps-count' : '.pic-open') : '';
+      const fly = reducedMotion() ? null : old.cloneNode(true);
+      picTop.set(mid, (picTop.get(mid) || 0) + 1);
+      const tmp = document.createElement('div');
+      tmp.innerHTML = picsHTML(m);
+      const neu = tmp.querySelector('.pic-stack');
+      st.replaceWith(neu);
+      if (fly) {
+        fly.classList.add('ps-fly');
+        fly.setAttribute('aria-hidden', 'true');
+        fly.inert = true;
+        neu.appendChild(fly);
+        fly
+          .animate(
+            [
+              { transform: `translateX(${fromX}px) rotate(${(fromX / neu.offsetWidth) * 4}deg)`, opacity: 1 },
+              { transform: `translateX(${-dir * 108}%) rotate(${-dir * 6}deg)`, opacity: 0.6, offset: 0.6 },
+              { transform: `translateX(${-dir * 40}%) translateY(14px) scale(.96)`, opacity: 0 },
+            ],
+            { duration: 380, easing: 'cubic-bezier(.2,.7,.2,1)' }
+          )
+          .finished.then(() => fly.remove(), () => fly.remove());
+        neu.querySelector('.ps-top').animate([{ transform: 'translateY(12px) scaleX(.96)', filter: 'brightness(.88)' }, { transform: 'none', filter: 'none' }], { duration: 320, easing: 'cubic-bezier(.16,1,.3,1)' });
+      }
+      if (hadFocus) neu.querySelector(hadFocus)?.focus({ preventScroll: true });
+    }
+    // Drag the top picture sideways; past 30% (or a flick) sends it to the back. A drag isn't a tap.
+    let sw = null;
+    log.addEventListener('pointerdown', (e) => {
+      const t = e.target.closest('.ps-top');
+      if (!t || e.button === 2 || e.target.closest('.pic-more, .ps-count')) return;
+      sw = { t, x0: e.clientX, y0: e.clientY, t0: performance.now(), dx: 0, horiz: null, id: e.pointerId };
+    });
+    log.addEventListener('pointermove', (e) => {
+      if (!sw) return;
+      sw.dx = e.clientX - sw.x0;
+      const dy = e.clientY - sw.y0;
+      if (sw.horiz == null && (Math.abs(sw.dx) > 8 || Math.abs(dy) > 8)) {
+        sw.horiz = Math.abs(sw.dx) > Math.abs(dy);
+        if (!sw.horiz) return (sw = null);
+        try {
+          sw.t.setPointerCapture(sw.id);
+        } catch {}
+      }
+      if (sw.horiz) sw.t.style.transform = `translateX(${sw.dx}px) rotate(${Math.max(-4, Math.min(4, (sw.dx / sw.t.offsetWidth) * 4))}deg)`;
+    });
+    const swEnd = () => {
+      if (!sw) return;
+      const s0 = sw;
+      sw = null;
+      if (!s0.horiz) return;
+      stackSwipedAt = Date.now();
+      const v = Math.abs(s0.dx) / Math.max(1, performance.now() - s0.t0);
+      if (Math.abs(s0.dx) > s0.t.offsetWidth * 0.3 || v > 0.5) return stackNext(s0.t.closest('[data-stack]').dataset.stack, s0.dx < 0 ? 1 : -1, s0.dx);
+      s0.t.animate([{ transform: s0.t.style.transform }, { transform: 'none' }], { duration: 260, easing: 'cubic-bezier(.16,1,.3,1)' });
+      s0.t.style.transform = '';
+    };
+    log.addEventListener('pointerup', swEnd);
+    log.addEventListener('pointercancel', swEnd);
     // ---------- Paint on Perchance: the prompt on the plate, then two steps (copy & open, add the picture) ----------
     // Kept on the message (m.pcPending) so it is still there after Perchance's tab and a reload.
     function pcLines(t) {
@@ -1902,7 +1977,8 @@ export async function chatView(id, focusId = null) {
         const i = chat.messages.indexOf(m);
         if (i >= 0) rerenderMsg(i);
         made.forEach((r) => log.querySelector(`[data-pic="${r.id}"]`)?.classList.add('fresh'));
-        const rec = made[0];
+        picTop.delete(m.id); // the newest picture comes up on top
+        const rec = made[made.length - 1];
         if (!auto || document.activeElement === document.body) log.querySelector(`[data-picmore="${rec.id}"]`)?.focus({ preventScroll: true });
         if (made.length === n) toast(n > 1 ? `Painted ${n} copies` : 'Painted');
       } catch (e) {
@@ -2105,8 +2181,11 @@ export async function chatView(id, focusId = null) {
       }
       const more = e.target.closest('[data-picmore]');
       if (more) return openMenu(more, picItems(more.dataset.picmore));
+      const psn = e.target.closest('[data-psnext]');
+      if (psn) return stackNext(psn.dataset.psnext);
       const opener = e.target.closest('.pic-open');
       if (!opener) return;
+      if (Date.now() - stackSwipedAt < 400) return e.stopImmediatePropagation(); // that was a swipe
       e.stopImmediatePropagation();
       const img = opener.querySelector('img');
       const pid = opener.dataset.picid;
@@ -3255,7 +3334,7 @@ export async function chatView(id, focusId = null) {
     let press = null;
     log.addEventListener('pointerdown', (e) => {
       const el = e.target.closest('.msg');
-      if (!el || e.target.closest('button,a') || e.button === 2) return;
+      if (!el || e.target.closest('button,a,.pic-stack') || e.button === 2) return;
       const bubble = el.querySelector('.bubble');
       const onMark = !!e.target.closest('.para.here');
       press = { el, bubble, x: e.clientX, y: e.clientY, dx: 0, swipe: false, t: setTimeout(() => (press && !press.swipe ? (onMark ? clearMark() : messageMenu(el), (press = null)) : 0), 480) };
