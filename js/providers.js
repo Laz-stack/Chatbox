@@ -275,6 +275,29 @@ export async function generateImage(conn, { model, prompt, signal }) {
     }
   };
   if (conn.provider === 'openrouter') {
+    // Image models in OpenRouter's Images API (Grok Imagine, Qwen Image, Seedream, Flux, Gemini…):
+    // each model's own options come from its public list (no key needed).
+    const info = await orImageModel(m);
+    if (info) {
+      const sp = info.supported_parameters || {};
+      const pick = (k, prefs) => prefs.find((x) => sp[k]?.values?.includes(x));
+      const body = { model: m, prompt };
+      const ar = pick('aspect_ratio', ['3:2', '16:9', '4:3']);
+      const rs = pick('resolution', ['1K']);
+      if (ar) body.aspect_ratio = ar;
+      if (rs) body.resolution = rs;
+      if (sp.n) body.n = 1;
+      const post = (path) => reach(baseOf(conn) + path, { method: 'POST', headers: headers(conn), body: JSON.stringify(body), signal });
+      let res = await post('/images/generations');
+      if (res.status === 404 || res.status === 405) res = await post('/images');
+      if (res.ok) {
+        const j = await res.json();
+        const url = imageIn(j);
+        if (!url) throw new ProviderError('OpenRouter answered without a picture.', 0, `Its reply: ${JSON.stringify(j).replace(/"[A-Za-z0-9+/=]{200,}"/g, '"…"').slice(0, 240)}`);
+        return { url, cost: Number.isFinite(+j.usage?.cost) ? +j.usage.cost : null };
+      }
+      if (res.status !== 404 && res.status !== 405) throw await readError(res); // e.g. the model's own content rules
+    }
     // Some image models answer with text and pictures, some only pictures: try both shapes.
     const ask = (modalities) => reach(baseOf(conn) + '/chat/completions', { method: 'POST', headers: headers(conn), body: JSON.stringify({ model: m, messages: [{ role: 'user', content: prompt }], modalities }), signal });
     let res = await ask(['image', 'text']);
@@ -294,6 +317,21 @@ export async function generateImage(conn, { model, prompt, signal }) {
   if (d?.b64_json) return { url: 'data:image/png;base64,' + d.b64_json, cost: null };
   if (d?.url) return { url: d.url, cost: null };
   throw new ProviderError('The provider didn’t return a picture.');
+}
+// OpenRouter's public list of image models, read once.
+let orImgModels = null;
+async function orImageModel(id) {
+  orImgModels ||= fetch('https://openrouter.ai/api/v1/images/models')
+    .then((r) => (r.ok ? r.json() : { data: [] }))
+    .then((j) => j.data || [])
+    .catch(() => ((orImgModels = null), []));
+  return (await orImgModels).find((x) => x.id === id) || null;
+}
+// Where an image API put the picture: base64 or a link, in the shapes providers use.
+function imageIn(j) {
+  const b64 = (v) => (typeof v === 'string' && v.length > 100 ? (v.startsWith('data:') ? v : `data:image/png;base64,${v}`) : null);
+  const one = (d) => d && (b64(d.b64_json) || b64(d.b64) || b64(d.base64) || (typeof d.url === 'string' && d.url) || (typeof d.image_url === 'string' && d.image_url) || d.image_url?.url || null);
+  return one(j?.data?.[0]) || one(j?.images?.[0]) || one(j?.output?.[0]) || j?.choices?.[0]?.message?.images?.[0]?.image_url?.url || (typeof j?.images?.[0] === 'string' && (b64(j.images[0]) || j.images[0])) || null;
 }
 // Demo mode: a painted-looking placeholder, so the feature can be tried without a key.
 function demoPicture(prompt) {
