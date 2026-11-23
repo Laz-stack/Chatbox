@@ -2429,3 +2429,13 @@ button.nm-tag { border: 0; cursor: pointer; text-align: left; }
 :root.page-light .chat .msg.ai:not(.scene) .bubble { box-shadow: 0 0 0 1px rgba(0, 0, 0, .12); }
 :root.page-light .chat .msg.ai.found:not(.scene) .bubble { box-shadow: 0 0 0 3px var(--yellow); }
 :root.page-light .chat .msg.ai.lifted:not(.scene) .bubble { box-shadow: 0 0 0 1px rgba(0, 0, 0, .12), 0 18px 40px rgba(0, 0, 0, .6); }
+/* Owner pick v45 1B: the Lines filters, shorter names, all on one row (they still wrap on very narrow screens). */
+.chips-f { gap: 5px; }
+.chips-f a { min-width: 44px; justify-content: center; padding: 0 9px; font-size: 12px; }
+/* Owner pick v45 3A: story screens (Route map, Bonds, Diary, Quests, World map) use the big two-line title, like Memory. */
+.cr-t2 { margin: 0 0 14px; }
+.cr-t2 + .cr-read { margin: -4px 0 16px; text-align: left; }
+/* Owner pick v45 2B: a low budget is a heads-up, not an action: striped bar and a warning sign, no red. */
+.rc-meter.low i { background: repeating-linear-gradient(-45deg, var(--bg) 0 3px, transparent 3px 6px); box-shadow: inset 0 0 0 2px var(--bg); }
+.rc-low { display: flex; align-items: center; gap: 6px; margin-top: 6px; font: 800 12px/1.2 var(--font); color: var(--bg); }
+.rc-low svg { flex: none; }

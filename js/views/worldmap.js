@@ -96,8 +96,8 @@ export async function worldMapView(id) {
   const editBtn = () => (mapOn(chat) ? `<button type="button" class="wm-edit press" id="wmEdit" aria-pressed="${editing}">${editing ? 'Done' : 'Edit'}</button>` : '<span class="ibtn-spacer"></span>');
 
   const html = `<div class="screen no-tab cr-screen">
-    ${topbar({ back: `#/chat/${encodeURIComponent(chat.id)}`, title: 'World map', right: `<span id="wmEditSlot">${editBtn()}</span>` })}
-    <p class="cr-sub">${esc(ix ? ix.title : ch.name)}${mapOn(chat) ? ` · ${chat.map.places.length} place${chat.map.places.length === 1 ? '' : 's'}` : ''}</p>
+    ${topbar({ back: `#/chat/${encodeURIComponent(chat.id)}`, right: `<span id="wmEditSlot">${editBtn()}</span>` })}
+    <h1 class="t2 cr-t2"><span>World map</span><span class="sub" id="wmSub">${esc(ix ? ix.title : ch.name)}${mapOn(chat) ? ` · ${chat.map.places.length} place${chat.map.places.length === 1 ? '' : 's'}` : ''}</span></h1>
     ${mapOn(chat) ? `<p class="cr-read">${esc(readLine(chat, S.settings, agoLong))}</p>` : ''}
     <div id="wmBody">${body()}</div>
     <p class="vh" aria-live="polite" id="wmSay"></p>
@@ -112,7 +112,7 @@ export async function worldMapView(id) {
       const redraw = () => {
         $('#wmBody').innerHTML = body();
         $('#wmEditSlot').innerHTML = editBtn();
-        root.querySelector('.cr-sub').textContent = sub();
+        root.querySelector('#wmSub').textContent = sub();
       };
       // Listen on this page only (the app container is shared with other screens).
       const page = root.querySelector('.screen');

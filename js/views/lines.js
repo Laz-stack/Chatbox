@@ -9,8 +9,8 @@ const FILTERS = [
   ['recent', 'Recent'],
   ['all', 'All'],
   ['starred', 'Starred'],
-  ['narrators', 'One narrator'],
-  ['interchanges', 'Interchanges'],
+  ['narrators', 'Narrator'],
+  ['interchanges', 'Groups'],
 ];
 
 // A character imported as one narrator for a multi-character card.

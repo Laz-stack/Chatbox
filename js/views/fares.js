@@ -72,7 +72,8 @@ export function faresView() {
       ? `<div class="rc-r"><span>Monthly budget</span><button type="button" class="rc-edit num" data-budget>$${budget.toFixed(2)}</button></div>
          <div class="rc-r big"><span>Left to ride</span><span class="num">${left < 0 ? '−$' + Math.abs(left).toFixed(2) : '$' + left.toFixed(2)}</span></div>
          <div class="rc-meter${frac < 0.2 ? ' low' : ''}" role="meter" aria-valuemin="0" aria-valuemax="${budget}" aria-valuenow="${Math.max(0, left).toFixed(2)}" aria-label="Budget left"><i style="width:${(frac * 100).toFixed(1)}%"></i></div>
-         <div class="rc-note">${left < 0 ? 'Over budget. ' : ''}Resets in ${daysLeft} ${daysLeft === 1 ? 'day' : 'days'}</div>`
+         ${frac < 0.2 ? `<div class="rc-low"><svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 21h20L12 3z" fill="currentColor"/><path d="M12 10v5M12 17.5v.5" stroke="#ECECEC" stroke-width="2.4" stroke-linecap="round"/></svg>${left < 0 ? 'Over budget' : 'Under 20% left'}</div>` : ''}
+         <div class="rc-note">Resets in ${daysLeft} ${daysLeft === 1 ? 'day' : 'days'}</div>`
       : `<button type="button" class="rc-budget press" data-budget>${icon('plus', 18)}Set a monthly budget</button>`;
   const totals = (total, unpriced, note) =>
     `<div class="rc-r tot"><span>Total${unpriced ? `<small>${note}</small>` : ''}</span><span class="num">${money(total)}</span></div>
