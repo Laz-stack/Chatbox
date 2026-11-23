@@ -29,8 +29,8 @@ export async function adventureView(id) {
   };
 
   const html = `<div class="screen no-tab cr-screen">
-    ${topbar({ back: `#/chat/${encodeURIComponent(chat.id)}`, title: 'Quests and items' })}
-    <p class="cr-sub">${esc(title || '')}</p>
+    ${topbar({ back: `#/chat/${encodeURIComponent(chat.id)}` })}
+    <h1 class="t2 cr-t2"><span>Quests and items</span><span class="sub">${esc(title || 'This story')}</span></h1>
     <p class="cr-read" id="adRead">${esc(advOn(chat) ? readLine(chat, S.settings, agoLong) : 'Adventure mode is off. Turn it on to track quests and items.')}</p>
     <div class="ad-tog">${toggleRow('adOn', 'Adventure mode', 'Three suggested moves after each reply and a d20 for risky actions. Uses one short extra AI call per reply.', advOn(chat))}</div>
     <div id="adBoards">${boards()}</div>

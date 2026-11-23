@@ -69,8 +69,8 @@ export async function routeView(id) {
   const sub = () => `${esc(c.title)}${chat.chapters?.length ? ` · ${chat.chapters.length} chapter${chat.chapters.length === 1 ? '' : 's'}` : ''} · ${chat.route.length} station${chat.route.length === 1 ? '' : 's'}`;
 
   const html = `<div class="screen no-tab cr-screen">
-    ${topbar({ back: `#/chat/${encodeURIComponent(chat.id)}`, title: 'Route map' })}
-    <p class="cr-sub" id="rtSub">${sub()}</p>
+    ${topbar({ back: `#/chat/${encodeURIComponent(chat.id)}` })}
+    <h1 class="t2 cr-t2"><span>Route map</span><span class="sub" id="rtSub">${sub()}</span></h1>
     <p class="cr-read" id="rtRead">${esc(readLine(chat, S.settings, ago))}</p>
     <div id="rtList">${listHTML()}</div>
     <div class="cr-foot">${toggleRow('tChron', 'Track the story', 'Every couple of replies, a short extra AI call updates the map and Bonds.', trackingOn(S.settings))}
@@ -184,8 +184,8 @@ export async function bondsView(id, tab = 'you') {
   const listHTML = () => cast.map(card).join('');
 
   const html = `<div class="screen no-tab cr-screen">
-    ${topbar({ back: `#/chat/${encodeURIComponent(chat.id)}`, title: 'Bonds' })}
-    <p class="cr-sub" id="bdSub">${cast.length > 1 && tab === 'them' ? 'How they see each other' : `How they feel about ${esc(c.persona?.name?.trim() || 'you')}`}</p>
+    ${topbar({ back: `#/chat/${encodeURIComponent(chat.id)}` })}
+    <h1 class="t2 cr-t2"><span>Bonds</span><span class="sub" id="bdSub">${cast.length > 1 && tab === 'them' ? 'How they see each other' : `How they feel about ${esc(c.persona?.name?.trim() || 'you')}`}</span></h1>
     <p class="cr-read">${esc(readLine(chat, S.settings, ago))}</p>
     ${cast.length > 1 ? `<div class="bd-tabs" role="tablist" aria-label="Bonds"><button type="button" class="press" role="tab" id="tabYou" aria-selected="${tab !== 'them'}" aria-controls="bdList">With you</button><button type="button" class="press" role="tab" id="tabThem" aria-selected="${tab === 'them'}" aria-controls="twBox">Between them</button></div>` : ''}
     <div id="bdList" class="bd-list" role="tabpanel" ${cast.length > 1 && tab === 'them' ? 'hidden' : ''}>${listHTML()}</div>
@@ -298,8 +298,8 @@ export async function diaryView(id, entryId = null) {
   const hint = () => (since() >= 4 ? '' : entries().length ? 'A new entry unlocks after a few more messages.' : 'The first entry unlocks after a few messages.');
 
   const html = `<div class="screen no-tab cr-screen">
-    ${topbar({ back: `#/chat/${encodeURIComponent(chat.id)}`, title: 'Diary' })}
-    <p class="cr-sub" id="dySub">${esc(who.name)}’s private entries</p>
+    ${topbar({ back: `#/chat/${encodeURIComponent(chat.id)}` })}
+    <h1 class="t2 cr-t2"><span>Diary</span><span class="sub" id="dySub">${esc(who.name)}’s private entries</span></h1>
     ${whoRow()}
     <div id="dyList" class="dy-list">${listHTML()}</div>
     <p class="fhint" id="dyHint">${hint()}</p>
