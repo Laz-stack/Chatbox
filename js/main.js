@@ -1,4 +1,5 @@
 // Boot + hash router with View Transitions between screens.
+import { keepData } from './db.js';
 import { load } from './store.js';
 import { homeView } from './views/home.js';
 import { chatView } from './views/chat.js';
@@ -254,6 +255,7 @@ window.addEventListener('unhandledrejection', (e) => {
 (async () => {
   try {
     await load();
+    keepData(); // ask the browser not to clear Chatbox's data when space runs low
     applyText();
     startDim();
   } catch (e) {
