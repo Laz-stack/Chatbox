@@ -1554,7 +1554,7 @@ export async function chatView(id, focusId = null) {
     const nmIn = () => nmPeople().filter((x) => !(chat.picOff || []).includes(x.key));
     const sizeText = (z) => z.replace('x', '×');
     const finSum = (P) => [P.upscale ? `Upscale ${P.scale}` : 'Upscale off', P.colour || P.adjust ? [P.colour && 'Colour correction', P.adjust && 'Adjusted'].filter(Boolean).join(' · ') : 'Colours as painted'].join(' · ');
-    const moreSum = (P) => [P.lockSeed && P.seed ? `Seed ${P.seed}` : 'Seed random', P.negative.trim() ? 'Your negative' : 'Nightmare’s negative'].join(' · ');
+    const moreSum = (P) => [(P.copies || 1) > 1 ? `${P.copies} copies` : '', P.lockSeed && P.seed ? `Seed ${P.seed}` : 'Seed random', P.negative.trim() ? 'Your negative' : 'Nightmare’s negative'].filter(Boolean).join(' · ');
     function nmSheet(m, open = {}) {
       const P = nmPrefs();
       const face = (x) => `<button type="button" class="nm-face press" aria-pressed="${!(chat.picOff || []).includes(x.key)}" data-who="${esc(x.key)}" style="--c:${x.color}">${x.me ? `<i class="nm-me" aria-hidden="true">${esc((x.p?.name || 'Y')[0].toUpperCase())}</i>` : avatarTile(x.p, 34, { radius: 17 })}<span>${esc(x.name)}</span></button>`;
@@ -1565,6 +1565,7 @@ export async function chatView(id, focusId = null) {
         ${toggleRow('nmAdj', 'Adjust colours', 'Brightness, contrast, saturation, warmth as set in Nightmare', P.adjust)}`;
       const more = `${toggleRow('nmSeed', 'Keep the same seed', `Same look across pictures${P.seed ? ` · ${P.seed}` : ''}`, P.lockSeed)}
         ${toggleRow('nmPrev', 'Show the prompt first', 'Read and edit before it paints', P.preview)}
+        <div class="trow"><div><div class="trow-t">Copies</div><div class="trow-s">Same prompt and model, a new seed each</div></div></div>${chipRow([['1', '1'], ['2', '2'], ['3', '3'], ['4', '4']], String(P.copies || 1), 'copies', 'Copies')}
         ${toggleRow('picAuto', 'Paint each new station', 'A picture whenever the Route map gets a new station. Free on this phone.', !!chat.picAuto)}
         <div class="trow"><div><div class="trow-t">Negative prompt</div><div class="trow-s">${P.negative.trim() ? esc(P.negative.trim().slice(0, 60)) : 'Nightmare’s default'}</div></div><button type="button" class="nm-edit press" id="nmNeg">Edit</button></div>`;
       const fold = (id, t, sum, body, isOpen) => `<div class="nm-fold"><button type="button" class="nm-fold-b press" aria-expanded="${!!isOpen}" aria-controls="${id}In" id="${id}B"><span>${t}</span><small>${isOpen ? '' : esc(sum)}</small></button><div class="nm-in" id="${id}In"${isOpen ? '' : ' hidden'}>${body}</div></div>`;
@@ -1576,7 +1577,7 @@ export async function chatView(id, focusId = null) {
           <p class="nm-lbl">In the picture</p><div class="nm-who">${nmPeople().map(face).join('')}<button type="button" class="nm-looks press" id="nmLooks">Looks</button></div>
           <p class="nm-lbl">Model and size</p><div class="nm-row2"><button type="button" class="nm-sel press" id="nmModel" aria-haspopup="menu"><small>Model</small><b>${esc(P.model ? modelLabel(P.model) : 'Nightmare’s')}</b></button><button type="button" class="nm-sel press" id="nmSize" aria-haspopup="menu"><small>Size</small><b>${sizeText(P.size)}</b></button></div>
           ${fold('nmFin', 'Finish', finSum(P), fin, open.fin)}${fold('nmMore', 'More', moreSum(P), more, open.more)}
-          <button type="button" class="pic-go press" id="nmGo">Paint it</button>`,
+          <button type="button" class="pic-go press" id="nmGo">${(P.copies || 1) > 1 ? `Paint ${P.copies} copies` : 'Paint it'}</button>`,
         onMount(s, close) {
           const radio = (attr, key) =>
             s.querySelectorAll(`[data-${attr}]`)[0]?.parentElement.addEventListener('click', async (e) => {
@@ -1590,6 +1591,14 @@ export async function chatView(id, focusId = null) {
           radio('frame', 'frame');
           radio('ups', 'upscaler');
           radio('scale', 'scale');
+          s.querySelector('[data-copies]').parentElement.addEventListener('click', async (e) => {
+            const b = e.target.closest('[data-copies]');
+            if (!b) return;
+            b.parentElement.querySelectorAll('[role="radio"]').forEach((x) => x.setAttribute('aria-checked', x === b));
+            const n = +b.dataset.copies;
+            await saveNm({ copies: n });
+            s.querySelector('#nmGo').textContent = n > 1 ? `Paint ${n} copies` : 'Paint it';
+          });
           s.querySelector('.nm-who').addEventListener('click', async (e) => {
             const b = e.target.closest('[data-who]');
             if (!b) return;
@@ -1792,14 +1801,15 @@ export async function chatView(id, focusId = null) {
       });
     }
     // Paint: tags written by the chat's connection (or the Helper), fitted to 77 tokens, painted by Nightmare.
-    async function runNightmare(m, { auto = false } = {}) {
+    // reuse: { prompt, model, size, cap, mood, frame } paints more from a picture's own prompt (no new tags).
+    async function runNightmare(m, { auto = false, reuse = null } = {}) {
       const el = log.querySelector(`.msg[data-id="${CSS.escape(m.id)}"] .msg-col`);
       if (!el) return;
       const P = nmPrefs();
       const ctlP = new AbortController();
       const plate = document.createElement('figure');
       plate.className = 'pic painting';
-      plate.innerHTML = `<div class="pic-board" aria-hidden="true"><span class="pic-wait">Writing the tags…</span></div><figcaption><span class="pic-status" role="status">Nightmare · ${esc(P.model ? modelLabel(P.model) : 'painting')}</span><button type="button" class="pic-cancel press">Cancel</button></figcaption>`;
+      plate.innerHTML = `<div class="pic-board" aria-hidden="true"><span class="pic-wait">${reuse ? 'Same prompt, new seeds…' : 'Writing the tags…'}</span></div><figcaption><span class="pic-status" role="status">Nightmare · ${esc(P.model ? modelLabel(P.model) : 'painting')}</span><button type="button" class="pic-cancel press">Cancel</button></figcaption>`;
       ([...el.querySelectorAll('.pic, .pc-plate')].pop() || el.querySelector('.bubble')).after(plate);
       if (nearBottom()) toBottom(true);
       plate.querySelector('.pic-cancel').addEventListener('click', () => {
@@ -1818,64 +1828,83 @@ export async function chatView(id, focusId = null) {
           if (e.name === 'AbortError') throw e;
           throw e instanceof NmError ? e : new NmError('Couldn’t reach Nightmare.', 'Open Nightmare and check Settings › Advanced: “Listen on the local network” and “Allow browser pages” on.');
         });
-        const inPic = nmIn();
-        const people = inPic.filter((x) => !x.me).map((x) => x.p);
-        const withMe = inPic.some((x) => x.me);
-        await nmModels().catch(() => []); // the model's kind (DiT or not) and its own settings
-        const anime = isAnime(P.model);
-        const dit = isDit(P.model);
-        const limit = promptLimit(P.model);
-        const conn = connectionFor(ch);
-        // Someone without look tags yet: write them once from their card (editable under Looks).
-        const wrote = [];
-        for (const x of inPic) {
-          if (x.p && !x.p.lookTags?.trim()) {
-            const t = await writeLooks({ name: x.p.name, sheet: lookSheet(x.p, x.me), conn, anime, signal: ctlP.signal }).catch((e) => (e.name === 'AbortError' ? Promise.reject(e) : ''));
-            if (t) (x.p.lookTags = t), wrote.push(x.p.name), x.me ? await savePersona() : await saveCharacter(x.p);
+        const model = reuse?.model ?? P.model;
+        const size = reuse?.size || P.size;
+        let prompt = reuse?.prompt || '';
+        let cap = reuse?.cap || '';
+        if (!reuse) {
+          const inPic = nmIn();
+          const people = inPic.filter((x) => !x.me).map((x) => x.p);
+          const withMe = inPic.some((x) => x.me);
+          await nmModels().catch(() => []); // the model's kind (DiT or not) and its own settings
+          const anime = isAnime(P.model);
+          const dit = isDit(P.model);
+          const limit = promptLimit(P.model);
+          const conn = connectionFor(ch);
+          // Someone without look tags yet: write them once from their card (editable under Looks).
+          const wrote = [];
+          for (const x of inPic) {
+            if (x.p && !x.p.lookTags?.trim()) {
+              const t = await writeLooks({ name: x.p.name, sheet: lookSheet(x.p, x.me), conn, anime, signal: ctlP.signal }).catch((e) => (e.name === 'AbortError' ? Promise.reject(e) : ''));
+              if (t) (x.p.lookTags = t), wrote.push(x.p.name), x.me ? await savePersona() : await saveCharacter(x.p);
+            }
+          }
+          if (wrote.length) toast(`Wrote ${wrote.join(' and ')}’s look tags. Change them under Looks.`);
+          let tags = [];
+          try {
+            ({ tags, cap } = await sceneTags({ chat, people, speaker: ix ? speakerOf(m) : ch, persona: me(), withMe, m, conn, mood: P.mood, frame: P.frame, anime, dit, signal: ctlP.signal }));
+          } catch (e) {
+            // With Show the prompt first on, write the scene yourself after the look tags instead.
+            if (e.name === 'AbortError' || !(P.preview && !auto)) throw e;
+            toast(`${e.message} Write the scene after the look tags.`, { ms: 6000 });
+          }
+          const looks = inPic.filter((x) => x.p?.lookTags?.trim()).map((x) => ({ tags: x.p.lookTags, color: x.color }));
+          const fit = compose({ looks, frame: P.frame, tags, limit });
+          board.innerHTML = '';
+          const lines = [];
+          for (let k = 0; k < fit.keep.length; k += 4) lines.push(fit.keep.slice(k, k + 4).join(', '));
+          board.innerHTML = lines.slice(0, 6).map((l) => `<span>${esc(l.toUpperCase())}</span>`).join('');
+          prompt = fit.keep.join(', ');
+          if (destroyed) return plate.remove();
+          if (P.preview && !auto) {
+            prompt = await promptSheet(fit, looks, limit);
+            if (destroyed) return;
+            if (!prompt) return plate.remove();
           }
         }
-        if (wrote.length) toast(`Wrote ${wrote.join(' and ')}’s look tags. Change them under Looks.`);
-        let tags = [];
-        let cap = '';
-        try {
-          ({ tags, cap } = await sceneTags({ chat, people, speaker: ix ? speakerOf(m) : ch, persona: me(), withMe, m, conn, mood: P.mood, frame: P.frame, anime, dit, signal: ctlP.signal }));
-        } catch (e) {
-          // With Show the prompt first on, write the scene yourself after the look tags instead.
-          if (e.name === 'AbortError' || !(P.preview && !auto)) throw e;
-          toast(`${e.message} Write the scene after the look tags.`, { ms: 6000 });
-        }
-        const looks = inPic.filter((x) => x.p?.lookTags?.trim()).map((x) => ({ tags: x.p.lookTags, color: x.color }));
-        const fit = compose({ looks, frame: P.frame, tags, limit });
-        board.innerHTML = '';
-        const lines = [];
-        for (let k = 0; k < fit.keep.length; k += 4) lines.push(fit.keep.slice(k, k + 4).join(', '));
-        board.innerHTML = lines.slice(0, 6).map((l) => `<span>${esc(l.toUpperCase())}</span>`).join('');
-        let prompt = fit.keep.join(', ');
-        if (destroyed) return plate.remove();
-        if (P.preview && !auto) {
-          prompt = await promptSheet(fit, looks, limit);
-          if (destroyed) return;
-          if (!prompt) return plate.remove();
-        }
-        status.textContent = `Painting · ${P.model ? modelLabel(P.model) : 'Nightmare'} · ${sizeText(P.size)}`;
-        const res = await nmPaint({ prompt, signal: ctlP.signal, onWait: () => (status.textContent = 'Nightmare is busy · waiting') });
-        if (res.sizeNote) toast(res.sizeNote, { ms: 6000 });
-        // Large (upscaled) pictures are kept at a size the app can hold; Nightmare keeps the full one if asked.
-        const data = await resizeImage(await (await fetch(res.url)).blob(), 1600).catch(() => {
-          throw new NmError('The picture came back but couldn’t be read.', 'Try again, or a smaller size or upscale.');
-        });
+        // Copies: the same prompt and model, a new seed each (with Keep the same seed on: that seed, +1, +2…).
+        const n = auto ? 1 : Math.max(1, Math.min(4, +P.copies || 1));
+        const base = P.lockSeed && P.seed ? P.seed : 0;
         const place = hereOf(chat);
-        const rec = await keepPicture({ chat, alt, data, prompt, cap: cap || place?.name || '', style: 'nightmare', from: 'nightmare', extra: { ms: res.ms, seed: res.seed, model: res.model, size: res.size, mood: P.mood, frame: P.frame } });
-        (m.pics ||= []).push(rec);
-        keepScene(chat, rec, m);
-        await saveChat(chat);
+        const made = [];
+        try {
+          for (let k = 0; k < n; k++) {
+            status.textContent = `Painting${n > 1 ? ` ${k + 1} of ${n}` : ''} · ${model ? modelLabel(model) : 'Nightmare'} · ${sizeText(size)}`;
+            const res = await nmPaint({ prompt, signal: ctlP.signal, onWait: () => (status.textContent = 'Nightmare is busy · waiting'), overrides: { model, size, ...(base ? { seed: base + k } : {}) } });
+            if (res.sizeNote) toast(res.sizeNote, { ms: 6000 });
+            // Large (upscaled) pictures are kept at a size the app can hold; Nightmare keeps the full one if asked.
+            const data = await resizeImage(await (await fetch(res.url)).blob(), 1600).catch(() => {
+              throw new NmError('The picture came back but couldn’t be read.', 'Try again, or a smaller size or upscale.');
+            });
+            const rec = await keepPicture({ chat, alt, data, prompt, cap: cap || place?.name || '', style: 'nightmare', from: 'nightmare', extra: { ms: res.ms, seed: res.seed, model: res.model, size: res.size, mood: reuse?.mood ?? P.mood, frame: reuse?.frame ?? P.frame } });
+            (m.pics ||= []).push(rec);
+            keepScene(chat, rec, m);
+            await saveChat(chat);
+            made.push(rec);
+          }
+        } catch (e) {
+          if (!made.length) throw e;
+          // Some were painted: keep them, and say why the rest weren't.
+          if (e.name !== 'AbortError') toast(`Painted ${made.length} of ${n}. ${e.message || ''}`.trim(), { ms: 6000 });
+        }
         if (destroyed) return;
         plate.remove();
         const i = chat.messages.indexOf(m);
         if (i >= 0) rerenderMsg(i);
-        log.querySelector(`[data-pic="${rec.id}"]`)?.classList.add('fresh');
+        made.forEach((r) => log.querySelector(`[data-pic="${r.id}"]`)?.classList.add('fresh'));
+        const rec = made[0];
         if (!auto || document.activeElement === document.body) log.querySelector(`[data-picmore="${rec.id}"]`)?.focus({ preventScroll: true });
-        toast('Painted');
+        if (made.length === n) toast(n > 1 ? `Painted ${n} copies` : 'Painted');
       } catch (e) {
         if (e.name === 'AbortError' || destroyed) return plate.remove();
         const hadFocus = plate.contains(document.activeElement) || document.activeElement === document.body;
@@ -2030,7 +2059,8 @@ export async function chatView(id, focusId = null) {
         await saveCharacter(who);
         renderAll();
         toast(`${who.name}’s portrait updated`);
-      } else if (what === 'again') p.from === 'perchance' ? runPerchance(m, p.style) : p.from === 'nightmare' && isNm() ? nmSheet(m) : runPaint(m, p.style);
+      } else if (what === 'more') runNightmare(m, { reuse: { prompt: p.prompt, model: p.model || '', size: p.size, cap: String(p.caption || '').split(' · ')[0], mood: p.mood, frame: p.frame } });
+      else if (what === 'again') p.from === 'perchance' ? runPerchance(m, p.style) : p.from === 'nightmare' && isNm() ? nmSheet(m) : runPaint(m, p.style);
       else if (what === 'delete') {
         if (!(await confirmSheet({ title: 'Delete this picture?', body: 'It’s removed from this chat and from the app.', ok: 'Delete', danger: true }))) return;
         m.pics = m.pics.filter((x) => x !== p);
@@ -2050,6 +2080,8 @@ export async function chatView(id, focusId = null) {
         // Only for characters shown as a letter.
         ...(who && !who.avatarImage && who.preset === 'initial' ? [{ icon: 'user', label: `Use as ${who.name}’s portrait`, on: () => picAction(pid, 'portrait') }] : []),
         { icon: 'refresh', label: p?.from === 'perchance' ? 'Paint again on Perchance' : p?.from === 'nightmare' ? 'Paint again with Nightmare' : 'Paint again (new picture)', on: () => picAction(pid, 'again') },
+        // Same prompt, same model and size, new seeds (as many as Copies says).
+        ...(p?.from === 'nightmare' && isNm() && p.prompt ? [{ icon: 'layers', label: (nmPrefs().copies || 1) > 1 ? `${nmPrefs().copies} more like this` : 'More like this', on: () => picAction(pid, 'more') }] : []),
         { icon: 'trash', label: 'Delete picture', on: () => picAction(pid, 'delete') },
       ];
     };
