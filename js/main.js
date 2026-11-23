@@ -1,6 +1,6 @@
 // Boot + hash router with View Transitions between screens.
 import { keepData } from './db.js';
-import { load } from './store.js';
+import { load, loadedOk } from './store.js';
 import { homeView } from './views/home.js';
 import { chatView } from './views/chat.js';
 import { editorView } from './views/editor.js';
@@ -268,16 +268,20 @@ window.addEventListener('unhandledrejection', (e) => {
     startDim();
   } catch (e) {
     console.error(e);
-    toast('Could not open saved data. Starting fresh for this session.', { kind: 'err' });
+    toast(e?.name === 'StorageFull' ? 'Your phone is too full to open everything. Free some space, then reload. Sync is paused until then.' : 'Could not open saved data. Nothing was deleted; Sync is paused. Try reloading.', { kind: 'err', ms: 12000 });
   }
   await render();
   document.documentElement.classList.add('ready');
   // Sync: run in the background while signed in. When changes from another device arrive, redraw
   // list screens (never a chat you might be typing in). With sign-in expired and changes waiting,
   // offer to sign in again once per session.
-  startAutoSync();
-  // Tidy scene pictures nothing points to any more (deleted messages and chats).
-  import('./pictures.js').then((m) => m.gcPictures()).catch(() => {});
+  // Only with your data read in full: a half-loaded app must not tell Drive your chats are gone,
+  // nor tidy away pictures whose chats it couldn't read.
+  if (loadedOk) {
+    startAutoSync();
+    // Tidy scene pictures nothing points to any more (deleted messages and chats).
+    import('./pictures.js').then((m) => m.gcPictures()).catch(() => {});
+  }
   addEventListener('chatbox-synced', () => /^#\/(lines|settings|sync)?(\/|$)|^#?\/?$/.test(location.hash) && render());
   if (syncOn()) {
     setTimeout(async () => {

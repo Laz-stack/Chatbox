@@ -117,8 +117,12 @@ function demoConnection() {
   return { ...newConnection('demo'), id: 'demo', name: 'Demo', model: 'canned replies' };
 }
 
+// True once saved data was read in full. Until then nothing may treat "not here" as "deleted"
+// (Sync, tidying unused pictures).
+export let loadedOk = false;
 export async function load() {
   const loaded = await loadAll();
+  loadedOk = true;
   // Anything that came in from outside (an old card import, a restore, Sync) is checked once more.
   if (cleanState(S)) await saveEverything();
   return loaded;
@@ -146,19 +150,29 @@ async function loadAll() {
     for (const [k, v] of all) if (typeof k === 'string' && k.startsWith(CHAR)) byId.set(k.slice(CHAR.length), v);
     S.characters = [...order.map((id) => byId.get(id)), ...[...byId].filter(([id]) => !order.includes(id)).map(([, v]) => v)].filter(Boolean);
   }
-  savedImg.clear();
-  savedChar.clear();
-  if (oldImages) {
-    await saveImages();
-    await db.del('images');
-  } else for (const [k, v] of Object.entries(S.images)) savedImg.set(k, v);
-  if (oldChars) {
-    await saveCharacters();
-    await db.del('characters');
-  } else for (const c of S.characters) savedChar.set(c.id, JSON.stringify(c));
   S.chats = new Map();
   // Every chat has its own id. Older data keyed one chat per character; that chat keeps the character's id.
   for (const [k, v] of all) if (typeof k === 'string' && k.startsWith('chat:')) S.chats.set((v.id ||= k.slice(5)), v);
+  // Move older single entries over only after everything is read. If the phone is too full to
+  // write the new ones, the old entry stays as it is and the move is tried again next time.
+  savedImg.clear();
+  savedChar.clear();
+  if (oldImages) {
+    try {
+      await saveImages();
+      await db.del('images');
+    } catch (e) {
+      console.warn('Pictures stay in the older single entry for now', e);
+    }
+  } else for (const [k, v] of Object.entries(S.images)) savedImg.set(k, v);
+  if (oldChars) {
+    try {
+      await saveCharacters();
+      await db.del('characters');
+    } catch (e) {
+      console.warn('Characters stay in the older single entry for now', e);
+    }
+  } else for (const c of S.characters) savedChar.set(c.id, JSON.stringify(c));
   await giveChatsOwnIds();
 
   if (!all.has('seeded')) {

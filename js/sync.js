@@ -9,7 +9,7 @@
 // "tombstones" so a deleted chat doesn't come back. Pictures are their own small files next to the
 // main one (named by their content), uploaded once and downloaded only when this device lacks them.
 import * as db from './db.js';
-import { S, saveSettings, saveCharacters, saveConnections, savePersona, saveInterchanges, saveLore, saveImages } from './store.js';
+import { S, loadedOk, saveSettings, saveCharacters, saveConnections, savePersona, saveInterchanges, saveLore, saveImages } from './store.js';
 import { okId, cleanImg, cleanCharacter, cleanPersona, cleanInterchange, cleanLore, cleanChat } from './safe.js';
 
 const FILE = 'chatbox-sync.json';
@@ -337,6 +337,8 @@ export function syncNow() {
 export const syncing = () => !!running;
 
 async function run() {
+  // Never sync a half-loaded app: everything it couldn't read would look deleted to Drive.
+  if (!loadedOk) throw new SyncError('Chatbox couldn’t open all your saved data, so Sync is paused to keep Drive safe. Reload the app.', 'other');
   const prefs = syncPrefs();
   const got = {};
   for (let attempt = 0; ; attempt++) {
