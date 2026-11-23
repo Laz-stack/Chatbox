@@ -2402,13 +2402,16 @@ button.nm-tag { border: 0; cursor: pointer; text-align: left; }
 .tipbar button { position: relative; flex: none; margin-left: auto; font: 800 12px/1 var(--font); color: var(--cream); text-decoration: underline; text-underline-offset: 3px; }
 .tipbar button::after { content: ''; position: absolute; inset: -14px -12px; }
 /* Review polish (v44 4A): the picture viewer — a near-black backdrop and an even 2×2 grid of actions. */
-.pic-lb { background: rgba(0, 0, 0, .94); }
+.pic-lb { background: rgba(0, 0, 0, .9); }
+.pic-lb > img { border-radius: 12px; }
+/* An odd number of actions: the last one (Delete) takes the whole row. */
+.pic-lb-acts button:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .pic-lb-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .pic-lb-acts button { gap: 8px; min-height: 46px; padding: 0 12px; border-radius: 23px; font: 800 13px/1.1 var(--font); text-align: left; }
 .pic-lb-acts button .ic { flex: none; }
 .pic-lb-acts button.del { color: #FF6B6B; }
 .pic-lb-src { font: 700 12.5px/1.3 var(--font) !important; color: var(--soft, #BDBDBD) !important; }
-.pic-lb-x { position: absolute; top: calc(12px + env(safe-area-inset-top, 0px)); right: 12px; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--plate); color: var(--cream); }
+.pic-lb-x { position: absolute; top: calc(6px + env(safe-area-inset-top, 0px)); right: 12px; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--plate); color: var(--cream); }
 /* Review polish (v44 5A): on a stack the caption keeps the name, the count and ⋯; the source line lives in the viewer. */
 .ps-top .pic-more { margin-left: auto; }
 /* Review polish (v44 6A): on a light page the character's bubble gets a hairline edge, so it stands off the paper. */

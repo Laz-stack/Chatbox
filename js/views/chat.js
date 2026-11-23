@@ -156,6 +156,7 @@ export async function chatView(id, focusId = null) {
   const pcRuns = new Map(); // Paint on Perchance: message id -> { ctl, alt } while its prompt is written
   let markOnLeave = null;
   let markOff = null; // set in mount(): marks the paragraph you were reading when you leave
+  let chipsRO = null; // watches the chip row's width for the edge fade
 
   const conn0 = connectionFor(ch);
   const connText = (c) => (!c ? 'No connection' : c.provider === 'demo' ? 'Demo replies' : String(c.model || c.name).split('/').pop());
@@ -170,6 +171,7 @@ export async function chatView(id, focusId = null) {
       ${ibtn('more', 'Chat options', { id: 'moreBtn' })}
     </header>
     <div class="win${winPics().length ? ' has-pic' : ''}${chat.winFold ? ' fold' : ''}" id="win"${chat.winOff ? ' hidden' : ''} data-k="${esc(winKey())}"><div class="win-pic" id="winPic"${ix ? '' : ` data-av="win:${esc(ch.id)}"`}>${winPicHTML()}</div><button type="button" class="sign press" id="signBtn" aria-controls="winPic" aria-label="Where you are">${signHTML()}</button></div>
+    <p class="vh" id="msgHint">Enter opens message actions.</p>
     <div class="log${story ? ' story' : ''}" id="log" role="log" aria-live="polite" aria-relevant="additions" aria-label="Chat with ${esc(ch.name)}"></div>
     <div class="mk-dock"><button type="button" class="mk-back press" id="mkBack" hidden></button></div>
     <div class="chips${scene ? ' steer' : ''}" id="chips"></div>
@@ -314,7 +316,7 @@ export async function chatView(id, focusId = null) {
         const cx = choicesOf(m);
         inner = sceneParts(cx ? cx.body : textOf(m), m).join('') + (cx ? choicesHTML(cx.items.map((x) => ({ ...x, text: fillS(x.text), after: fillS(x.after) })), isLive(i)) : '');
       }
-      return `<div class="msg scene ${m.role === 'user' ? 'mine' : 'ai'}${m.dir ? ' dir' : ''}${enter ? ' enter' : ''}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="msg-col">${m.role === 'assistant' ? thinkHTML(m) : ''}<div class="bubble scn" tabindex="0" aria-haspopup="menu">${ribbon(m)}${inner}${star}</div>${m.role === 'assistant' ? picsHTML(m) + chronHTML(m) + toolsHTML(m, i) : ''}</div></div>${m.role === 'user' ? rollHTML(m, enter) : movesHTML(m, i)}`;
+      return `<div class="msg scene ${m.role === 'user' ? 'mine' : 'ai'}${m.dir ? ' dir' : ''}${enter ? ' enter' : ''}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="msg-col">${m.role === 'assistant' ? thinkHTML(m) : ''}<div class="bubble scn" tabindex="0" aria-describedby="msgHint">${ribbon(m)}${inner}${star}</div>${m.role === 'assistant' ? picsHTML(m) + chronHTML(m) + toolsHTML(m, i) : ''}</div></div>${m.role === 'user' ? rollHTML(m, enter) : movesHTML(m, i)}`;
     }
     function renderAboard() {
       const bar = document.querySelector('#aboard');
@@ -336,10 +338,10 @@ export async function chatView(id, focusId = null) {
       if (m.dir) return `<div class="msg dirline${enter ? ' enter' : ''}" data-i="${i}" data-id="${m.id}">${dirSign(m)}</div>`;
       const cls = `msg ${m.role === 'user' ? 'user' : 'ai'}${enter ? ' enter' : ''}`;
       const star = m.star || m.quotes?.length ? `<span class="star-b" title="In your Logbook">${icon('star', 13)}</span>` : '';
-      if (m.role === 'user') return `<div class="${cls}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="bubble" tabindex="0" aria-haspopup="menu">${ribbon(m)}${formatMessage(named(textOf(m), ch, 'you', me()))}${star}</div></div>${rollHTML(m, enter)}`;
+      if (m.role === 'user') return `<div class="${cls}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="bubble" tabindex="0" aria-describedby="msgHint">${ribbon(m)}${formatMessage(named(textOf(m), ch, 'you', me()))}${star}</div></div>${rollHTML(m, enter)}`;
       const sp = speakerOf(m);
       const tag = ix ? `<span class="spk-tag" style="--c:${sp.line?.color || '#2EAA67'};--ink:${inkOn(sp.line?.color || '#2EAA67')}">${esc(sp.name)}</span>` : '';
-      return `<div class="${cls}${m.star || m.quotes?.length ? ' starred' : ''}" data-i="${i}" data-id="${m.id}">${avatarTile(sp, 30, { expr: m.mood || 'happy', radius: 10, cls: 'msg-av' })}<div class="msg-col">${thinkHTML(m)}<div class="bubble" tabindex="0" aria-haspopup="menu">${ribbon(m)}${tag}${(() => {
+      return `<div class="${cls}${m.star || m.quotes?.length ? ' starred' : ''}" data-i="${i}" data-id="${m.id}">${avatarTile(sp, 30, { expr: m.mood || 'happy', radius: 10, cls: 'msg-av' })}<div class="msg-col">${thinkHTML(m)}<div class="bubble" tabindex="0" aria-describedby="msgHint">${ribbon(m)}${tag}${(() => {
         const cx = choicesOf(m);
         const nm = (t) => named(t, sp, 'you', me());
         return enhance(formatMessage(showAi(nm(cx ? cx.body : textOf(m))))) + (cx ? choicesHTML(cx.items.map((x) => ({ ...x, text: nm(x.text), after: nm(x.after) })), isLive(i)) : '');
@@ -735,11 +737,12 @@ export async function chatView(id, focusId = null) {
       t.setAttribute('role', 'status');
       t.innerHTML = '<span>Long-press a reply for more.</span><button type="button" class="press">Got it</button>';
       chips.before(t);
-      t.querySelector('button').addEventListener('click', () => {
+      t.querySelector('button').addEventListener('click', (e) => {
         S.settings.seenChatTips = true;
         saveSettings();
         t.remove();
-        root.querySelector('#input')?.focus({ preventScroll: true });
+        // From the keyboard, focus goes on to the chips (a tap leaves it be: no keyboard pops up).
+        if (e.detail === 0) (chips.querySelector('button') || root.querySelector('#input'))?.focus({ preventScroll: true });
       });
       if (scroll) toBottom(true);
     }
@@ -770,7 +773,13 @@ export async function chatView(id, focusId = null) {
       chips.innerHTML = h;
       overChips();
     }
-    // The right-edge fade only shows when the chips really run past the edge.
+    // The right-edge fade only shows when the chips really run past the edge (checked again when
+    // the row's width changes: rotation, resize, fonts arriving).
+    if (typeof ResizeObserver === 'function') {
+      chipsRO = new ResizeObserver(() => overChips());
+      chipsRO.observe(chips);
+    }
+    document.fonts?.ready.then(() => !destroyed && overChips());
     function overChips() {
       chips.classList.remove('over');
       chips.classList.toggle('over', chips.scrollWidth > chips.clientWidth + 1);
@@ -2191,7 +2200,7 @@ export async function chatView(id, focusId = null) {
         // Works whichever connection paints now: a Nightmare picture is remade by Nightmare.
         ...(p?.from === 'nightmare' && p.prompt ? [{ icon: 'layers', label: (nmPrefs().copies || 1) > 1 ? `Recreate ${nmPrefs().copies} with the same prompt` : 'Recreate with the same prompt', short: (nmPrefs().copies || 1) > 1 ? `Recreate ${nmPrefs().copies}` : 'Recreate', on: () => picAction(pid, 'more') }] : []),
         { icon: 'refresh', label: p?.from === 'perchance' ? 'Paint again on Perchance' : p?.from === 'nightmare' ? 'Paint again with Nightmare' : 'Paint again (new picture)', short: 'Paint again', on: () => picAction(pid, 'again') },
-        { icon: 'trash', label: 'Delete picture', short: 'Delete', on: () => picAction(pid, 'delete') },
+        { icon: 'trash', label: 'Delete picture', short: 'Delete', danger: true, on: () => picAction(pid, 'delete') },
       ];
     };
     log.addEventListener('click', (e) => {
@@ -2228,7 +2237,7 @@ export async function chatView(id, focusId = null) {
       lb.setAttribute('aria-modal', 'true');
       lb.setAttribute('aria-label', 'Picture');
       const src = p?.from === 'perchance' ? 'From Perchance' : p?.from === 'nightmare' ? `Nightmare${p.ms ? ` · ${Math.max(1, Math.round(p.ms / 1000))} s` : ''}` : '';
-      lb.innerHTML = `<button type="button" class="pic-lb-x press" data-close aria-label="Close">${icon('x', 18)}</button><img src="${esc(img.getAttribute('src'))}" alt="${esc(img.alt)}"><div class="pic-lb-bar"><details><summary>${icon('chev', 16)}What was painted</summary><p>${esc(p?.prompt || '')}</p>${src ? `<p class="pic-lb-src">${esc(src)}</p>` : ''}</details><div class="pic-lb-acts">${picItems(pid).map((x, k) => `<button type="button" class="press${x.icon === 'trash' ? ' del' : ''}" data-k="${k}">${icon(x.icon, 16)}${esc(x.short || x.label)}</button>`).join('')}</div></div>`;
+      lb.innerHTML = `<button type="button" class="pic-lb-x press" data-close aria-label="Close">${icon('x', 18)}</button><img src="${esc(img.getAttribute('src'))}" alt="${esc(img.alt)}"><div class="pic-lb-bar"><details><summary>What was painted${icon('chev', 16)}</summary><p>${esc(p?.prompt || '')}</p>${src ? `<p class="pic-lb-src">${esc(src)}</p>` : ''}</details><div class="pic-lb-acts">${picItems(pid).map((x, k) => `<button type="button" class="press${x.icon === 'trash' ? ' del' : ''}" data-k="${k}"${x.short && x.short !== x.label ? ` aria-label="${esc(x.label)}"` : ''}>${icon(x.icon, 16)}${esc(x.short || x.label)}</button>`).join('')}</div></div>`;
       const shut = () => (lb.remove(), removeEventListener('keydown', esc1), opener.isConnected && opener.focus());
       // Escape closes; Tab stays inside the picture view.
       const esc1 = (k) => {
@@ -3516,6 +3525,7 @@ export async function chatView(id, focusId = null) {
       markOnLeave?.();
       markOff?.();
       watchOff?.();
+      chipsRO?.disconnect();
       destroyed = true;
       pcRuns.forEach((r) => r.ctl.abort());
       silence();

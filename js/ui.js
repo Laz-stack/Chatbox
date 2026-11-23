@@ -256,15 +256,19 @@ function dragToDismiss(sheet, handle, close) {
 export function openMenu(anchor, items, { onClose, spotlight } = {}) {
   const wrap = document.createElement('div');
   wrap.className = 'menu-ov';
+  // A {group} item opens a labelled group that runs to the next rule or the end of the menu.
+  let inGroup = false;
+  const endGroup = () => (inGroup ? ((inGroup = false), '</div>') : '');
+  const gid = 'mg' + Math.random().toString(36).slice(2, 8);
   const html = items
     .map((it, i) =>
       it === '-'
-        ? '<hr>'
+        ? endGroup() + '<hr role="separator">'
         : it.group
-        ? `<div class="grp" role="presentation">${esc(it.group)}</div>`
+        ? endGroup() + ((inGroup = true), `<div role="group" aria-labelledby="${gid}-${i}"><div class="grp" id="${gid}-${i}">${esc(it.group)}</div>`)
         : `<button type="button" role="menuitem" data-i="${i}" class="${it.danger ? 'danger' : ''}" style="animation-delay:${0.03 * i}s"><span class="mi">${icon(it.icon, 16)}</span>${esc(it.label)}</button>`
     )
-    .join('');
+    .join('') + endGroup();
   // The catcher takes taps everywhere, including inside the spotlight cut-out, so the menu always closes.
   wrap.innerHTML = `<div class="menu-catch"></div><div class="menu-scrim"></div><div class="menu" role="menu">${html}</div>`;
   ovRoot().appendChild(wrap);
