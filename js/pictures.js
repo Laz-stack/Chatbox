@@ -4,12 +4,12 @@
 import { S, connection, saveImages, recordPicture, loadedOk } from './store.js';
 import { PROVIDERS, generateImage } from './providers.js';
 import { extractJson, compileSheet } from './blueprint.js';
-import { helperComplete } from './helper.js';
+import { helperComplete, helperFor } from './helper.js';
 import { textOf, named } from './store.js';
 import { uid } from './util.js';
 import { hereOf } from './worldmap.js';
 import { clockOn, hhmm, partOfDay } from './clock.js';
-import { NM_ID, NM_CONN, nmPrefs, modelLabel, moodAsk } from './nightmare.js';
+import { NM_ID, NM_CONN, nmPrefs, modelLabel, moodAsk, declined } from './nightmare.js';
 
 export const STYLES = {
   anime: { label: 'Anime', words: 'anime illustration, clean line art, soft cel shading, expressive faces' },
@@ -68,7 +68,12 @@ export async function describe({ chat, cast, m, persona, conn, mood = '', signal
     'No names of real artists, no text or lettering in the image. Everyone is an adult. caption: 1 to 4 words naming the place or moment.' +
     (moodAsk(mood) ? ' ' + moodAsk(mood) : '');
   // Room to spare: models that think first spend tokens before the answer (only what's used is billed).
-  const out = await helperComplete(conn, 'scene', { system: 'You write prompts for an illustrator. Reply with ONE JSON object and nothing else.', messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: 1200, temperature: 0.6, signal });
+  const req = { system: 'You write prompts for an illustrator. Reply with ONE JSON object and nothing else.', messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: 1200, temperature: 0.6, signal };
+  let out = await helperComplete(conn, 'scene', req);
+  // The Helper said no: ask the model you chat with instead, once. A refusal is never painted.
+  const helperRan = helperFor(conn, 'scene') !== conn;
+  if (declined(sceneFromReply(out) || out) && helperRan) out = await helperComplete(conn, 'scene', { ...req, direct: true });
+  if (declined(sceneFromReply(out) || out)) throw new Error(`${(helperRan ? conn : helperFor(conn, 'scene'))?.model || 'The text model'} declined to write this scene. Pick a model that will for this chat (or for Connections › Helper), or turn on the prompt preview and write it yourself.`);
   // A reply that can't be read still paints: from the moment itself.
   return sceneFromReply(out) || plainScene(text, place, when);
 }

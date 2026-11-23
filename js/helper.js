@@ -21,8 +21,9 @@ export function helperFor(conn, job) {
   return h;
 }
 // Every background call is counted on the Helper receipt (Fares), whichever connection ran it.
-export async function helperComplete(conn, job, opts) {
-  const run = helperFor(conn, job);
+// opts.direct: run on `conn` itself, not on the Helper (used when the Helper declined a job).
+export async function helperComplete(conn, job, { direct = false, ...opts } = {}) {
+  const run = direct ? conn : helperFor(conn, job);
   const mt = meter();
   let mt2 = null;
   const sent = (opts.system || '') + (opts.messages || []).map((m) => (typeof m.content === 'string' ? m.content : (m.content || []).map((p) => p.text || '').join(' '))).join('\n');
