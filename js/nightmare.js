@@ -45,6 +45,7 @@ const DEFAULTS = {
   lockSeed: false,
   seed: 0,
   preview: false,
+  copies: 1, // pictures per paint, each with its own seed
 };
 export const nmPrefs = () => ({ ...DEFAULTS, ...(S.settings.nightmare || {}) });
 export async function saveNm(patch) {
@@ -160,7 +161,7 @@ async function paintNow({ prompt, signal, onWait, overrides = {} }) {
   const p = { ...nmPrefs(), ...overrides };
   if (!p.token.trim()) throw new NmError('Nightmare needs its token.', 'Copy it from Nightmare (Settings › Advanced) into Connections › Pictures.');
   await whenFree(signal, onWait);
-  const seed = p.lockSeed && p.seed ? p.seed : 1 + Math.floor(Math.random() * 2147483646);
+  const seed = overrides.seed || (p.lockSeed && p.seed ? p.seed : 1 + Math.floor(Math.random() * 2147483646));
   const mi = p.model ? modelInfo(p.model) || (await nmModels().catch(() => []), modelInfo(p.model)) : null;
   const [w, h] = (SIZES.includes(p.size) ? p.size : '768x512').split('x');
   const params = {
