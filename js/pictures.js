@@ -1,7 +1,7 @@
 // Scene pictures: the AI writes what the moment looks like (the characters' looks, the place, the
 // time of day) and an image model paints it. Pictures are saved in the app (S.images) and
 // attached to the message they show.
-import { S, connection, saveImages, recordPicture } from './store.js';
+import { S, connection, saveImages, recordPicture, loadedOk } from './store.js';
 import { PROVIDERS, generateImage } from './providers.js';
 import { extractJson, compileSheet } from './blueprint.js';
 import { helperComplete } from './helper.js';
@@ -176,6 +176,7 @@ export const removeScene = (chat, key) => (chat.scenes = (chat.scenes || []).fil
 
 // Pictures nothing points to any more (a deleted message or chat) are removed from storage.
 export async function gcPictures() {
+  if (!loadedOk) return 0; // chats not read: pictures can't be judged unused
   const used = new Set();
   for (const c of S.chats.values()) {
     scenesOf(c); // an older chat's scenes count as kept before anything is removed
