@@ -5,7 +5,9 @@
 // Sign-in uses Google Identity Services with a client ID you create once (Depot › Sync shows how).
 // Each sync downloads the Drive copy, merges it record by record with this device, saves the result
 // here and uploads it back. A record changed on only one side takes that side; changed on both, the
-// newer edit wins. Deletions travel as "tombstones" so a deleted chat doesn't come back.
+// newer edit wins; a chat changed on both keeps the new messages from each. Deletions travel as
+// "tombstones" so a deleted chat doesn't come back. Pictures are their own small files next to the
+// main one (named by their content), uploaded once and downloaded only when this device lacks them.
 import * as db from './db.js';
 import { S, saveSettings, saveCharacters, saveConnections, savePersona, saveInterchanges, saveLore, saveImages } from './store.js';
 import { okId, cleanImg, cleanCharacter, cleanPersona, cleanInterchange, cleanLore, cleanChat } from './safe.js';
@@ -105,23 +107,50 @@ async function download(id) {
   const r = await drive(`${API}/${id}?alt=media`);
   return r.json();
 }
-async function upload(id, body) {
-  // Resumable upload: works for any size (pictures can make the file big).
-  const meta = id ? {} : { name: FILE, parents: ['appDataFolder'] };
+async function upload(id, body, name = FILE, type = 'application/json') {
+  // Resumable upload: works for any size.
+  const meta = id ? {} : { name, parents: ['appDataFolder'] };
   const start = await drive(`${UPLOAD}${id ? '/' + id : ''}?uploadType=resumable`, { method: id ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json; charset=UTF-8' }, body: JSON.stringify(meta) });
   const loc = start.headers.get('Location');
-  if (loc) return void (await drive(loc, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body }));
+  if (loc) return void (await drive(loc, { method: 'PUT', headers: { 'Content-Type': type }, body }));
   // No session address readable here: fall back to a one-request multipart upload (up to 5 MB).
   const b = 'chatbox' + Date.now();
-  const multi = `--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${body}\r\n--${b}--`;
+  const multi = `--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: ${type}\r\n\r\n${body}\r\n--${b}--`;
   await drive(`${UPLOAD}${id ? '/' + id : ''}?uploadType=multipart`, { method: id ? 'PATCH' : 'POST', headers: { 'Content-Type': `multipart/related; boundary=${b}` }, body: multi });
 }
+
+// ---------- picture files ----------
+const IMGF = 'chatbox-img-';
+// Every picture file in Drive: ref -> { id, made }.
+async function listPics() {
+  const out = new Map();
+  let page = '';
+  do {
+    const q = encodeURIComponent(`name contains '${IMGF}' and trashed=false`);
+    const r = await drive(`${API}?spaces=appDataFolder&q=${q}&pageSize=1000&fields=nextPageToken,files(id,name,createdTime)${page ? '&pageToken=' + encodeURIComponent(page) : ''}`);
+    const j = await r.json();
+    for (const f of j.files || []) if (f?.name?.startsWith(IMGF)) out.set(f.name.slice(IMGF.length), { id: f.id, made: Date.parse(f.createdTime) || 0 });
+    page = j.nextPageToken || '';
+  } while (page);
+  return out;
+}
+const getPic = async (id) => (await drive(`${API}/${id}?alt=media`)).text();
+const dropPic = (id) => drive(`${API}/${id}`, { method: 'DELETE' });
 
 // ---------- records ----------
 function hash(s) {
   let h = 5381;
   for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
   return (h >>> 0).toString(36) + s.length.toString(36);
+}
+// A picture's name from its content, worked out once per picture.
+const refs = new Map(); // key -> [data, ref]
+function picRef(k, v) {
+  const c = refs.get(k);
+  if (c && c[0] === v) return c[1];
+  const r = hash(v);
+  refs.set(k, [v, r]);
+  return r;
 }
 const settingsPart = () => Object.fromEntries(Object.entries(S.settings).filter(([k]) => !LOCAL_SETTINGS.includes(k)));
 // Every synced thing on this device, as key -> data.
@@ -133,7 +162,8 @@ function collect(keys) {
   S.interchanges.forEach((x) => out.set('ix:' + x.id, x));
   S.lore.forEach((e) => out.set('lore:' + e.id, e));
   S.connections.forEach((c) => out.set('conn:' + c.id, keys ? c : { ...c, apiKey: '' }));
-  Object.entries(S.images || {}).forEach(([k, v]) => out.set('img:' + k, v));
+  // A picture's record is only its content's name; the picture itself is its own file.
+  Object.entries(S.images || {}).forEach(([k, v]) => out.set('img:' + k, { ref: picRef(k, v) }));
   out.set('settings:main', settingsPart());
   return out;
 }
@@ -149,6 +179,25 @@ export async function localChanges() {
   if (now.size !== Object.keys(meta.hashes).length) return true;
   for (const [k, h] of now) if (meta.hashes[k] !== h) return true;
   return false;
+}
+
+// Both copies changed since the last sync. A message only one side has is new there if it was
+// written after the last sync (keep it), and deleted on the other side if it's older (drop it).
+// Messages both have come from the newer copy.
+export function mergeChat(win, lose, since) {
+  const have = new Set((win.messages || []).map((m) => m?.id));
+  const theirs = new Set((lose.messages || []).map((m) => m?.id));
+  const extra = (lose.messages || []).filter((m) => m && m.id && !have.has(m.id) && (m.at || 0) > since);
+  const gone = (win.messages || []).filter((m) => m && m.id && !theirs.has(m.id) && (m.at || 0) <= since);
+  if (!extra.length && !gone.length) return win;
+  const out = structuredClone(win);
+  out.messages = (out.messages || []).filter((m) => !(m && m.id && !theirs.has(m.id) && (m.at || 0) <= since));
+  for (const m of extra.sort((a, b) => (a.at || 0) - (b.at || 0))) {
+    const i = out.messages.findIndex((x) => (x?.at || 0) > (m.at || 0));
+    out.messages.splice(i < 0 ? out.messages.length : i, 0, structuredClone(m));
+  }
+  out.updatedAt = Math.max(win.updatedAt || 0, lose.updatedAt || 0);
+  return out;
 }
 
 // Merge the Drive copy into this device. Returns the new remote file and what changed here.
@@ -170,6 +219,14 @@ function merge(local, lh, remote, meta, keys) {
       // Hiding or showing a chat counts as an edit, without moving it up the list.
       const stamp = (o) => Math.max(o?.updatedAt || 0, o?.hiddenAt || 0);
       const remoteWins = rc && (!lc || (stamp(r.d) || r.at || 0) > stamp(l));
+      // A chat written on both devices: the newer one, plus messages the other added since the last sync.
+      if (k.startsWith('chat:') && lc && rc) {
+        const m = remoteWins ? mergeChat(r.d, l, meta.at || 0) : mergeChat(l, r.d, meta.at || 0);
+        if (m !== l) take.set(k, m);
+        rec[k] = { at: now, h: hash(JSON.stringify(m)), d: m };
+        delete del[k];
+        continue;
+      }
       if (remoteWins) take.set(k, r.d);
       else rec[k] = { at: now, h: lh.get(k), d: l };
       delete del[k];
@@ -193,7 +250,7 @@ function merge(local, lh, remote, meta, keys) {
 }
 
 // Write the merged records into this device.
-async function apply(take) {
+async function apply(take, pics) {
   const count = {};
   const dirty = new Set();
   // Update objects in place, so a screen holding one (an open chat) sees the new data.
@@ -207,7 +264,7 @@ async function apply(take) {
     else if (i >= 0) into(arr[i], d);
     else arr.push(d);
   };
-  for (const [k, d] of take) {
+  for (let [k, d] of take) {
     const [kind, ...rest] = k.split(':');
     const id = rest.join(':');
     // Records from Drive are checked like a card or a backup: a usable id, safe colours and pictures.
@@ -218,7 +275,20 @@ async function apply(take) {
     else if (d && kind === 'ix') cleanInterchange(d);
     else if (d && kind === 'lore') cleanLore(d);
     else if (d && kind === 'chat') cleanChat(d);
-    else if (d && kind === 'img' && !/^data:image\//.test(cleanImg(d) || '')) continue;
+    else if (d && kind === 'img') {
+      // Older sync files carried the picture itself; newer ones name its file.
+      if (typeof d === 'object') {
+        const f = d.ref && pics.get(d.ref);
+        if (!f) continue; // its file isn't there (yet): try again next sync
+        if (S.images[id] && picRef(id, S.images[id]) === d.ref) continue;
+        try {
+          d = await getPic(f.id);
+        } catch {
+          continue;
+        }
+      }
+      if (!/^data:image\//.test(cleanImg(d) || '')) continue;
+    }
     count[kind] = (count[kind] || 0) + 1;
     if (kind === 'char') upsert(S.characters, d, id), dirty.add('char');
     else if (kind === 'persona') upsert(S.personas, d, id), dirty.add('persona');
@@ -276,13 +346,28 @@ async function run() {
     const meta = await loadMeta();
     const local = collect(prefs.keys);
     const { file: next, take } = merge(local, hashAll(local), remote, meta, prefs.keys);
-    const n = await apply(take);
+    const pics = await listPics();
+    const n = await apply(take, pics);
     for (const [k, v] of Object.entries(n)) got[k] = Array.isArray(v) ? [...(got[k] || []), ...v] : (got[k] || 0) + v;
     // Another device uploaded while we merged: merge again on top of theirs.
     const now = await findFile();
     if ((now?.version || null) !== (file?.version || null) && attempt < 3) continue;
+    // Pictures first, so no device ever reads a picture name whose file isn't there.
+    const want = new Set();
+    for (const [k, r] of Object.entries(next.rec)) {
+      if (!k.startsWith('img:') || !r.d?.ref) continue;
+      want.add(r.d.ref);
+      const data = S.images[k.slice(4)];
+      if (!pics.has(r.d.ref) && data && picRef(k.slice(4), data) === r.d.ref) {
+        await upload(null, data, IMGF + r.d.ref, 'text/plain');
+        pics.set(r.d.ref, { made: Date.now() });
+      }
+    }
     const body = JSON.stringify(next);
     await upload(file?.id || now?.id, body);
+    // Picture files nothing names any more (older than a day, so another device's upload in
+    // progress is left alone).
+    for (const [ref, f] of pics) if (!want.has(ref) && f.id && Date.now() - f.made > 864e5) await dropPic(f.id).catch(() => {});
     // This device now matches exactly what was uploaded (edits made meanwhile stay "changed").
     const hashes = Object.fromEntries(Object.entries(next.rec).map(([k, r]) => [k, viewHash(k, r.d, prefs.keys)]));
     await db.set('syncmeta', { hashes, at: next.at });
@@ -331,7 +416,7 @@ export function startAutoSync() {
   started = true;
   addEventListener('chatbox-dirty', () => {
     clearTimeout(timer);
-    timer = setTimeout(autoSync, 15000);
+    timer = setTimeout(autoSync, 60000); // a minute after the last change: fewer, bigger syncs
   });
   addEventListener('online', () => setTimeout(autoSync, 2000));
   setTimeout(autoSync, 3000);

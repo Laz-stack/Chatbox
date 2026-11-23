@@ -131,10 +131,31 @@ async function loadAll() {
   if (all.has('fares')) S.fares = { months: {}, ...all.get('fares') };
   S.interchanges = all.get('interchanges') || [];
   S.lore = all.get('lore') || [];
-  S.images = all.get('images') || {};
+  // Pictures: one entry each ('img:<key>'). Older data kept them all in one 'images' entry.
+  const oldImages = all.get('images');
+  S.images = { ...(oldImages || {}) };
+  for (const [k, v] of all) if (typeof k === 'string' && k.startsWith(IMG)) S.images[k.slice(IMG.length)] = v;
   setImageResolver((url) => S.images[url] || url);
   S.connections = all.get('connections') || [];
-  S.characters = all.get('characters') || [];
+  // Characters: one entry each ('char:<id>') plus their order. Older data kept them in one 'characters' entry.
+  const oldChars = !all.has('charOrder') ? all.get('characters') : null;
+  if (oldChars) S.characters = oldChars;
+  else {
+    const order = all.get('charOrder') || [];
+    const byId = new Map();
+    for (const [k, v] of all) if (typeof k === 'string' && k.startsWith(CHAR)) byId.set(k.slice(CHAR.length), v);
+    S.characters = [...order.map((id) => byId.get(id)), ...[...byId].filter(([id]) => !order.includes(id)).map(([, v]) => v)].filter(Boolean);
+  }
+  savedImg.clear();
+  savedChar.clear();
+  if (oldImages) {
+    await saveImages();
+    await db.del('images');
+  } else for (const [k, v] of Object.entries(S.images)) savedImg.set(k, v);
+  if (oldChars) {
+    await saveCharacters();
+    await db.del('characters');
+  } else for (const c of S.characters) savedChar.set(c.id, JSON.stringify(c));
   S.chats = new Map();
   // Every chat has its own id. Older data keyed one chat per character; that chat keeps the character's id.
   for (const [k, v] of all) if (typeof k === 'string' && k.startsWith('chat:')) S.chats.set((v.id ||= k.slice(5)), v);
@@ -224,11 +245,39 @@ export async function deletePersona(id) {
   await Promise.all([saveSettings(), savePersona(), ...touched.map((c) => saveChat(c, false))]);
 }
 export const saveConnections = () => db.set('connections', S.connections);
-export const saveCharacters = () => db.set('characters', S.characters);
+// Characters are written one entry each, and only the ones that changed (an avatar picture
+// isn't rewritten every time any character is saved).
+const CHAR = 'char:';
+const savedChar = new Map(); // id -> the JSON last written
+export async function saveCharacters() {
+  const ids = S.characters.map((c) => c.id);
+  const jobs = [];
+  for (const c of S.characters) {
+    const j = JSON.stringify(c);
+    if (savedChar.get(c.id) === j) continue;
+    savedChar.set(c.id, j);
+    jobs.push(db.set(CHAR + c.id, c).catch((e) => (savedChar.delete(c.id), Promise.reject(e))));
+  }
+  for (const id of [...savedChar.keys()]) if (!ids.includes(id)) savedChar.delete(id), jobs.push(db.del(CHAR + id));
+  jobs.push(db.set('charOrder', ids));
+  await Promise.all(jobs);
+}
 export const saveFares = () => db.set('fares', S.fares);
 export const saveInterchanges = () => db.set('interchanges', S.interchanges);
 export const saveLore = () => db.set('lore', S.lore);
-export const saveImages = () => db.set('images', S.images);
+// Pictures are written one entry each, and only new or changed ones; removed ones are deleted.
+const IMG = 'img:';
+const savedImg = new Map(); // key -> the picture last written
+export async function saveImages() {
+  const jobs = [];
+  for (const [k, v] of Object.entries(S.images)) {
+    if (savedImg.get(k) === v) continue;
+    savedImg.set(k, v);
+    jobs.push(db.set(IMG + k, v).catch((e) => (savedImg.delete(k), Promise.reject(e))));
+  }
+  for (const k of [...savedImg.keys()]) if (!(k in S.images)) savedImg.delete(k), jobs.push(db.del(IMG + k));
+  await Promise.all(jobs);
+}
 
 // ---------- Lorebook: world info that joins the prompt when its keywords come up ----------
 export const newLore = () => ({ id: 'lore-' + uid(), title: '', keys: [], text: '', scope: 'all', lines: [], always: false, on: true, createdAt: Date.now() });
@@ -629,14 +678,15 @@ export function snapshot({ includeKeys = true } = {}) {
 async function saveEverything() {
   await Promise.all([saveSettings(), savePersona(), saveConnections(), saveCharacters(), saveInterchanges(), saveLore(), saveImages()]);
   const keep = new Set([...S.chats.keys()].map((k) => 'chat:' + k));
-  for (const [k] of await db.entries()) if (typeof k === 'string' && k.startsWith('chat:') && !keep.has(k)) await db.del(k);
   await Promise.all([...S.chats.values()].map((c) => db.set('chat:' + c.id, c)));
+  for (const k of await db.keys()) if (typeof k === 'string' && k.startsWith('chat:') && !keep.has(k)) await db.del(k);
 }
 
 export async function restore(data) {
   if (!data || data.app !== 'chatbox') throw new Error('This file is not a Chatbox backup.');
-  await db.clear();
-  await db.set('seeded', true);
+  // Write the backup first and only then remove what it replaces: if the phone runs out of space
+  // half-way, the old data is still there. Your own music files stay.
+  const before = await db.keys();
   const nmLocal = S.settings.nightmare; // Nightmare's address and token belong to this phone
   S.settings = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };
   if (nmLocal) S.settings.nightmare = nmLocal;
@@ -653,7 +703,10 @@ export async function restore(data) {
   for (const c of [...S.chats.values()])
     if (c.id === c.characterId && !String(c.id).startsWith('ix-')) S.chats.delete(c.id), S.chats.set((c.id = `${c.id}~1`), c);
   cleanState(S);
+  savedImg.clear();
+  savedChar.clear();
   await Promise.all([
+    db.set('seeded', true),
     saveSettings(),
     savePersona(),
     saveConnections(),
@@ -664,6 +717,9 @@ export async function restore(data) {
     saveImages(),
     ...[...S.chats.values()].map((c) => db.set('chat:' + c.id, c)),
   ]);
+  const now = new Set([...[...S.chats.keys()].map((k) => 'chat:' + k), ...Object.keys(S.images).map((k) => IMG + k), ...S.characters.map((c) => CHAR + c.id)]);
+  const stale = (k) => typeof k === 'string' && (['images', 'characters', 'syncmeta'].includes(k) || (/^(chat|img|char):/.test(k) && !now.has(k)));
+  for (const k of before) if (stale(k)) await db.del(k);
 }
 
 export const isPersistent = db.persistent;
