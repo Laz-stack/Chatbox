@@ -86,10 +86,17 @@ let modelsCache = null;
 export async function nmModels(fresh = false) {
   if (!fresh && modelsCache) return modelsCache;
   const j = await nmJson('/models');
-  modelsCache = (j.models || []).map((m) => ({ id: m.id, label: m.label || m.id, family: m.family || '', native: m.native || '' }));
+  modelsCache = (j.models || []).map((m) => ({ id: m.id, label: m.label || m.id, family: m.family || '', native: m.native || '', dit: !!m.dit, steps: m.steps, cfg: m.cfg, scheduler: m.scheduler || '' }));
   return modelsCache;
 }
 export const modelLabel = (id) => modelsCache?.find((m) => m.id === id)?.label || id || 'Nightmare’s model';
+export const modelInfo = (id) => modelsCache?.find((m) => m.id === id) || null;
+// The family as people know it, for the model picker.
+const FAMILY = { SD15: 'SD 1.5', SD15_SWAP: 'SD 1.5', SDXL: 'SDXL', SDXL_SWAP: 'SDXL', FLUX2: 'FLUX.2', FLUX3: 'FLUX.3', FLUX1: 'FLUX.1', ZIMAGE: 'Z-Image', ANIMA_DIT: 'Anima', ANIMA: 'Anima', QWEN21: 'Qwen Image', KREA2: 'Krea 2' };
+export const familyName = (f) => FAMILY[f] || String(f || '').replace(/_/g, ' ');
+// SD 1.5 and SDXL read 77 tokens (CLIP); DiT models (FLUX, Z-Image, Anima…) read long sentences.
+export const isDit = (id) => !!modelInfo(id)?.dit;
+export const promptLimit = (id) => (isDit(id) ? 225 : TOKEN_LIMIT);
 // Anime models read Danbooru-style tags; realistic ones short phrases.
 export const isAnime = (id) => /anything|yuki|qtea|anime|anima|counterfeit|meina|pony|illustrious|noob|waifu|hentai|abyss|orange/i.test(id || '');
 
@@ -154,9 +161,11 @@ async function paintNow({ prompt, signal, onWait, overrides = {} }) {
   if (!p.token.trim()) throw new NmError('Nightmare needs its token.', 'Copy it from Nightmare (Settings › Advanced) into Connections › Pictures.');
   await whenFree(signal, onWait);
   const seed = p.lockSeed && p.seed ? p.seed : 1 + Math.floor(Math.random() * 2147483646);
+  const mi = p.model ? modelInfo(p.model) || (await nmModels().catch(() => []), modelInfo(p.model)) : null;
   const [w, h] = (SIZES.includes(p.size) ? p.size : '768x512').split('x');
   const params = {
-    generate: { seed: String(seed), width: w, height: h, ...(p.model ? { model: p.model } : {}) },
+    // The model's own steps, CFG and scheduler (a DiT model at the flow's 20 steps and CFG 7.5 comes out ruined).
+    generate: { seed: String(seed), width: w, height: h, ...(p.model ? { model: p.model } : {}), ...(mi?.steps ? { steps: String(mi.steps) } : {}), ...(mi?.cfg ? { cfg: String(mi.cfg) } : {}), ...(mi?.scheduler ? { scheduler: mi.scheduler } : {}) },
     output: {
       autosave: String(!!p.autosave),
       auto_upscale: String(!!p.upscale),
@@ -202,7 +211,7 @@ export async function writeLooks({ name, sheet, conn, anime, signal }) {
 }
 
 // The scene as tags (the look tags of who's in it are added in front by compose()).
-export async function sceneTags({ chat, people, speaker, persona, withMe, m, conn, mood, frame, anime, signal }) {
+export async function sceneTags({ chat, people, speaker, persona, withMe, m, conn, mood, frame, anime, dit = false, signal }) {
   const you = persona?.name?.trim() || 'the user';
   const place = hereOf(chat);
   const when = clockOn(chat) ? `${partOfDay(chat.clock.min)} (${hhmm(chat.clock.min)}), ${chat.clock.weather}` : '';
@@ -210,8 +219,11 @@ export async function sceneTags({ chat, people, speaker, persona, withMe, m, con
   const inFrame = [...people.map((p) => p.name), ...(withMe ? [you] : [])];
   const brief = { in_the_picture: inFrame, place: place ? `${place.name}: ${place.note}` : '', time: when, moment: text };
   const ask =
-    `Tag this exact moment for a Stable Diffusion 1.5 image model. Reply {"tags":"...","caption":"..."}. ` +
-    `tags: ${anime ? 'Danbooru-style tags' : 'short visual phrases'}, comma-separated, at most 40 tokens in all, most important first: what they are doing and their poses and expressions, interaction, then the place, then light and time. ` +
+    (dit
+      ? `Describe this exact moment for an image model that reads plain sentences (a DiT model). Reply {"tags":"...","caption":"..."}. ` +
+        `tags: one vivid natural-language description of 40 to 90 words${anime ? ', in anime illustration style (Danbooru tags may be mixed in)' : ''}: what they are doing, their poses, expressions and interaction, then the place, light and time. `
+      : `Tag this exact moment for a Stable Diffusion 1.5 image model. Reply {"tags":"...","caption":"..."}. ` +
+        `tags: ${anime ? 'Danbooru-style tags' : 'short visual phrases'}, comma-separated, at most 40 tokens in all, most important first: what they are doing and their poses and expressions, interaction, then the place, then light and time. `) +
     `Only ${inFrame.join(' and ') || 'the scene'} in the picture${withMe ? '' : ` (not ${you})`}. Their looks are added separately: don't describe hair, eyes or outfits unless the moment changes them (undressed, wet, torn). ${anime ? '' : 'No character names. '}Everyone is an adult. ` +
     `${MOOD_ASK[mood] || 'Mood: as the moment is written.'}${frame ? ` Framing: ${FRAMES.find((f) => f[0] === frame)?.[1].toLowerCase()}.` : ''} caption: 1 to 4 words naming the place or moment.`;
   // The sturdy reader: room for models that think first, their thinking stripped, and one more
@@ -235,9 +247,9 @@ export async function sceneTags({ chat, people, speaker, persona, withMe, m, con
 // Count tags (1girl, 1boy) from every look are added up into one ("2girls", "1girl, 1boy") and go first,
 // and each look gets a share of the tokens so the scene always has room (at least 25).
 const COUNT = /^(\d+)\s*(girl|boy|other)s?$/i;
-export function compose({ looks, frame, tags }) {
+export function compose({ looks, frame, tags, limit = TOKEN_LIMIT }) {
   const counts = { girl: 0, boy: 0, other: 0 };
-  const per = looks.length ? Math.max(8, Math.floor((TOKEN_LIMIT - 25) / looks.length)) : 0;
+  const per = looks.length ? Math.max(8, Math.floor((limit - 25) / looks.length)) : 0;
   const lookTags = looks.flatMap((l) => {
     const own = splitTags(l.tags).filter((t) => {
       const c = t.match(COUNT);
@@ -253,5 +265,5 @@ export function compose({ looks, frame, tags }) {
     const k = t.toLowerCase();
     if (!seen.has(k)) seen.add(k), all.push(t);
   }
-  return fitTags(all);
+  return fitTags(all, limit);
 }

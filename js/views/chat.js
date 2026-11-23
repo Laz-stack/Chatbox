@@ -16,7 +16,7 @@ import { hereOf, untravel } from '../worldmap.js';
 import { sttSupported, listen, speakParts, stopParts } from '../voice.js';
 import { voiceSheet } from './voicesheet.js';
 import { STYLES, picConn, picPrefs, providerName, paint, picSrc, altOf, squareOf, isDemoPics, gcPictures, keepScene, scenesOf, removeScene, perchancePrompt, keepPicture, PERCHANCE_URL, isNm } from '../pictures.js';
-import { nmPrefs, saveNm, nmModels, nmPaint, nmInfo, NmError, modelLabel, isAnime, SIZES, MOODS, FRAMES, sceneTags, compose, clipTokens, splitTags, fitTags, writeLooks, lookSheet, TOKEN_LIMIT } from '../nightmare.js';
+import { nmPrefs, saveNm, nmModels, nmPaint, nmInfo, NmError, modelInfo, familyName, isDit, promptLimit, modelLabel, isAnime, SIZES, MOODS, FRAMES, sceneTags, compose, clipTokens, splitTags, fitTags, writeLooks, lookSheet, TOKEN_LIMIT } from '../nightmare.js';
 import { scenesSheet } from './scenes.js';
 import { parseChoices, choicesHTML, colourNames, wrapParas } from '../reading.js';
 import { esc, uid, formatMessage, markProse, fmtNum, estimateTokens, inkOn, ago, plain, detectMood, copyText, download, slug, reducedMotion, motion, lineAccent, EASE_OUT, resizeImage } from '../util.js';
@@ -1628,7 +1628,24 @@ export async function chatView(id, focusId = null) {
               return toast(`${e.message} ${e.hint || ''}`.trim());
             }
             if (!list.length) return toast('Nightmare has no models installed yet. Download one in Nightmare › Models.');
-            openMenu(btn, list.map((x) => ({ icon: x.id === nmPrefs().model ? 'check' : 'image', label: `${x.label}${x.native ? ` · ${x.native.replace('x', '×')}` : ''}`, on: async () => (await saveNm({ model: x.id }), (btn.querySelector('b').textContent = x.label)) })));
+            // SD 1.5 first (fast on the NPU), then DiT models (FLUX, Z-Image, Anima: slow on many phones).
+            const sorted = [...list].sort((a, b) => a.dit - b.dit);
+            openMenu(
+              btn,
+              sorted.map((x) => ({
+                icon: x.id === nmPrefs().model ? 'check' : 'image',
+                label: `${x.label} · ${familyName(x.family)}${x.dit ? ' · slow on many phones' : ''}`,
+                on: async () => {
+                  const was = isDit(nmPrefs().model);
+                  const patch = { model: x.id };
+                  // A model of the other kind gets a size it's made for.
+                  if (x.dit !== was || !nmPrefs().model) patch.size = x.dit ? '1024x768' : '768x512';
+                  await saveNm(patch);
+                  btn.querySelector('b').textContent = x.label;
+                  if (patch.size) (s.querySelector('#nmSize b').textContent = sizeText(patch.size)), toast(`Size set to ${sizeText(patch.size)} for ${familyName(x.family)}`);
+                },
+              }))
+            );
           };
           s.querySelector('#nmModel').addEventListener('click', (e) => pickModel(e.currentTarget));
           s.querySelector('#nmSize').addEventListener('click', (e) => {
@@ -1697,7 +1714,7 @@ export async function chatView(id, focusId = null) {
       });
     }
     // The prompt before it paints: look tags first, tags past 77 tokens struck through. Resolves to the prompt, or null.
-    function promptSheet(fit, looks) {
+    function promptSheet(fit, looks, limit = 75) {
       const P = nmPrefs();
       return new Promise((resolve) => {
         let out = null;
@@ -1706,17 +1723,18 @@ export async function chatView(id, focusId = null) {
           const l = lookOf(t);
           return `<span class="nm-tag${l ? ' look' : ''}${cut ? ' cut' : ''}"${l ? ` style="--c:${l.color}"` : ''}>${esc(t)}${cut ? '<span class="vh"> (cut by the model)</span>' : ''}</span>`;
         }).join('');
-        const meter = (n) => `<span>${n} / 77 tokens</span><span class="nm-bar"><i style="width:${Math.min(100, (n / 77) * 100)}%"></i></span>`;
+        const dit = limit > 77;
+        const meter = (n) => (dit ? `<span>${n} tokens · this model reads long prompts</span>` : `<span>${n} / 77 tokens</span><span class="nm-bar"><i style="width:${Math.min(100, (n / 77) * 100)}%"></i></span>`);
         openSheet({
           label: 'The prompt',
-          html: `<h2 class="sheet-title">The prompt</h2><p class="sheet-p nm-p">Look tags first. Tags past 77 tokens are cut by the model, shown struck through.</p>
+          html: `<h2 class="sheet-title">The prompt</h2><p class="sheet-p nm-p">${dit ? 'Look tags first, then the scene. This model reads long prompts.' : 'Look tags first. Tags past 77 tokens are cut by the model, shown struck through.'}</p>
             <div class="nm-tags" id="pmTags">${chipsOf(fit)}</div><textarea class="nm-ta" id="pmTa" rows="6" aria-label="Prompt" hidden>${esc([...fit.keep, ...fit.cut].join(', '))}</textarea>
             <p class="nm-meter" id="pmMeter" aria-live="polite">${meter(fit.tokens)}</p>
             <button type="button" class="nm-ghost press" id="pmEdit">Edit as text</button>
             <button type="button" class="pic-go press" id="pmGo">Paint · ${sizeText(P.size)}</button>`,
           onMount(s, close) {
             const ta = s.querySelector('#pmTa');
-            const refit = () => fitTags(splitTags(ta.value));
+            const refit = () => fitTags(splitTags(ta.value), limit);
             ta.addEventListener('input', () => (s.querySelector('#pmMeter').innerHTML = meter(clipTokens(ta.value))));
             s.querySelector('#pmEdit').addEventListener('click', (e) => {
               const editing = ta.hidden;
@@ -1765,7 +1783,10 @@ export async function chatView(id, focusId = null) {
         const inPic = nmIn();
         const people = inPic.filter((x) => !x.me).map((x) => x.p);
         const withMe = inPic.some((x) => x.me);
+        await nmModels().catch(() => []); // the model's kind (DiT or not) and its own settings
         const anime = isAnime(P.model);
+        const dit = isDit(P.model);
+        const limit = promptLimit(P.model);
         const conn = connectionFor(ch);
         // Someone without look tags yet: write them once from their card (editable under Looks).
         const wrote = [];
@@ -1779,14 +1800,14 @@ export async function chatView(id, focusId = null) {
         let tags = [];
         let cap = '';
         try {
-          ({ tags, cap } = await sceneTags({ chat, people, speaker: ix ? speakerOf(m) : ch, persona: me(), withMe, m, conn, mood: P.mood, frame: P.frame, anime, signal: ctlP.signal }));
+          ({ tags, cap } = await sceneTags({ chat, people, speaker: ix ? speakerOf(m) : ch, persona: me(), withMe, m, conn, mood: P.mood, frame: P.frame, anime, dit, signal: ctlP.signal }));
         } catch (e) {
           // With Show the prompt first on, write the scene yourself after the look tags instead.
           if (e.name === 'AbortError' || !(P.preview && !auto)) throw e;
           toast(`${e.message} Write the scene after the look tags.`, { ms: 6000 });
         }
         const looks = inPic.filter((x) => x.p?.lookTags?.trim()).map((x) => ({ tags: x.p.lookTags, color: x.color }));
-        const fit = compose({ looks, frame: P.frame, tags });
+        const fit = compose({ looks, frame: P.frame, tags, limit });
         board.innerHTML = '';
         const lines = [];
         for (let k = 0; k < fit.keep.length; k += 4) lines.push(fit.keep.slice(k, k + 4).join(', '));
@@ -1794,7 +1815,7 @@ export async function chatView(id, focusId = null) {
         let prompt = fit.keep.join(', ');
         if (destroyed) return plate.remove();
         if (P.preview && !auto) {
-          prompt = await promptSheet(fit, looks);
+          prompt = await promptSheet(fit, looks, limit);
           if (destroyed) return;
           if (!prompt) return plate.remove();
         }
