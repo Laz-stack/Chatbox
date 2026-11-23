@@ -19,7 +19,7 @@ import { STYLES, picConn, picPrefs, providerName, paint, picSrc, altOf, squareOf
 import { QUALITY, moodsNow, nmPrefs, saveNm, nmModels, nmPaint, nmInfo, NmError, modelInfo, familyName, isDit, promptLimit, modelLabel, isAnime, SIZES, MOODS, FRAMES, sceneTags, compose, clipTokens, splitTags, fitTags, writeLooks, lookSheet, TOKEN_LIMIT } from '../nightmare.js';
 import { scenesSheet } from './scenes.js';
 import { parseChoices, choicesHTML, colourNames, wrapParas } from '../reading.js';
-import { esc, uid, formatMessage, markProse, fmtNum, estimateTokens, inkOn, ago, plain, detectMood, copyText, download, slug, reducedMotion, motion, lineAccent, EASE_OUT, resizeImage } from '../util.js';
+import { esc, uid, formatMessage, markProse, fmtNum, estimateTokens, inkOn, ago, plain, detectMood, copyText, download, slug, reducedMotion, motion, lineAccent, EASE_OUT, resizeImage, flyFrames, takeOver, snapBack } from '../util.js';
 import { avatarTile } from '../avatar.js';
 import { windowSheet as openWindowSheet, pale } from '../scenepicker.js';
 import { speak, stopSpeaking, ttsSupported } from '../tts.js';
@@ -1410,7 +1410,7 @@ export async function chatView(id, focusId = null) {
       return `<div class="pic-stack" data-stack="${esc(m.id)}"><div class="ps-peek p2" aria-hidden="true"></div><div class="ps-peek" aria-hidden="true"><img class="ps-img" src="${esc(picSrc(next))}" alt=""></div><div class="ps-top">${picFig(list[top], m, top, n)}</div></div><p class="ps-hint" aria-hidden="true">Swipe for the next picture</p>` + pcHTML(m);
     }
     // Bring the next picture up: the top one flies off and tucks behind, the one beneath rises.
-    function stackNext(mid, dir = 1, fromX = 0) {
+    function stackNext(mid, dir = 1, fromX = 0, v = 0) {
       const m = chat.messages.find((x) => x.id === mid);
       const st = log.querySelector(`[data-stack="${CSS.escape(mid)}"]`);
       if (!m || !st) return;
@@ -1429,18 +1429,12 @@ export async function chatView(id, focusId = null) {
         fly.setAttribute('aria-hidden', 'true');
         fly.inert = true;
         neu.appendChild(fly);
+        const dur = Math.max(220, Math.min(380, 380 - v * 120));
         fly
-          .animate(
-            [
-              { transform: `translateX(${fromX}px) rotate(${(fromX / neu.offsetWidth) * 4}deg)`, opacity: 1 },
-              { transform: `translateX(${-dir * 108}%) rotate(${-dir * 6}deg)`, opacity: 0.6, offset: 0.6 },
-              { transform: `translateX(${-dir * 40}%) translateY(14px) scale(.96)`, opacity: 0 },
-            ],
-            { duration: 380, easing: 'cubic-bezier(.2,.7,.2,1)' }
-          )
+          .animate(flyFrames(fromX, neu.offsetWidth, dir), { duration: dur, easing: 'linear' }) // a faster flick flies faster
           .finished.then(() => fly.remove(), () => fly.remove());
-        neu.querySelector('.ps-top').animate([{ transform: 'translateY(12px) scaleX(.96)', filter: 'brightness(.88)' }, { transform: 'none', filter: 'none' }], { duration: 320, easing: 'cubic-bezier(.16,1,.3,1)' });
-      }
+        neu.querySelector('.ps-top').animate([{ transform: 'translateY(12px) scaleX(.96)', filter: 'brightness(.88)' }, { transform: 'none', filter: 'none' }], { duration: 320, easing: EASE_OUT });
+      } else neu.querySelector('.ps-top').animate([{ opacity: 0.4 }, { opacity: 1 }], { duration: 150, easing: 'linear' }); // reduced motion: a quick change, no travel
       if (hadFocus) neu.querySelector(hadFocus)?.focus({ preventScroll: true });
     }
     // Drag the top picture sideways; past 30% (or a flick) sends it to the back. A drag isn't a tap.
@@ -1448,7 +1442,9 @@ export async function chatView(id, focusId = null) {
     log.addEventListener('pointerdown', (e) => {
       const t = e.target.closest('.ps-top');
       if (!t || e.button === 2 || e.target.closest('.pic-more, .ps-count')) return;
-      sw = { t, mid: t.closest('[data-stack]').dataset.stack, x0: e.clientX, y0: e.clientY, t0: performance.now(), dx: 0, horiz: null, id: e.pointerId };
+      // Grabbing it mid-animation takes over from where it is, instead of jumping when that ends.
+      const base = takeOver(t);
+      sw = { t, base, mid: t.closest('[data-stack]').dataset.stack, x0: e.clientX, y0: e.clientY, t0: performance.now(), dx: 0, horiz: null, id: e.pointerId };
     });
     log.addEventListener('pointermove', (e) => {
       if (!sw || e.pointerId !== sw.id) return;
@@ -1456,23 +1452,25 @@ export async function chatView(id, focusId = null) {
       const dy = e.clientY - sw.y0;
       if (sw.horiz == null && (Math.abs(sw.dx) > 8 || Math.abs(dy) > 8)) {
         sw.horiz = Math.abs(sw.dx) > Math.abs(dy);
-        if (!sw.horiz) return (sw = null);
+        if (!sw.horiz) return snapBack(sw.t), (sw = null);
         try {
           sw.t.setPointerCapture(sw.id);
         } catch {}
       }
-      if (sw.horiz) sw.t.style.transform = `translateX(${sw.dx}px) rotate(${Math.max(-4, Math.min(4, (sw.dx / sw.t.offsetWidth) * 4))}deg)`;
+      const x = sw.base + sw.dx;
+      if (sw.horiz) sw.t.style.transform = `translateX(${x}px) rotate(${Math.max(-4, Math.min(4, (x / sw.t.offsetWidth) * 4))}deg)`;
     });
     const swEnd = (e) => {
       if (!sw || e.pointerId !== sw.id) return;
       const s0 = sw;
       sw = null;
-      if (!s0.horiz || !s0.t.isConnected) return; // redrawn mid-drag: nothing to finish
+      if (!s0.t.isConnected) return; // redrawn mid-drag: nothing to finish
+      if (!s0.horiz) return snapBack(s0.t); // a tap that caught it mid-move
       stackSwipedAt = Date.now();
       const v = Math.abs(s0.dx) / Math.max(1, performance.now() - s0.t0);
-      if (e.type === 'pointerup' && (Math.abs(s0.dx) > s0.t.offsetWidth * 0.3 || v > 0.5)) return stackNext(s0.mid, s0.dx < 0 ? 1 : -1, s0.dx);
-      if (!reducedMotion()) s0.t.animate([{ transform: s0.t.style.transform }, { transform: 'none' }], { duration: 260, easing: 'cubic-bezier(.16,1,.3,1)' });
-      s0.t.style.transform = '';
+      const x = s0.base + s0.dx;
+      if (e.type === 'pointerup' && (Math.abs(x) > s0.t.offsetWidth * 0.3 || v > 0.5)) return stackNext(s0.mid, x < 0 ? 1 : -1, x, v);
+      snapBack(s0.t);
     };
     log.addEventListener('pointerup', swEnd);
     log.addEventListener('pointercancel', swEnd);

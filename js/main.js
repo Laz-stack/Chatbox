@@ -158,13 +158,20 @@ async function render() {
   clearStaleToasts();
   closeOverlays();
 
+  // Back on a screen already seen this session: its entrances (rows rising, badges popping) don't
+  // play again; the screen change itself is the motion.
+  const again = seen.has(location.hash || '#/');
+  seen.add(location.hash || '#/');
+  const settle = () => again && app.getAnimations({ subtree: true }).forEach((a) => a instanceof CSSAnimation && a.effect?.getTiming().iterations !== Infinity && a.finish());
   const swap = () => {
     current?.unmount?.();
     current = view;
     app.innerHTML = view.html;
     if (shared) tagShared(app, false);
     window.scrollTo(0, 0);
-    return view.mount?.(app);
+    const r = view.mount?.(app);
+    settle();
+    return r;
   };
   // In dim mode the screen changes without a view transition: its snapshots would be drawn above the dim layer.
   if (document.startViewTransition && !reducedMotion() && current && !document.documentElement.classList.contains('dim')) {
@@ -191,6 +198,7 @@ async function render() {
   }
 }
 
+const seen = new Set(); // routes shown this session
 window.addEventListener('hashchange', render);
 
 // Long text boxes grow with what you type (they also open up when focused, see app.css).
@@ -202,7 +210,7 @@ document.addEventListener('input', (e) => {
 });
 document.addEventListener('focusin', (e) => {
   const t = e.target;
-  if (t.matches?.('textarea.input.area')) setTimeout(() => t.scrollIntoView({ block: 'nearest', behavior: 'smooth' }), 320);
+  if (t.matches?.('textarea.input.area')) setTimeout(() => t.scrollIntoView({ block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' }), 320);
 });
 
 // The red Build stop in the bar opens the Build sheet on any screen that shows the bar.

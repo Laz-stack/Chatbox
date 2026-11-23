@@ -6,7 +6,7 @@
 import { S, saveSettings, monthKey, costOf, character, connection, interchange } from '../store.js';
 import { picPrefs } from '../pictures.js';
 import { JOBS } from '../helper.js';
-import { esc, fmtNum, inkOn, reducedMotion } from '../util.js';
+import { esc, fmtNum, inkOn, reducedMotion, EASE_OUT, flyFrames, takeOver, snapBack } from '../util.js';
 import { title2, tabbar, avatarBullet, icon, openSheet, toast, groupAvatar } from '../ui.js';
 
 const money = (v) => (v == null ? '—' : '$' + (v > 0 && v < 0.001 ? v.toFixed(4) : v > 0 && v < 0.01 ? v.toFixed(3) : v.toFixed(2)));
@@ -195,12 +195,18 @@ export function faresView() {
       const stack = root.querySelector('#rcStack');
       const tabs = root.querySelector('.rc-chips');
       let top = lastTop;
-      let busyAnim = false;
 
       // Bring paper `to` up. dir: 1 = the top paper leaves to the left (next), -1 = to the right (back).
-      async function show(to, dir = 1, fromX = 0) {
-        if (busyAnim || to === top) return;
-        busyAnim = true;
+      async function show(to, dir = 1, fromX = 0, v = 0) {
+        if (to === top) return;
+        // A tap or swipe mid-flight isn't dropped: the stack redraws at once and the flights overlap.
+        // Earlier flights still in the air skip ahead to their way round the back.
+        stack.parentElement.querySelectorAll('.rc-fly').forEach((f) =>
+          f.getAnimations().forEach((a) => {
+            const d = a.effect.getTiming().duration;
+            if (a.currentTime < d * 0.601) a.currentTime = d * 0.601;
+          })
+        );
         const old = stack.querySelector('#rcTop');
         const quiet = reducedMotion();
         if (!quiet) {
@@ -213,14 +219,8 @@ export function faresView() {
           fly.style.top = old.offsetTop + 'px';
           // Outside the stack, so redrawing the stack doesn't take it away mid-flight.
           stack.parentElement.appendChild(fly);
-          fly.animate(
-            [
-              { transform: `translateX(${fromX}px) rotate(${(fromX / stack.offsetWidth) * 4}deg)`, opacity: 1 },
-              { transform: `translateX(${-dir * 108}%) rotate(${-dir * 6}deg)`, opacity: 0.6, offset: 0.6 },
-              { transform: `translateX(${-dir * 40}%) translateY(14px) scale(.96)`, opacity: 0 },
-            ],
-            { duration: 380, easing: 'cubic-bezier(.2,.7,.2,1)' }
-          ).finished.then(() => fly.remove());
+          const dur = Math.max(220, Math.min(380, 380 - v * 120)); // a faster flick flies faster
+          fly.animate(flyFrames(fromX, stack.offsetWidth, dir), { duration: dur, easing: 'linear' }).finished.then(() => fly.remove(), () => fly.remove());
         }
         top = to;
         lastTop = to;
@@ -228,12 +228,11 @@ export function faresView() {
         stack.innerHTML = stackHTML(to);
         const neu = stack.querySelector('#rcTop');
         // …and the next one rises out of its peek.
-        neu.animate(quiet ? [{ opacity: 0 }, { opacity: 1 }] : [{ transform: 'translateY(12px) scaleX(.96)', filter: 'brightness(.88)' }, { transform: 'none', filter: 'none' }], { duration: quiet ? 150 : 320, easing: 'cubic-bezier(.16,1,.3,1)' });
+        neu.animate(quiet ? [{ opacity: 0.4 }, { opacity: 1 }] : [{ transform: 'translateY(12px) scaleX(.96)', filter: 'brightness(.88)' }, { transform: 'none', filter: 'none' }], { duration: quiet ? 150 : 320, easing: EASE_OUT });
         tabs.innerHTML = chips(to);
         root.querySelector('#rcBusy').innerHTML = busyHTML(PAPERS[to][0]);
         root.querySelector('#rcHint').textContent = hint(to);
         bindDrag();
-        setTimeout(() => (busyAnim = false), quiet ? 150 : 380);
       }
 
       // Drag the top paper sideways; let go past 30% (or with a flick) to send it to the back.
@@ -244,8 +243,11 @@ export function faresView() {
         let t0 = 0;
         let dx = 0;
         let horiz = null;
+        let base = 0;
         el.addEventListener('pointerdown', (e) => {
           if (e.target.closest('a, button')) return;
+          // Grabbing it mid-animation takes over from where it is, instead of jumping when that ends.
+          base = takeOver(el);
           x0 = e.clientX;
           y0 = e.clientY;
           t0 = performance.now();
@@ -259,20 +261,18 @@ export function faresView() {
             horiz = Math.abs(dx) > Math.abs(e.clientY - y0);
             if (horiz) el.setPointerCapture(e.pointerId);
           }
-          if (horiz) el.style.transform = `translateX(${dx}px) rotate(${Math.max(-4, Math.min(4, (dx / el.offsetWidth) * 4))}deg)`;
+          const x = base + dx;
+          if (horiz) el.style.transform = `translateX(${x}px) rotate(${Math.max(-4, Math.min(4, (x / el.offsetWidth) * 4))}deg)`;
         });
         const end = () => {
           if (x0 == null) return;
           const v = Math.abs(dx) / Math.max(1, performance.now() - t0);
-          const go = horiz && (Math.abs(dx) > el.offsetWidth * 0.3 || v > 0.5);
+          const x = base + dx;
+          const go = horiz && (Math.abs(x) > el.offsetWidth * 0.3 || v > 0.5);
           x0 = null;
-          if (go) {
-            // Either way you swipe, the paper you can see underneath comes up next.
-            show((top + 1) % 3, dx < 0 ? 1 : -1, dx);
-          } else if (horiz) {
-            el.animate([{ transform: el.style.transform }, { transform: 'none' }], { duration: 260, easing: 'cubic-bezier(.16,1,.3,1)' });
-            el.style.transform = '';
-          }
+          // Either way you swipe, the paper you can see underneath comes up next.
+          if (go) show((top + 1) % 3, x < 0 ? 1 : -1, x, v);
+          else snapBack(el); // a short drag, a scroll, or a tap that caught it mid-move
         };
         el.addEventListener('pointerup', end);
         el.addEventListener('pointercancel', end);

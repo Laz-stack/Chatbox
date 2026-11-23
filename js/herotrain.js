@@ -95,7 +95,7 @@ export function mountRail(hero, { onDepart } = {}) {
       onDepart?.(tile ? box.left + box.width / 2 : box.right - 24, tile ? box.top + box.height / 2 : box.top + 30);
       location.hash = href;
     };
-    if (reducedMotion()) return setTimeout(go, 300);
+    if (reducedMotion()) return go(); // no train: open the chat at once
     if (!plan) makePlan();
     const runs = slices.map((s, i) => s.animate(plan[i], { duration: RUN_MS, delay: 90, easing: 'linear', fill: 'forwards' }));
     // Open the chat once the whole train is in the tunnel.
