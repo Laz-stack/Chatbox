@@ -97,7 +97,7 @@ export const ibtn = (ic, label, { href, id, cls = '', attrs = '' } = {}) =>
     : `<button type="button" class="ibtn press ${cls}" ${id ? `id="${id}"` : ''} aria-label="${esc(label)}" ${attrs}>${icon(ic)}</button>`;
 
 export const topbar = ({ back = '#/', title = '', right = '', backIcon = 'back', backLabel = 'Back' } = {}) =>
-  `<div class="topbar">${ibtn(backIcon, backLabel, { href: back })}<h1 class="tb-title">${title}</h1>${right || '<span class="ibtn-spacer"></span>'}</div>`;
+  `<div class="topbar">${ibtn(backIcon, backLabel, { href: back })}${title ? `<h1 class="tb-title">${title}</h1>` : '<span class="tb-title"></span>'}${right || '<span class="ibtn-spacer"></span>'}</div>`;
 
 export const sw = (id, on, label) =>
   `<button type="button" class="switch" role="switch" id="${id}" aria-checked="${on ? 'true' : 'false'}" aria-label="${esc(label)}"><span class="knob"></span></button>`;
@@ -260,6 +260,8 @@ export function openMenu(anchor, items, { onClose, spotlight } = {}) {
     .map((it, i) =>
       it === '-'
         ? '<hr>'
+        : it.group
+        ? `<div class="grp" role="presentation">${esc(it.group)}</div>`
         : `<button type="button" role="menuitem" data-i="${i}" class="${it.danger ? 'danger' : ''}" style="animation-delay:${0.03 * i}s"><span class="mi">${icon(it.icon, 16)}</span>${esc(it.label)}</button>`
     )
     .join('');
@@ -268,7 +270,7 @@ export function openMenu(anchor, items, { onClose, spotlight } = {}) {
   ovRoot().appendChild(wrap);
   const menu = wrap.querySelector('.menu');
   const r = anchor.getBoundingClientRect();
-  const mw = 244;
+  const mw = Math.min(268, innerWidth - 24);
   const mh = menu.offsetHeight;
   const x = clamp(r.right - mw, 12, innerWidth - mw - 12);
   let y = r.bottom + 8;

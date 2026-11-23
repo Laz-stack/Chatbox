@@ -169,7 +169,7 @@ a.pill::after, button.pill::after { content: ''; position: absolute; inset: -4px
 .row-t { font: 700 15px/1.15 var(--font); }
 .row-s { font: 400 13px/1.3 var(--font); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row-chev { color: var(--muted); }
-.row-end { font: 800 15px/1 var(--font); color: var(--yellow); }
+.row-end { font: 800 15px/1 var(--font); color: var(--cream); }
 
 /* ---------- route-line tab bar ---------- */
 .tabfade { position: fixed; left: 50%; bottom: 0; width: min(520px, 100%); transform: translateX(-50%); height: calc(150px + var(--safe-b)); pointer-events: none; background: linear-gradient(180deg, rgba(10, 10, 10, 0), rgba(10, 10, 10, .9) 30%, var(--bg) 46%); z-index: 30; }
@@ -319,10 +319,12 @@ html.vt-tabs .tabbar .stop-new .stop { view-transition-name: tab-new; }
 .menu-ov { position: fixed; inset: 0; z-index: 110; }
 .menu-scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, .55); animation: fadeIn .25s ease both; }
 .menu { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; position: absolute; min-width: 236px; padding: 6px 0; border-radius: 24px; background: var(--cream); color: var(--bg); box-shadow: 0 24px 60px rgba(0, 0, 0, .6); animation: menuIn .28s var(--out) both; }
-.menu button { display: flex; align-items: center; gap: 12px; width: 100%; height: 50px; padding: 0 14px 0 10px; font: 700 15px/1 var(--font); color: var(--bg); text-align: left; animation: menuItemIn .28s var(--out) both; }
+.menu button { display: flex; align-items: center; gap: 12px; width: 100%; height: 46px; padding: 0 14px 0 10px; font: 700 15px/1.15 var(--font); color: var(--bg); text-align: left; animation: menuItemIn .28s var(--out) both; }
 .menu button:hover, .menu button:focus-visible { background: rgba(10, 10, 10, .06); outline: none; }
-.menu .mi { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--bg); color: var(--cream); flex: none; }
+.menu .mi { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--bg); color: var(--cream); flex: none; }
 .menu .danger .mi { background: var(--red); color: var(--white); }
+.menu .danger { color: var(--red); }
+.menu .grp { padding: 10px 14px 4px; font: 800 11px/1 var(--font); letter-spacing: .08em; text-transform: uppercase; color: #6A6A6A; }
 .menu hr { border: 0; height: 2px; background: var(--bg); margin: 4px 12px; }
 .menu-ov.closing .menu { animation: menuOut .2s var(--in) both; }
 .menu-ov.closing .menu-scrim { animation: fadeOut .2s ease both; }
@@ -359,7 +361,7 @@ body[data-route='chat'] #toast-root { bottom: calc(150px + var(--safe-b)); }
 .ruler { position: relative; height: 44px; border-radius: 14px; background: var(--plate); overflow: hidden; --p: .5; }
 .ruler .ticks, .ruler .fill { position: absolute; left: 12px; right: 12px; top: 14px; height: 16px; background: repeating-linear-gradient(90deg, rgba(236, 236, 236, .32) 0 2px, transparent 2px 12px); }
 .ruler .fill { right: auto; width: calc((100% - 24px) * var(--p)); background: repeating-linear-gradient(90deg, var(--yellow) 0 2px, transparent 2px 12px); }
-.ruler .head { position: absolute; top: 6px; bottom: 6px; width: 3px; border-radius: 2px; background: var(--red); left: calc(12px + (100% - 24px) * var(--p) - 1px); transition: transform .3s var(--spring); }
+.ruler .head { position: absolute; top: 6px; bottom: 6px; width: 3px; border-radius: 2px; background: var(--cream); left: calc(12px + (100% - 24px) * var(--p) - 1px); transition: transform .3s var(--spring); }
 .ruler input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; margin: 0; cursor: ew-resize; }
 .ruler:focus-within { box-shadow: 0 0 0 2px var(--yellow); }
 .ruler:active .head { transform: scaleY(1.25); }
@@ -562,7 +564,7 @@ html.vt-tap::view-transition-new(root) { animation: vtReveal .5s cubic-bezier(.2
 .stub-p { display: block; margin-top: 6px; font: 500 14px/1.4 var(--font); }
 .stub-p .act { font-style: italic; color: inherit; }
 .log-empty { display: flex; gap: 12px; align-items: flex-start; padding: 16px; border-radius: 18px; box-shadow: inset 0 0 0 2px var(--cream); font: 500 14px/1.45 var(--font); color: var(--cream); }
-.log-empty .ic { flex: none; color: var(--yellow); }
+.log-empty .ic { flex: none; color: var(--cream); }
 
 /* Lines: search, filters, character plates */
 .search { display: flex; align-items: center; gap: 10px; height: 52px; margin-top: 16px; padding: 0 16px; border-radius: 26px; background: var(--cream); color: var(--bg); }
@@ -593,7 +595,8 @@ html.vt-tap::view-transition-new(root) { animation: vtReveal .5s cubic-bezier(.2
 .bopt { display: flex; align-items: center; gap: 14px; min-height: 84px; padding: 14px 16px; border-radius: 24px; margin-top: 10px; text-decoration: none; }
 .bopt.red { background: var(--red); color: var(--white); }
 .bopt.yel { background: var(--cream); color: var(--bg); }
-.bopt.off { box-shadow: inset 0 0 0 2px var(--cream); color: var(--cream); }
+.bopt.off { box-shadow: none; border: 2px dashed var(--plate2); color: var(--muted); }
+.bopt.off b { color: var(--cream); }
 .bo-ic { width: 52px; height: 52px; border-radius: 50%; background: rgba(0, 0, 0, .2); display: flex; align-items: center; justify-content: center; flex: none; }
 .bo-tx { flex: 1; display: flex; flex-direction: column; gap: 5px; }
 .bo-tx b { font: 800 20px/1 var(--font); letter-spacing: -.02em; }
@@ -680,7 +683,7 @@ p, .fhint, .sheet-p, .note, .trow-s, .stub-p, .search-none { text-wrap: pretty; 
 .bp .hrow { margin-bottom: 0; }
 .bp-link { min-height: 44px; display: inline-flex; align-items: center; background: none; border: 0; padding: 0; color: var(--cream); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
 .bp-legacy { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 18px; box-shadow: inset 0 0 0 2px var(--cream); font: 600 14px/1.4 var(--font); color: var(--cream); }
-.bp-legacy .ic { flex: none; color: var(--yellow); margin-top: 1px; }
+.bp-legacy .ic { flex: none; color: var(--cream); margin-top: 1px; }
 .bp-hint { display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 16px; border-radius: 26px; background: var(--cream); color: var(--bg); }
 .bp-hint input { flex: 1; min-width: 0; height: 100%; border: 0; background: transparent; font: 700 16px/1 var(--font); color: var(--bg); }
 .bp-hint input::placeholder { color: var(--muted); }
@@ -735,7 +738,7 @@ p, .fhint, .sheet-p, .note, .trow-s, .stub-p, .search-none { text-wrap: pretty; 
 textarea.bp-ta { height: auto; min-height: 52px; padding: 14px 54px 14px 16px; resize: none; display: block; font-weight: 600; line-height: 1.45; }
 textarea.bp-ta.tall { min-height: 96px; }
 .bpf-help { margin: 8px 2px 0; font: 400 13px/1.3 var(--font); color: var(--muted); }
-.bpf-help.warn { color: var(--yellow); }
+.bpf-help.warn { color: var(--white); font-weight: 700; }
 .bp-mature { padding: 6px 12px; border-radius: 16px; box-shadow: inset 0 0 0 1.5px rgba(236, 236, 236, .32); }
 .bp-sug { padding: 12px 14px; border-radius: 16px; background: var(--cream); color: var(--bg); animation: riseIn .25s var(--out) both; }
 .bp-sug-t { font: 800 12px/1 var(--font); }
@@ -748,7 +751,7 @@ textarea.bp-ta.tall { min-height: 96px; }
 .bp-prev span { flex: 1; }
 /* persona preview */
 .bpv { display: flex; flex-direction: column; }
-.bpv-h { margin: 16px 0 6px; font: 800 14px/1 var(--font); color: var(--yellow); }
+.bpv-h { margin: 16px 0 6px; font: 800 14px/1 var(--font); color: var(--muted); }
 .bpv-h:first-child { margin-top: 0; }
 .bpv-r { display: grid; grid-template-columns: 40% 1fr; gap: 10px; padding: 8px 0; border-bottom: 1.5px dashed rgba(236, 236, 236, .25); font: 500 14px/1.4 var(--font); color: var(--cream); }
 .bpv-r span:first-child { font: 800 12px/1.4 var(--font); color: var(--white); }
@@ -964,9 +967,9 @@ textarea.bp-ta.tall { min-height: 96px; }
 .chips button::after { content: ''; position: absolute; inset: -4px 0; }
 .chat:has(#input:not(:placeholder-shown)) .chips { max-height: 0; opacity: 0; padding-top: 0; padding-bottom: 0; pointer-events: none; }
 .composer { margin: 4px 10px calc(10px + var(--safe-b)); padding: 4px; gap: 6px; border-radius: 24px; align-items: center; }
-.composer textarea { min-height: 40px; padding: 10px 4px; }
-.composer .ibtn, .composer .send { width: 40px; height: 40px; }
-.composer .as-btn { width: 40px; height: 40px; }
+.composer textarea { min-height: 44px; padding: 12px 4px; }
+.composer .ibtn, .composer .send { width: 44px; height: 44px; }
+.composer .as-btn { width: 44px; height: 44px; }
 
 /* ================= Lorebook folders ================= */
 .lf-list { display: flex; flex-direction: column; gap: 10px; }
@@ -1980,8 +1983,8 @@ button.bopt { width: 100%; text-align: left; }
 /* Dim mode (js/dim.js): a warm multiply layer over everything. Black stays black, whites go to soft
    paper, yellow to amber; it never takes touches. Fades in and out over two seconds. */
 .dim-layer { position: fixed; inset: 0; z-index: 2147483000; pointer-events: none; background: #E9BE8A; mix-blend-mode: multiply; opacity: 0; visibility: hidden; transition: opacity 2s ease, visibility 0s 2s; }
-.dim-layer.on { opacity: .9; visibility: visible; transition: opacity 2s ease, visibility 0s; }
-html.dim { --white: #F3F0EA; }
+.dim-layer.on { opacity: .8; visibility: visible; transition: opacity 2s ease, visibility 0s; }
+html.dim { --white: #F3F0EA; --muted: #BDBDBD; } /* muted text stays AA under the warm layer */
 .dim-times { display: flex; gap: 10px; margin: 14px 0 4px; }
 .dim-times label { flex: 1; display: flex; flex-direction: column; gap: 6px; font: 700 13px var(--font); color: var(--muted); }
 .dim-skip { margin: 10px 0 4px; }
@@ -2033,7 +2036,7 @@ html.mk-ribbon .para.here { margin-top: 1.1em; }
 .tx-help .trow { padding: 10px 14px; }
 /* Chip rows that scroll sideways fade at the right edge, so a cut-off chip reads as "more this way".
    The extra end padding keeps the fade over empty space when everything fits. */
-.chips, .nextbar { padding-right: 40px !important; -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent); }
+.chips.over, .nextbar { padding-right: 40px !important; -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent); }
 /* The chat's ⋯ menu as a Station board sheet */
 .cm-quick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 4px 0 6px; }
 .cm-q { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; min-height: 76px; padding: 10px 4px; border-radius: 18px; background: var(--cream); color: var(--bg); font: 800 13px/1.15 var(--font); text-align: center; }
@@ -2389,3 +2392,26 @@ button.nm-tag { border: 0; cursor: pointer; text-align: left; }
 :root.page-light .chat .log .ps-count { color: var(--bg); }
 :root.page-light .chat .log .ps-peek { background: var(--plate2); }
 :root.page-light .chat .log .ps-peek.p2 { background: var(--plate); }
+
+/* Review polish (v44 2A): tighter reply chips, so Regenerate, Continue and Write for me fit a 360px phone. */
+.chips { gap: 6px; padding-left: 10px; padding-right: 10px; }
+.chips button, .chips.steer button { gap: 5px; padding: 0 9px; font-weight: 800; }
+.chips button .ic { width: 14px; height: 14px; }
+/* Review polish (v44 3B): the first-reply tip, docked above the chips until Got it. */
+.tipbar { display: flex; gap: 10px; align-items: center; margin: 0 12px; padding: 10px 12px; border-radius: 16px 16px 0 0; background: var(--plate); font: 600 13px/1.35 var(--font); color: var(--cream); }
+.tipbar button { position: relative; flex: none; margin-left: auto; font: 800 12px/1 var(--font); color: var(--cream); text-decoration: underline; text-underline-offset: 3px; }
+.tipbar button::after { content: ''; position: absolute; inset: -14px -12px; }
+/* Review polish (v44 4A): the picture viewer — a near-black backdrop and an even 2×2 grid of actions. */
+.pic-lb { background: rgba(0, 0, 0, .94); }
+.pic-lb-acts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pic-lb-acts button { gap: 8px; min-height: 46px; padding: 0 12px; border-radius: 23px; font: 800 13px/1.1 var(--font); text-align: left; }
+.pic-lb-acts button .ic { flex: none; }
+.pic-lb-acts button.del { color: #FF6B6B; }
+.pic-lb-src { font: 700 12.5px/1.3 var(--font) !important; color: var(--soft, #BDBDBD) !important; }
+.pic-lb-x { position: absolute; top: calc(12px + env(safe-area-inset-top, 0px)); right: 12px; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--plate); color: var(--cream); }
+/* Review polish (v44 5A): on a stack the caption keeps the name, the count and ⋯; the source line lives in the viewer. */
+.ps-top .pic-more { margin-left: auto; }
+/* Review polish (v44 6A): on a light page the character's bubble gets a hairline edge, so it stands off the paper. */
+:root.page-light .chat .msg.ai:not(.scene) .bubble { box-shadow: 0 0 0 1px rgba(0, 0, 0, .12); }
+:root.page-light .chat .msg.ai.found:not(.scene) .bubble { box-shadow: 0 0 0 3px var(--yellow); }
+:root.page-light .chat .msg.ai.lifted:not(.scene) .bubble { box-shadow: 0 0 0 1px rgba(0, 0, 0, .12), 0 18px 40px rgba(0, 0, 0, .6); }

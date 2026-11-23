@@ -58,6 +58,11 @@ const chatTitle = (chat) => {
   const first = chat.messages.find((m) => m.role === 'user');
   return first ? plain(textOf(first)).slice(0, 80) || 'Untitled chat' : 'Not started yet';
 };
+// The station's second line: the latest message, unless it's your first line (already the title).
+const lastLine = (chat, who, name) => {
+  const last = lastMessage(chat);
+  return last?.role === 'user' && last === chat.messages.find((m) => m.role === 'user') ? `Waiting for ${name}` : plain(named(textOf(last), who));
+};
 // The chats a character or group shows: started and not hidden, newest first. One source for the
 // station list, the count badge and the All pill.
 const shownChats = (id) => chatsFor(id).filter((c) => hasStarted(c) && !c.hidden);
@@ -89,7 +94,7 @@ function lineGroup({ c, ix, chats }) {
   const who = ix ? ix.people[0] : c;
   const stations = chats
     .map((chat) =>
-      sw(`<a class="ln-stn press" href="#/chat/${chat.id}" aria-label="Chat with ${esc(name)}: ${esc(chatTitle(chat))}, ${esc(agoLong(chat.updatedAt))}" aria-describedby="swHint"><span class="ln-dot" aria-hidden="true"></span><span class="row-tx"><span class="ln-st">${esc(chatTitle(chat))}</span><span class="ln-ss">${esc(plain(named(textOf(lastMessage(chat)), who)))}</span></span><span class="ln-w num">${ago(chat.updatedAt)}</span></a>`, 'chat', chat.id, name, { group: !!ix })
+      sw(`<a class="ln-stn press" href="#/chat/${chat.id}" aria-label="Chat with ${esc(name)}: ${esc(chatTitle(chat))}, ${esc(agoLong(chat.updatedAt))}" aria-describedby="swHint"><span class="ln-dot" aria-hidden="true"></span><span class="row-tx"><span class="ln-st">${esc(chatTitle(chat))}</span><span class="ln-ss">${esc(lastLine(chat, who, name))}</span></span><span class="ln-w num">${ago(chat.updatedAt)}</span></a>`, 'chat', chat.id, name, { group: !!ix })
     )
     .join('');
   return `<div class="ln-grp" role="group" aria-label="${esc(name)}" style="${vars}">${head}${stations}</div>`;

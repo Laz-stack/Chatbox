@@ -31,7 +31,7 @@ export async function adventureView(id) {
   const html = `<div class="screen no-tab cr-screen">
     ${topbar({ back: `#/chat/${encodeURIComponent(chat.id)}`, title: 'Quests and items' })}
     <p class="cr-sub">${esc(title || '')}</p>
-    <p class="cr-read">${esc(readLine(chat, S.settings, agoLong))}</p>
+    <p class="cr-read" id="adRead">${esc(advOn(chat) ? readLine(chat, S.settings, agoLong) : 'Adventure mode is off. Turn it on to track quests and items.')}</p>
     <div class="ad-tog">${toggleRow('adOn', 'Adventure mode', 'Three suggested moves after each reply and a d20 for risky actions. Uses one short extra AI call per reply.', advOn(chat))}</div>
     <div id="adBoards">${boards()}</div>
     <p class="fhint">While Adventure mode is on, the story adds quests and items as you play (checked every couple of replies). Anything you edit stays the way you set it.</p>
@@ -49,6 +49,7 @@ export async function adventureView(id) {
       bindSwitch(root.querySelector('#adOn'), async (on) => {
         chat.adv = { ...(chat.adv || {}), on };
         await saveChat(chat);
+        root.querySelector('#adRead').textContent = on ? readLine(chat, S.settings, agoLong) : 'Adventure mode is off. Turn it on to track quests and items.';
       });
       box.addEventListener('click', (e) => {
         const q = e.target.closest('[data-q]');

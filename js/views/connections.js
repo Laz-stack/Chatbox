@@ -20,7 +20,7 @@ export function connectionsView(open = null) {
     return `<div class="conn${on ? ' active' : ''}" style="animation-delay:${0.06 * i}s">
       <a class="conn-main" href="#/connection/${c.id}" aria-label="Edit ${esc(c.name || p.label)}">${bullet(esc((c.name || p.label)[0].toUpperCase()), on ? '#0A0A0A' : LETTER_BG[c.provider] || '#ECECEC', on ? '#FDCD15' : null, 54)}
         <span class="conn-tx"><span class="conn-n">${esc(c.name || p.label)}</span><span class="conn-m num">${esc(c.provider === 'demo' ? p.sub : c.model || 'no model set')}</span><span class="tags">${tags}</span></span></a>
-      <button type="button" class="radio press" role="radio" aria-checked="${on}" aria-label="Use ${esc(c.name || p.label)}" data-use="${c.id}">${on ? bullet(arrow(18, '#FDCD15'), '#0A0A0A', '#FDCD15', 36) : '<span class="ring"></span>'}</button>
+      <button type="button" class="radio press" role="radio" aria-checked="${on}" aria-label="Use ${esc(c.name || p.label)}" data-use="${c.id}">${on ? bullet(icon('check', 18), '#0A0A0A', '#FDCD15', 36) : '<span class="ring"></span>'}</button>
     </div>`;
   };
   const html = `<div class="screen no-tab">

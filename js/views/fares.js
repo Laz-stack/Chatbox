@@ -55,6 +55,13 @@ export function faresView() {
 
   // OpenRouter connections have no price boxes (it reports what it bills), so nothing to set there.
   const setPrice = (id) => (connection(id) && connection(id).provider !== 'openrouter' ? `<a class="rc-set" href="#/connection/${esc(id)}">Set price</a>` : '—');
+  // The footnote says only what applies to the connections you have.
+  const provs = new Set(S.connections.map((c) => c.provider));
+  const footnote = [
+    provs.has('openrouter') ? 'With OpenRouter, each cost is what OpenRouter actually charged.' : '',
+    [...provs].some((p) => p !== 'openrouter' && p !== 'demo') ? `For ${provs.has('openrouter') ? 'other' : 'your'} connections it’s worked out from the prices you set in the connection’s More options, so treat it as an estimate.` : '',
+    pics.length ? 'Pictures use your price per picture.' : '',
+  ].filter(Boolean).join(' ');
   const tag = (c) => (c.est ? ' · est.' : '') + (c.unpriced && c.cost != null ? ' · some unpriced' : '');
   const val = (c) => (c.cost == null ? setPrice(c.id) : money(c.cost));
   const srcNote = (rows) =>
@@ -178,7 +185,7 @@ export function faresView() {
     <div class="rc-wrap"><div class="rc-stack" id="rcStack">${stackHTML(lastTop)}</div></div>
     <p class="rc-hint" id="rcHint">${hint(lastTop)}</p>
     <div id="rcBusy">${busyHTML(PAPERS[lastTop][0])}</div>
-    <p class="fhint" style="margin-top:18px">With OpenRouter, each cost is what OpenRouter actually charged. For other connections it’s worked out from the prices you set in the connection’s More options, so treat it as an estimate. Pictures use your price per picture.</p>
+    ${footnote ? `<p class="fhint" style="margin-top:18px">${footnote}</p>` : ''}
   </div>${tabbar('fares')}`;
 
   return {
