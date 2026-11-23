@@ -97,7 +97,7 @@ export const ibtn = (ic, label, { href, id, cls = '', attrs = '' } = {}) =>
     : `<button type="button" class="ibtn press ${cls}" ${id ? `id="${id}"` : ''} aria-label="${esc(label)}" ${attrs}>${icon(ic)}</button>`;
 
 export const topbar = ({ back = '#/', title = '', right = '', backIcon = 'back', backLabel = 'Back' } = {}) =>
-  `<div class="topbar">${ibtn(backIcon, backLabel, { href: back })}<h1 class="tb-title">${title}</h1>${right || '<span class="ibtn-spacer"></span>'}</div>`;
+  `<div class="topbar">${ibtn(backIcon, backLabel, { href: back })}${title ? `<h1 class="tb-title">${title}</h1>` : '<span class="tb-title"></span>'}${right || '<span class="ibtn-spacer"></span>'}</div>`;
 
 export const sw = (id, on, label) =>
   `<button type="button" class="switch" role="switch" id="${id}" aria-checked="${on ? 'true' : 'false'}" aria-label="${esc(label)}"><span class="knob"></span></button>`;
@@ -256,19 +256,25 @@ function dragToDismiss(sheet, handle, close) {
 export function openMenu(anchor, items, { onClose, spotlight } = {}) {
   const wrap = document.createElement('div');
   wrap.className = 'menu-ov';
+  // A {group} item opens a labelled group that runs to the next rule or the end of the menu.
+  let inGroup = false;
+  const endGroup = () => (inGroup ? ((inGroup = false), '</div>') : '');
+  const gid = 'mg' + Math.random().toString(36).slice(2, 8);
   const html = items
     .map((it, i) =>
       it === '-'
-        ? '<hr>'
+        ? endGroup() + '<hr role="separator">'
+        : it.group
+        ? endGroup() + ((inGroup = true), `<div role="group" aria-labelledby="${gid}-${i}"><div class="grp" id="${gid}-${i}">${esc(it.group)}</div>`)
         : `<button type="button" role="menuitem" data-i="${i}" class="${it.danger ? 'danger' : ''}" style="animation-delay:${0.03 * i}s"><span class="mi">${icon(it.icon, 16)}</span>${esc(it.label)}</button>`
     )
-    .join('');
+    .join('') + endGroup();
   // The catcher takes taps everywhere, including inside the spotlight cut-out, so the menu always closes.
   wrap.innerHTML = `<div class="menu-catch"></div><div class="menu-scrim"></div><div class="menu" role="menu">${html}</div>`;
   ovRoot().appendChild(wrap);
   const menu = wrap.querySelector('.menu');
   const r = anchor.getBoundingClientRect();
-  const mw = 244;
+  const mw = Math.min(268, innerWidth - 24);
   const mh = menu.offsetHeight;
   const x = clamp(r.right - mw, 12, innerWidth - mw - 12);
   let y = r.bottom + 8;

@@ -177,7 +177,7 @@ export async function bondsView(id, tab = 'you') {
     return `<section class="bd-card${b ? '' : ' none'}${isOpen ? ' open' : ''}" style="--c:${colorOf(p)};animation-delay:${k * 60}ms">
       ${b ? `<button type="button" class="bd-hd press" data-open="${esc(p.id)}" aria-expanded="${isOpen}">${tag(p)}<span class="bd-more">${isOpen ? 'Less' : 'History'}${icon('chev', 14)}</span></button>` : `<div class="bd-hd">${tag(p)}</div>`}
       ${rows}
-      ${b ? `${b.view ? `<p class="bd-view">${esc(b.view)}</p>` : ''}${when(b, last)}` : `<p class="bd-chg">No reads yet. Bonds appear after a couple of replies.</p>`}
+      ${b ? `${b.view ? `<p class="bd-view">${esc(b.view)}</p>` : ''}${when(b, last)}` : `<p class="bd-chg">No bond yet.</p>`}
       ${isOpen ? `${hist}${b ? `<div class="bd-tools">${toggleRow(`lk-${esc(p.id)}`, 'Keep these values', 'The story won’t change them; you still can, with − and +.', !!b.locked)}<button type="button" class="btn-text press" data-reset="${esc(p.id)}">${icon('restart', 15)}Start over</button></div>` : ''}` : ''}
     </section>`;
   };

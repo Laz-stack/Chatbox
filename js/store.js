@@ -409,7 +409,7 @@ export function costOf(o, connId) {
   const r = costShape({ ...o });
   const rest = fareCost(connId, r.uin, r.uout);
   const unpriced = rest == null;
-  return { cost: unpriced ? (r.costN ? r.cost : null) : r.cost + rest, est: !!(r.uin || r.uout) && !unpriced, unpriced: unpriced && !!(r.uin || r.uout), reported: r.costN };
+  return { cost: unpriced ? (r.costN ? r.cost : null) : r.cost + rest, est: !!(r.uin || r.uout) && !unpriced && connection(connId)?.provider !== 'demo', unpriced: unpriced && !!(r.uin || r.uout), reported: r.costN };
 }
 
 export const character = (id) => S.characters.find((c) => c.id === id);
