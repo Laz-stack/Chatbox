@@ -76,6 +76,39 @@ export function motion(el, frames, opts) {
 }
 export const EASE_OUT = 'cubic-bezier(.16,1,.3,1)';
 
+// A card sent to the back of a stack: out past the edge with a gentle ease-out (close to the
+// finger's speed), then round the back, under the stack (the switch is part of the path itself).
+export function flyFrames(fromX, width, dir) {
+  const edge = `translateX(${-dir * 108}%) rotate(${-dir * 6}deg)`;
+  return [
+    { transform: `translateX(${fromX}px) rotate(${(fromX / width) * 4}deg)`, opacity: 1, zIndex: 4, easing: 'cubic-bezier(.2,.7,.2,1)' },
+    { transform: edge, opacity: 0.6, zIndex: 4, offset: 0.6 },
+    { transform: edge, opacity: 0.6, zIndex: 0, offset: 0.601, easing: 'cubic-bezier(.65,0,.35,1)' },
+    { transform: `translateX(${-dir * 40}%) translateY(14px) scale(.96)`, opacity: 0, zIndex: 0 },
+  ];
+}
+// Grab a card that is still moving: it stays where it is (sideways), with no tint or fade left over.
+// Returns its sideways offset, for the drag to carry on from.
+export function takeOver(el) {
+  const anims = el.getAnimations();
+  if (!anims.length) return 0;
+  anims.forEach((a) => (a.commitStyles?.(), a.cancel()));
+  let x = 0;
+  try {
+    x = new DOMMatrix(getComputedStyle(el).transform).m41 || 0;
+  } catch {}
+  el.style.filter = '';
+  el.style.opacity = '';
+  el.style.transform = x ? `translateX(${x}px)` : '';
+  return x;
+}
+// Put a card back in place after a drag that didn't send it away (or a tap that grabbed it mid-move).
+export function snapBack(el) {
+  if (!el.style.transform) return;
+  motion(el, [{ transform: el.style.transform }, { transform: 'none' }], { duration: 260, easing: EASE_OUT });
+  el.style.transform = '';
+}
+
 // Roleplay formatting: *actions* in italics, line breaks kept.
 // Pictures inside messages resolve through this (the store maps a web address to its saved copy).
 let imageFor = (url) => url;
