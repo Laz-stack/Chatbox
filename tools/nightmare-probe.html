@@ -24,7 +24,8 @@ h2 { margin: 26px 0 6px; font: 800 18px/1.2 system-ui, sans-serif; }
 #pics img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; }
 #pics figcaption { margin-top: 4px; font: 700 12px/1.3 system-ui, sans-serif; color: var(--cream); }
 #run:disabled { opacity: .45; cursor: default; }
-#copy { background: var(--plate2); color: var(--cream); }
+#copy, #list { background: var(--plate2); color: var(--cream); }
+#list:disabled { opacity: .45; cursor: default; }
 #copy:disabled, #go:disabled { opacity: .45; cursor: default; }
 #status { min-height: 22px; margin: 14px 0 6px; font-weight: 700; }
 ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -47,6 +48,9 @@ li pre { margin: 6px 0 0; white-space: pre-wrap; word-break: break-word; font: 1
     <input id="tok" type="password" autocomplete="off" spellcheck="false" placeholder="Paste the token from Nightmare">
     <div class="row"><button type="submit" id="go">Probe</button><button type="button" id="copy" disabled>Copy results</button></div>
   </form>
+  <h2>Step 3: list models (v6)</h2>
+  <p>Shows Nightmare’s full model and flow lists, so Chatbox can offer every model you’ve installed. Reads only; nothing is painted.</p>
+  <div class="row"><button type="button" id="list" class="ghost">List models and flows</button></div>
   <h2>Step 2: test a picture</h2>
   <p>Paints six small test pictures of a red car on a beach, each sending the prompt a different way, to find the way Nightmare reads it. Takes about a minute.</p>
   <div class="row"><button type="button" id="run">Paint a test picture</button></div>
@@ -188,6 +192,41 @@ $('#run').addEventListener('click', async () => {
   }
   $('#run').disabled = false;
   $('#copy').disabled = !report;
+});
+// Step 3: the model and flow lists in full (long strings shortened, the token masked).
+$('#list').addEventListener('click', async () => {
+  const base = $('#addr').value.trim().replace(/\/+$/, '');
+  const tok = $('#tok').value.trim();
+  if (!tok) return ($('#status').textContent = 'Paste the token first.');
+  $('#list').disabled = true;
+  $('#out').innerHTML = '';
+  report = `Nightmare models and flows v6 (${base})\n`;
+  const paths = ['/models', '/models?all=1', '/models?installed=1', '/models/installed', '/installed', '/flows'];
+  for (const [k, w] of paths.entries()) {
+    $('#status').textContent = `Reading ${w} (${k + 1} of ${paths.length})…`;
+    try {
+      const r = await fetch(base + w, { headers: { Authorization: 'Bearer ' + tok } });
+      const t = (await r.text()).split(tok).join('[token]');
+      let body = t;
+      try {
+        body = JSON.stringify(JSON.parse(t), (key, v) => (typeof v === 'string' && v.length > 300 ? `(long text, ${v.length} chars)` : v));
+      } catch {}
+      if (body.length > 12000) body = body.slice(0, 12000) + ' …';
+      const li = document.createElement('li');
+      if (r.ok) li.className = 'hit';
+      li.innerHTML = '<span class="code"></span><b></b><pre></pre>';
+      li.querySelector('.code').textContent = r.status;
+      li.querySelector('b').textContent = 'GET ' + w;
+      li.querySelector('pre').textContent = body;
+      $('#out').appendChild(li);
+      report += `\nGET ${w} → ${r.status}\n${body}\n`;
+    } catch (err) {
+      report += `\nGET ${w} → failed (${err.message})\n`;
+    }
+  }
+  $('#status').textContent = 'Done. Tap Copy results and paste them to Claude.';
+  $('#list').disabled = false;
+  $('#copy').disabled = false;
 });
 $('#copy').addEventListener('click', async () => {
   try {
