@@ -16,7 +16,7 @@ import { hereOf, untravel } from '../worldmap.js';
 import { sttSupported, listen, speakParts, stopParts } from '../voice.js';
 import { voiceSheet } from './voicesheet.js';
 import { STYLES, picConn, picPrefs, providerName, paint, picSrc, altOf, squareOf, isDemoPics, gcPictures, keepScene, scenesOf, removeScene, perchancePrompt, keepPicture, PERCHANCE_URL, isNm } from '../pictures.js';
-import { nmPrefs, saveNm, nmModels, nmPaint, nmInfo, NmError, modelInfo, familyName, isDit, promptLimit, modelLabel, isAnime, SIZES, MOODS, FRAMES, sceneTags, compose, clipTokens, splitTags, fitTags, writeLooks, lookSheet, TOKEN_LIMIT } from '../nightmare.js';
+import { QUALITY, moodsNow, nmPrefs, saveNm, nmModels, nmPaint, nmInfo, NmError, modelInfo, familyName, isDit, promptLimit, modelLabel, isAnime, SIZES, MOODS, FRAMES, sceneTags, compose, clipTokens, splitTags, fitTags, writeLooks, lookSheet, TOKEN_LIMIT } from '../nightmare.js';
 import { scenesSheet } from './scenes.js';
 import { parseChoices, choicesHTML, colourNames, wrapParas } from '../reading.js';
 import { esc, uid, formatMessage, markProse, fmtNum, estimateTokens, inkOn, ago, plain, detectMood, copyText, download, slug, reducedMotion, motion, lineAccent, EASE_OUT, resizeImage } from '../util.js';
@@ -1653,7 +1653,7 @@ export async function chatView(id, focusId = null) {
       openSheet({
         label: 'Picture this',
         html: `<h2 class="sheet-title">Picture this</h2><p class="sheet-p nm-p">Nightmare on this phone · about 6 seconds.</p>
-          <p class="nm-lbl">Mood</p>${chipRow(MOODS, P.mood, 'mood', 'Mood')}
+          <p class="nm-lbl">Mood</p>${chipRow(moodsNow(), moodsNow().some(([k]) => k === P.mood) ? P.mood : '', 'mood', 'Mood')}
           <p class="nm-lbl">Framing</p>${chipRow(FRAMES.map(([k, t]) => [k, t]), P.frame, 'frame', 'Framing')}
           <p class="nm-lbl">In the picture</p><div class="nm-who">${nmPeople().map(face).join('')}<button type="button" class="nm-looks press" id="nmLooks">Looks</button></div>
           <p class="nm-lbl">Model and size</p><div class="nm-row2"><button type="button" class="nm-sel press" id="nmModel" aria-haspopup="menu"><small>Model</small><b>${esc(P.model ? modelLabel(P.model) : 'Nightmare’s')}</b></button><button type="button" class="nm-sel press" id="nmSize" aria-haspopup="menu"><small>Size</small><b>${sizeText(P.size)}</b></button></div>
@@ -1855,7 +1855,7 @@ export async function chatView(id, focusId = null) {
                 // Past the model's tokens: move it in, just after the look tags.
                 order.splice(i, 1);
                 let at = 0;
-                while (at < order.length && (lookOf(order[at]) || /^\d+(girl|boy|other)s?$/i.test(order[at]))) at++;
+                while (at < order.length && (QUALITY.includes(order[at]) || lookOf(order[at]) || /^\d+(girl|boy|other)s?$/i.test(order[at]))) at++;
                 order.splice(at, 0, t);
                 return redraw(at);
               }
@@ -2011,7 +2011,7 @@ export async function chatView(id, focusId = null) {
         label: 'Picture this',
         html: `<h2 class="sheet-title">Picture this</h2>
           <p class="sheet-p">${pc ? `Paints this moment with ${esc(who)}’s look${hereOf(chat) ? `, ${esc(hereOf(chat).name)}` : ''}${clockOn(chat) ? `, ${esc(partOfDay(chat.clock.min))}` : ''}. ${isDemoPics(pc) ? 'Demo pictures are free placeholders.' : `One picture, billed by ${esc(providerName(pc))}.`} Or paint it yourself on Perchance: Chatbox writes the scene, you pick the style there and add the picture. (The style here is for Paint it.)` : `Chatbox writes the prompt for this moment with ${esc(who)}’s look; you pick the art style on Perchance (free, in a new tab), paint it and add the picture. Or set up an image model under Connections › Pictures.`}</p>
-          <p class="nm-lbl">Mood</p><div class="nm-chips" role="radiogroup" aria-label="Mood">${MOODS.map(([k, t]) => `<button type="button" class="press" role="radio" aria-checked="${picPrefs().mood === k}" data-pmood="${k}">${t}</button>`).join('')}</div>
+          <p class="nm-lbl">Mood</p><div class="nm-chips" role="radiogroup" aria-label="Mood">${moodsNow().map(([k, t]) => `<button type="button" class="press" role="radio" aria-checked="${(moodsNow().some(([x]) => x === picPrefs().mood) ? picPrefs().mood : '') === k}" data-pmood="${k}">${t}</button>`).join('')}</div>
           ${pc ? '<p class="nm-lbl">Style</p>' : ''}<div class="ck-chips" role="radiogroup" aria-label="Style"${pc ? '' : ' hidden'}>${Object.entries(STYLES).map(([k, s]) => `<button type="button" class="press" role="radio" aria-checked="${style === k}" data-style="${k}">${s.label}</button>`).join('')}</div>
           ${pc ? `<div class="ck-tog">${toggleRow('picPrev', 'Show the prompt first', 'Read and edit it before it paints', !!picPrefs().preview)}</div><div class="ck-tog">${toggleRow('picAuto', 'Paint each new station', 'A picture whenever the Route map gets a new station. Each one is billed.', !!chat.picAuto)}</div>` : ''}
           <button type="button" class="pic-go press" id="picGo">${icon('image', 18)}${pc ? 'Paint it' : 'Paint on Perchance'}</button>
@@ -2436,6 +2436,8 @@ export async function chatView(id, focusId = null) {
       const last = chat.messages[chat.messages.length - 1];
       if (!last || chat.messages.length < 2 || last.error || chat.messages.slice(-2).some((x) => x.dir === 'away')) return;
       const lastAt = last.at || chat.updatedAt || 0;
+      // No real time on the last message (an imported or restored chat): not an absence ("2969 weeks").
+      if (lastAt < Date.UTC(2024, 0, 1) || lastAt > Date.now() + 60e3) return;
       const gone = Date.now() - lastAt;
       if (gone < AWAY_MS || (chat.awayAt || 0) > lastAt) return;
       chat.awayAt = Date.now();

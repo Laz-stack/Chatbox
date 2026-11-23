@@ -9,7 +9,7 @@ import { textOf, named } from './store.js';
 import { uid } from './util.js';
 import { hereOf } from './worldmap.js';
 import { clockOn, hhmm, partOfDay } from './clock.js';
-import { NM_ID, NM_CONN, nmPrefs, modelLabel, MOOD_ASK } from './nightmare.js';
+import { NM_ID, NM_CONN, nmPrefs, modelLabel, moodAsk } from './nightmare.js';
 
 export const STYLES = {
   anime: { label: 'Anime', words: 'anime illustration, clean line art, soft cel shading, expressive faces' },
@@ -66,7 +66,7 @@ export async function describe({ chat, cast, m, persona, conn, mood = '', signal
     'Write a prompt for an illustration of this exact moment. Return {"prompt":"...","caption":"..."}. ' +
     'prompt: 50 to 90 words, present tense, concrete and visual: who is in frame and what they look like (hair, clothes, build, from their sheets), what they are doing, the setting, light and mood. Landscape framing. ' +
     'No names of real artists, no text or lettering in the image. Everyone is an adult. caption: 1 to 4 words naming the place or moment.' +
-    (MOOD_ASK[mood] ? ' ' + MOOD_ASK[mood] : '');
+    (moodAsk(mood) ? ' ' + moodAsk(mood) : '');
   // Room to spare: models that think first spend tokens before the answer (only what's used is billed).
   const out = await helperComplete(conn, 'scene', { system: 'You write prompts for an illustrator. Reply with ONE JSON object and nothing else.', messages: [{ role: 'user', content: JSON.stringify(brief) + '\n\n' + ask }], stream: false, maxTokens: 1200, temperature: 0.6, signal });
   // A reply that can't be read still paints: from the moment itself.

@@ -40,7 +40,8 @@ export async function helperComplete(conn, job, opts) {
     const last = mt2 || mt;
     if (mt2 || text || mt.usage) last.commit(estimateTokens(sent), estimateTokens(text || ''), (i, o, c) => recordJob(run, job, i, o, c)).catch(() => {});
   }
-  return text;
+  // A thinking model's reasoning stays out of summaries, diaries and recaps (and the prompt they feed).
+  return unthink(text).trim();
 }
 
 // A background job that needs a JSON answer. Thinking models get room to think and still answer

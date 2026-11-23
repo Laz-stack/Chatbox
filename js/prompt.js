@@ -110,6 +110,21 @@ export function buildPrompt({ char, chat, conn, settings, persona, upto = null, 
   if (time) memory.push(time);
   if (memory.length) layers.push({ key: 'notes', name: 'Notes and summary', text: memory.join('\n\n') });
 
+  // Too much for the model's context (a big lorebook, many remembered facts): leave out the least
+  // needed extras first (lorebook entries, newest matches kept, then remembered facts), so the reply
+  // isn't refused for length. Notes, persona and rules always stay.
+  const room = Math.max(1500, (conn?.context || 16000) - (conn?.maxTokens || 600) - 1000);
+  const sysOf = () => estimateTokens(layers.map((l) => l.text).join('\n\n'));
+  const loreLayer = layers.find((l) => l.key === 'lore');
+  let trimmed = 0;
+  while (loreLayer && lore.length && sysOf() > room) {
+    lore.pop();
+    trimmed++;
+    if (lore.length) loreLayer.text = lore.map((e) => (e.title?.trim() ? `${e.title.trim()}: ` : '') + m(e.text)).join('\n\n');
+    else layers.splice(layers.indexOf(loreLayer), 1);
+  }
+  const recallAt = layers.findIndex((l) => l.key === 'recall');
+  if (recallAt >= 0 && sysOf() > room) layers.splice(recallAt, 1), trimmed++;
   const system = layers.map((l) => l.text).join('\n\n');
   layers.forEach((l) => (l.tokens = estimateTokens(l.text)));
   const sysTokens = estimateTokens(system);
@@ -181,6 +196,7 @@ export function buildPrompt({ char, chat, conn, settings, persona, upto = null, 
     layers,
     histTokens,
     loreIds: lore.map((e) => e.id),
+    trimmed, // extras left out to fit the context
     histCount: merged.length,
     total: sysTokens + histTokens,
   };
