@@ -138,7 +138,7 @@ export const TEX_STRENGTH = [0, 0.3, 0.45, 0.6, 0.78, 0.95];
 // Blend a colour toward the page, so text on a softer page is softer too.
 const mixHex = (a, b, k) => '#' + [1, 3, 5].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * k + parseInt(b.slice(i, i + 2), 16) * (1 - k)).toString(16).padStart(2, '0')).join('');
 
-export const DEFAULT_TEXT = { mk: DEFAULT_MK, autoMark: true, tex: 'none', str: 2, upright: false, lh: 3, bold: 0, page: 'original', choices: true, names: true, marker: true, side: 'normal', size: 3, font: 'archivo', dialogue: 'white', narration: 'soft', bubble: 'cream', me: 'yellow', layout: 'bubbles', width: 'wide', align: 'left', track: 'normal', para: 'normal' };
+export const DEFAULT_TEXT = { mk: DEFAULT_MK, autoMark: true, tex: 'none', str: 2, upright: false, lh: 3, bold: 0, page: 'original', choices: true, names: true, tags: true, marker: true, side: 'normal', size: 3, font: 'archivo', dialogue: 'white', narration: 'soft', bubble: 'cream', me: 'yellow', layout: 'bubbles', width: 'wide', align: 'left', track: 'normal', para: 'normal' };
 export function textPrefs() {
   const t = { ...DEFAULT_TEXT, ...(S.settings.text || {}) };
   // Older settings used words; they become the nearest numbers.

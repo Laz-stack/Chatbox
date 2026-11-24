@@ -55,6 +55,7 @@ export function editorView(id) {
           ${field('fName', 'Name', d.name, { ph: 'Their name', attrs: 'maxlength="80" autocomplete="off"' })}
           ${d.callAs ? field('fCall', 'Name in the story', d.callAs, { ph: 'What the story calls them', attrs: 'maxlength="60" autocomplete="off"' }) : ''}
           ${field('fTag', 'Tagline', d.tagline, { ph: 'A few words about them', attrs: 'maxlength="80" autocomplete="off"' })}
+          ${field('fTagName', 'Name on speech tags', d.tagName || '', { ph: 'Empty: their name', attrs: 'maxlength="40" autocomplete="off"' })}
           ${field('fCast', 'Characters in this card', (d.cast || []).map((m) => m.name).join(', '), { ph: 'For a card with several people: Sona, Sascha, Lyra', attrs: 'maxlength="400" autocomplete="off"' })}
           ${field('fTags', 'Tags', (d.tags || []).join(', '), { ph: 'Female, Magical, Romance', attrs: 'maxlength="200" autocomplete="off"' })}
         </div>
@@ -139,6 +140,8 @@ export function editorView(id) {
       paintBullet();
     });
     $('#fTag').addEventListener('input', (e) => (d.tagline = e.target.value));
+    // What the name tag over their lines says (empty: their name; a narrator with no one named: no tag).
+    $('#fTagName').addEventListener('input', (e) => (d.tagName = e.target.value.slice(0, 40)));
     // The people a card plays, comma-separated. Two or more make it a narrator that keeps each of
     // them (own colour, Bonds, Diary, picture face); names already there keep their colour and looks.
     $('#fCast').addEventListener('input', (e) => {
