@@ -8,6 +8,7 @@ import { textSummary } from '../textstyle.js';
 import { esc, download, resizeImage } from '../util.js';
 import { avatarTile, avatarSVG, PRESETS, PRESET_KEYS } from '../avatar.js';
 import { sceneCount } from './scenes.js';
+import { GUIDES, findHelp, latestChatId, mark } from '../help.js';
 import { ttsSupported, voices, speak } from '../tts.js';
 import { title2, topbar, group, row, sw, bindSwitch, field, area, toggleRow, bullet, icon, arrow, tabbar, openSheet, openMenu, toast, confirmSheet } from '../ui.js';
 
@@ -70,6 +71,60 @@ export function replyStyleSheet(onDone) {
   });
 }
 
+// Depot search (owner pick v46 A): every setting and feature, wherever it lives, with how to get there.
+function findHTML(q) {
+  const hits = findHelp(q);
+  if (!hits.length) return `<p class="search-none">Nothing matches “${esc(q)}”. Try another word, or look in Help below.</p>`;
+  const chat = latestChatId();
+  const one = (e) => {
+    const sub = `<b>${esc(e.where)}</b>`;
+    const k = hits.indexOf(e);
+    if (typeof e.go === 'string') return row({ href: e.go, ic: e.ic, title: mark(e.t, q), sub });
+    if (typeof e.go === 'function' && chat) return row({ href: e.go(encodeURIComponent(chat)), ic: e.ic, title: mark(e.t, q), sub: `${sub} · opens your latest chat’s` });
+    return `<button type="button" class="row press" data-hit="${k}"><span class="row-ic" style="background:var(--plate2);color:var(--cream)">${icon(e.ic, 19)}</span><span class="row-tx"><span class="row-t">${mark(e.t, q)}</span><span class="row-s">${sub}</span></span><span class="row-chev">${icon('chev', 18)}</span></button>`;
+  };
+  const part = (name, list) => (list.length ? `<h2 class="sec">${name}</h2>${group(...list.map(one))}` : '');
+  return part('Settings', hits.filter((e) => e.kind === 'set')) + part('In a chat', hits.filter((e) => e.kind === 'chat')) + part('Help', hits.filter((e) => e.kind === 'guide'));
+}
+function bindFind(root) {
+  const input = root.querySelector('#dq');
+  const box = root.querySelector('#dFind');
+  const body = root.querySelector('#dBody');
+  let hits = [];
+  const show = () => {
+    const q = input.value.trim();
+    box.hidden = !q;
+    body.hidden = !!q;
+    hits = q ? findHelp(q) : [];
+    box.innerHTML = q ? findHTML(q) : '';
+  };
+  input.addEventListener('input', show);
+  input.addEventListener('keydown', (e) => e.key === 'Escape' && input.value && ((input.value = ''), show()));
+  box.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-hit]');
+    if (!b) return;
+    const h = hits[+b.dataset.hit];
+    if (!h) return;
+    if (h.go?.row) {
+      // A setting on this screen: clear the search, bring the row into view and open or point at it.
+      input.value = '';
+      show();
+      const el = root.querySelector('#' + h.go.row);
+      const rowEl = el?.closest('.row') || el;
+      if (!rowEl) return;
+      rowEl.scrollIntoView({ block: 'center' });
+      rowEl.classList.add('d-here');
+      setTimeout(() => rowEl.classList.remove('d-here'), 1600);
+      if (el.matches('button.row')) el.click();
+      else el.focus({ preventScroll: true });
+      return;
+    }
+    // In a chat: say where it is (no chat yet, or a menu item with no screen of its own).
+    const chat = latestChatId();
+    toast(`${h.where} › ${h.t}`, chat ? { action: 'Open my last chat', ms: 7000, onAction: () => (location.hash = `#/chat/${encodeURIComponent(chat)}`) } : { ms: 6000 });
+  });
+}
+
 const matureSub = () => (S.settings.mature ? 'On · explicit scenes allowed, adults only' : 'Off · stories fade to black');
 
 export function settingsView() {
@@ -77,6 +132,9 @@ export function settingsView() {
   const v = ttsSupported ? voices().find((x) => x.voiceURI === S.settings.voiceURI) : null;
   const html = `<div class="screen">
     ${title2('Depot', 'Your setup')}
+    <label class="search">${icon('search', 20)}<input id="dq" type="search" placeholder="Find a setting or feature" aria-label="Find a setting or feature" autocomplete="off" enterkeyhint="search"></label>
+    <div id="dFind" class="d-find" hidden aria-live="polite"></div>
+    <div id="dBody">
     <a class="rider press" href="#/persona" style="margin-top:16px">${avatarTile(S.persona, 62, { radius: 18, rot: -3 })}<span class="nm">${esc(S.persona.name || 'You')}<small>${S.personas.length > 1 ? `Default · ${S.personas.length} personas` : 'Your persona in every chat'}</small></span>${bullet(arrow(20, '#ECECEC'), '#0A0A0A', '#ECECEC', 44)}</a>
     <h2 class="sec">AI</h2>
     ${group(
@@ -105,13 +163,17 @@ export function settingsView() {
     )}
     <h2 class="sec">Data</h2>
     ${group(row({ href: '#/scenes', ic: 'layers', bc: 'var(--plate2)', fc: 'var(--cream)', title: 'Scenes', sub: (() => { const n = sceneCount(); return n ? `${n} painted ${n === 1 ? 'scene' : 'scenes'}, kept from every chat` : 'Every scene you paint is kept here'; })() }), row({ href: '#/sync', ic: 'refresh', bc: 'var(--plate2)', fc: 'var(--cream)', title: 'Sync', sub: esc(syncSummary()) }), row({ href: '#/backup', ic: 'box', bc: 'var(--plate2)', fc: 'var(--cream)', title: 'Backup and cards', sub: S.settings.lastBackup ? `Last backup ${new Date(S.settings.lastBackup).toLocaleDateString()}` : 'No backup yet' }))}
+    <h2 class="sec">Help</h2>
+    ${group(...GUIDES.map((g) => row({ href: `#/help/${g.id}`, ic: g.ic, title: esc(g.t), sub: esc(g.sub) })))}
     <div class="note" style="margin-top:18px">${icon('shield', 18)}<span>${isPersistent() ? (S.settings.sync?.connected ? 'Saved in this browser and synced to your own Google Drive. Nothing goes to a server of ours.' : 'Everything is saved in this browser only. Nothing goes to a server of ours.') : 'This browser is blocking storage (private mode?), so changes will be lost when you close the tab.'}</span></div>
     <p class="credits">Faces: Open Peeps by Pablo Stanley (CC0). Icons: Phosphor (MIT). Platform train: OpenMoji high-speed train, recoloured (CC BY-SA 4.0).</p>
+    </div>
   </div>${tabbar('settings')}`;
   return {
     html,
     depth: 0,
     mount(root) {
+      bindFind(root);
       root.querySelector('#soundRow')?.addEventListener('click', () => soundSheet());
       root.querySelector('#dimRow')?.addEventListener('click', () => dimSheet({ onChange: () => (root.querySelector('#dimSub').textContent = dimSummary()) }));
       root.querySelector('#styleRow')?.addEventListener('click', () => replyStyleSheet(() => (root.querySelector('#styleSub').textContent = styleSummary())));
