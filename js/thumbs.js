@@ -30,7 +30,9 @@ async function make(src, max) {
   img.src = src;
   await img.decode();
   const s = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
-  if (s >= 1) return src;
+  // A card-sized copy that would be only a little smaller isn't worth a second compression:
+  // the card uses the picture itself.
+  if (s >= 1 || (max > 400 && s >= 0.7)) return src;
   const c = document.createElement('canvas');
   c.width = Math.round(img.naturalWidth * s);
   c.height = Math.round(img.naturalHeight * s);

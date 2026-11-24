@@ -269,7 +269,7 @@ export function rng(seed) {
 // Shrink an uploaded image so the browser database stays small.
 // area: cap the picture's size by its area, not its long side, so a tall card (a long strip) keeps
 // enough width to look sharp; the long side is still capped at 4x max.
-export async function resizeImage(file, max = 512, { area = false } = {}) {
+export async function resizeImage(file, max = 512, { area = false, quality = 0.88 } = {}) {
   const url = await fileToDataURL(file);
   const img = await new Promise((res, rej) => {
     const i = new Image();
@@ -278,11 +278,13 @@ export async function resizeImage(file, max = 512, { area = false } = {}) {
     i.src = url;
   });
   const s = area ? Math.min(1, max / Math.sqrt(img.width * img.height), (max * 4) / Math.max(img.width, img.height)) : Math.min(1, max / Math.max(img.width, img.height));
+  // Already small enough and already a compact format: keep the picture exactly as it came.
+  if (s >= 1 && /^data:image\/(webp|jpeg)/.test(url) && url.length < 1.6e6) return url;
   const c = document.createElement('canvas');
   c.width = Math.round(img.width * s);
   c.height = Math.round(img.height * s);
   c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-  return c.toDataURL('image/webp', 0.88);
+  return c.toDataURL('image/webp', quality);
 }
 
 export function copyText(t) {

@@ -182,7 +182,7 @@ export function editorView(id) {
             const f = e.target.files[0];
             if (!f) return;
             try {
-              d.avatarImage = await resizeImage(f, 1024, { area: true });
+              d.avatarImage = await resizeImage(f, 1536, { area: true, quality: 0.95 });
               paintAv();
               close();
             } catch {
