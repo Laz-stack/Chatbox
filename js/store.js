@@ -133,6 +133,7 @@ async function loadAll() {
   if (all.has('persona')) S.persona = { ...S.persona, ...all.get('persona') };
   setupPersonas(all.get('personas'));
   if (all.has('fares')) S.fares = { months: {}, ...all.get('fares') };
+  S.fares.others ||= {}; // other devices' months, from Sync (added up on the Fares screen)
   S.interchanges = all.get('interchanges') || [];
   S.lore = all.get('lore') || [];
   // Pictures: one entry each ('img:<key>'). Older data kept them all in one 'images' entry.
@@ -181,6 +182,12 @@ async function loadAll() {
     S.settings.activeConnectionId = S.connections[0].id;
     await Promise.all([saveConnections(), saveCharacters(), saveSettings(), db.set('seeded', true)]);
   }
+  // This device's own name for Sync's Fares, kept from the first start (a new one each start would
+  // count this device's fares twice).
+  if (!S.settings.deviceId) {
+    deviceId();
+    await saveSettings();
+  }
   // One-time: API keys used to go into backups by default. Turn that off for existing data too
   // (it can be switched back on in Backup); people share backup files more often than they think.
   if ((S.settings.migrated || 0) < 1) {
@@ -199,6 +206,13 @@ async function loadAll() {
     }
     S.settings.migrated = 2;
     await Promise.all([saveCharacters(), saveSettings()]);
+  }
+  // One-time: Sync now carries API keys by default, so a new device needs none typed again
+  // (the owner asked; it can be turned off on the Sync page).
+  if ((S.settings.migrated || 0) < 3) {
+    if (S.settings.sync) S.settings.sync = { ...S.settings.sync, keys: true };
+    S.settings.migrated = 3;
+    await saveSettings();
   }
   if (!S.connections.find((c) => c.id === S.settings.activeConnectionId)) {
     S.settings.activeConnectionId = S.connections[0]?.id || null;
@@ -344,6 +358,24 @@ export async function deleteInterchange(id) {
 }
 
 // ---------- Fares: tokens per connection and per line, by calendar month ----------
+// This device's name for Sync: each device sends its own Fares, and every device adds them up.
+export function deviceId() {
+  return (S.settings.deviceId ||= 'dev' + Math.random().toString(36).slice(2, 10));
+}
+// One month's Fares from every device: this one's plus what Sync brought from the others.
+export function faresMonth(k) {
+  const parts = [S.fares.months[k], ...Object.values(S.fares.others || {}).map((m) => m?.[k])].filter(Boolean);
+  return parts.length ? parts.reduce((a, b) => addUp(a, b), {}) : null;
+}
+function addUp(a, b) {
+  const out = { ...a };
+  for (const [k, v] of Object.entries(b || {})) {
+    if (typeof v === 'number') out[k] = (typeof out[k] === 'number' ? out[k] : 0) + v;
+    else if (v && typeof v === 'object' && !Array.isArray(v)) out[k] = addUp(out[k] && typeof out[k] === 'object' ? out[k] : {}, v);
+    else if (out[k] == null || out[k] === '') out[k] = v;
+  }
+  return out;
+}
 export const monthKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 
 // Cost bookkeeping on one record. `cost`/`costN`: dollars the provider reported (OpenRouter
@@ -702,13 +734,16 @@ export async function restore(data) {
   // half-way, the old data is still there. Your own music files stay.
   const before = await db.keys();
   const nmLocal = S.settings.nightmare; // Nightmare's address and token belong to this phone
+  const dev = S.settings.deviceId; // so does this device's name for Sync
   S.settings = { ...DEFAULT_SETTINGS, ...(data.settings || {}) };
   if (nmLocal) S.settings.nightmare = nmLocal;
+  if (dev) S.settings.deviceId = dev;
+  else delete S.settings.deviceId;
   S.persona = { ...S.persona, ...(data.persona || {}) };
   setupPersonas(data.personas);
   S.connections = data.connections || [];
   S.characters = data.characters || [];
-  S.fares = { months: {}, ...(data.fares || {}) };
+  S.fares = { months: {}, others: {}, ...(data.fares || {}) };
   S.interchanges = data.interchanges || [];
   S.lore = data.lore || [];
   S.images = data.images || {};
