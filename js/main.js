@@ -12,7 +12,7 @@ import { syncView } from './views/sync.js';
 import { scenesView } from './views/scenes.js';
 import { startAutoSync, syncOn, signedIn, localChanges } from './sync.js';
 import { applyText } from './textstyle.js';
-import { startDim } from './dim.js';
+import { startDim, applyDim } from './dim.js';
 import { openBuildSheet } from './build.js';
 import { reducedMotion } from './util.js';
 import { toast, closeOverlays } from './ui.js';
@@ -283,7 +283,11 @@ window.addEventListener('unhandledrejection', (e) => {
     // Tidy scene pictures nothing points to any more (deleted messages and chats).
     import('./pictures.js').then((m) => m.gcPictures()).catch(() => {});
   }
-  addEventListener('chatbox-synced', () => /^#\/(lines|settings|sync)?(\/|$)|^#?\/?$/.test(location.hash) && render());
+  addEventListener('chatbox-synced', (e) => {
+    // Settings from another device: reading text and Dim mode apply at once.
+    if (e.detail?.got?.settings) applyText(), applyDim();
+    if (/^#\/(lines|settings|sync)?(\/|$)|^#?\/?$/.test(location.hash)) render();
+  });
   if (syncOn()) {
     setTimeout(async () => {
       if (signedIn() || sessionStorage.getItem('chatbox-sync-asked') || !(await localChanges())) return;
