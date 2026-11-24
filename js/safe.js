@@ -39,6 +39,7 @@ export function cleanCharacter(c, fallbackColor = '#2EAA67') {
   if (c.scene != null && !KEY.test(String(c.scene))) c.scene = 'cafe';
   if ('avatarImage' in c) c.avatarImage = cleanImg(c.avatarImage);
   if ('bgPic' in c) c.bgPic = cleanImg(c.bgPic);
+  if ('cast' in c) c.cast = Array.isArray(c.cast) ? c.cast.filter((m) => m && okId(m.id) && String(m.name || '').trim()).map((m) => ({ id: m.id, name: String(m.name).slice(0, 60), color: safeColor(m.color, '#2EAA67'), about: String(m.about || '').slice(0, 6000), lookTags: String(m.lookTags || '').slice(0, 600) })) : [];
   return c;
 }
 export function cleanPersona(p) {

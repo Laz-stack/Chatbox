@@ -1,5 +1,5 @@
 // Route map, Bonds and Diary screens for one chat (see js/chronicle.js for how they are filled).
-import { S, getChat, saveChat, saveSettings, character, interchange, isInterchangeId, connectionFor, personaFor, branchChat } from '../store.js';
+import { S, castOf, getChat, saveChat, saveSettings, character, interchange, isInterchangeId, connectionFor, personaFor, branchChat } from '../store.js';
 import { KINDS, BOND_KEYS, chronicle, writeDiary, changeText, unread, trackingOn, sortRoute, readLine } from '../chronicle.js';
 import { esc, inkOn, agoLong as ago } from '../util.js';
 import { topbar, icon, avatarBullet, primary, toggleRow, bindSwitch, toast, confirmSheet } from '../ui.js';
@@ -15,7 +15,7 @@ async function load(id) {
   const ix = isInterchangeId(chat.characterId) ? interchange(chat.characterId) : null;
   const ch = ix ? null : character(chat.characterId);
   if (!ix && !ch) return null;
-  const cast = ix ? ix.people : [ch];
+  const cast = ix ? ix.people : castOf(ch);
   const room = ix ? { ...ix.people[0], id: ix.id, name: ix.title, connectionId: null } : ch;
   return { chat, ix, ch, cast, room, conn: connectionFor(room), persona: personaFor(chat), title: ix ? ix.title : ch.name };
 }
@@ -294,7 +294,7 @@ export async function diaryView(id, entryId = null) {
     return list.length ? list.map(plate).join('') : `<div class="dy empty"><b>Nothing written yet</b><span class="dy-t">${esc(who.name)} writes about what happened from their side: what they noticed, felt and kept to themselves.</span></div>`;
   };
   const whoRow = () =>
-    ix ? `<div class="dy-who" role="group" aria-label="Whose diary">${cast.map((p) => `<button type="button" class="press" aria-pressed="${p.id === who.id}" data-who="${esc(p.id)}">${avatarBullet(p, 26)}${esc(p.name)}</button>`).join('')}</div>` : '';
+    cast.length > 1 ? `<div class="dy-who" role="group" aria-label="Whose diary">${cast.map((p) => `<button type="button" class="press" aria-pressed="${p.id === who.id}" data-who="${esc(p.id)}">${avatarBullet(p, 26)}${esc(p.name)}</button>`).join('')}</div>` : '';
   const hint = () => (since() >= 4 ? '' : entries().length ? 'A new entry unlocks after a few more messages.' : 'The first entry unlocks after a few messages.');
 
   const html = `<div class="screen no-tab cr-screen">
