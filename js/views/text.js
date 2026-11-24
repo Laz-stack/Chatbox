@@ -3,8 +3,8 @@
 // e-reader's list; pages come in colours and paper textures. The chat's ⋯ › Text opens it as a sheet
 // over the chat (the story stays in view above it), and Depot › Reading text shows it as a page with
 // a preview.
-import { S, saveSettings } from '../store.js';
-import { MARK_STYLES, MARK_COLOURS, PAGES, FONTS, DIALOGUE, NARRATION, BUBBLES, MY_BUBBLES, LAYOUTS, WIDTHS, TRACKS, PARAS, SIDES, TEXTURES, SIZE_STEPS, DEFAULT_TEXT, textPrefs, applyText } from '../textstyle.js';
+import { S, saveSettings, castOf, storyName, character, interchange, isInterchangeId } from '../store.js';
+import { MARK_STYLES, MARK_COLOURS, PAGES, FONTS, DIALOGUE, NARRATION, BUBBLES, MY_BUBBLES, LAYOUTS, WIDTHS, TRACKS, PARAS, SIDES, TEXTURES, SIZE_STEPS, DEFAULT_TEXT, textPrefs, applyText, CALM, CALM_NAMES, nameColor } from '../textstyle.js';
 import { esc, formatMessage } from '../util.js';
 import { topbar, icon, openSheet } from '../ui.js';
 import { dimSheet, dimSummary } from '../dim.js';
@@ -103,6 +103,34 @@ function pageTab(t) {
     (t.tex !== 'none' ? range(t, 'str', ['−', '+'], [0, 5]) : '')
   );
 }
+// Owner pick v48: your own calm colour per character, for names in the text and speech tags.
+// In a chat it lists that chat's people; on the Reading text page, everyone with a line.
+function peopleHere() {
+  const m = /^#\/chat\/([^/?]+)/.exec(location.hash);
+  const id = m ? decodeURIComponent(m[1]) : '';
+  const chat = id && S.chats.get(id);
+  const own = (ch) => (!ch ? [] : ch.narrator && castOf(ch).length > 1 ? castOf(ch) : [{ ...ch, name: storyName(ch) }]);
+  let list;
+  if (chat && isInterchangeId(chat.characterId)) list = interchange(chat.characterId)?.people || [];
+  else if (chat) list = own(character(chat.characterId));
+  else list = S.characters.filter((c) => !c.hidden).flatMap(own);
+  const seen = new Set();
+  return list.filter((p) => p?.id && !seen.has(p.id) && seen.add(p.id)).slice(0, 40);
+}
+function nameColours() {
+  const people = peopleHere();
+  if (!people.length) return '';
+  const mine = S.settings.text?.nameColors || {};
+  return (
+    lbl('Name colours', 'names in the text and speech tags') +
+    people
+      .map((p) => {
+        const cur = nameColor(p);
+        return `<div class="kr-nc"><div class="kr-nc-h"><span>${esc(p.name)}</span>${mine[p.id] ? `<button type="button" class="press" data-nc="${esc(p.id)}:" aria-label="Reset ${esc(p.name)} to their line colour">Reset</button>` : ''}</div><div class="kr-nc-sw" role="radiogroup" aria-label="${esc(p.name)}’s colour">${CALM.map((c, i) => `<button type="button" class="press" role="radio" aria-checked="${cur === c}" aria-label="${CALM_NAMES[i]}" data-nc="${esc(p.id)}:${c}" style="--x:${c}"></button>`).join('')}</div></div>`;
+      })
+      .join('')
+  );
+}
 function coloursTab(t) {
   return (
     lbl('Speech colour') +
@@ -114,7 +142,8 @@ function coloursTab(t) {
     lbl('Character’s bubble', 'Bubbles layout') +
     swatchRow('bubble', 'Character’s bubble', BUBBLES, t.bubble, (c) => c.bg) +
     lbl('Your bubble') +
-    swatchRow('me', 'Your bubble', MY_BUBBLES, t.me, (c) => c.bg)
+    swatchRow('me', 'Your bubble', MY_BUBBLES, t.me, (c) => c.bg) +
+    nameColours()
   );
 }
 function helpTab(t) {
@@ -215,10 +244,21 @@ function bindPanel(box, after = () => {}) {
       const mk = textPrefs().mk;
       return change('mk', { ...mk, [k]: { ...mk[k], k: Math.max(1, Math.min(5, mk[k].k + +n)) } }, `[data-mkk="${d.mkk}"]:not(:disabled)`);
     }
+    if (d.nc != null) {
+      const [id, c] = d.nc.split(/:(.*)/);
+      const nc = { ...(textPrefs().nameColors || {}) };
+      if (c) nc[id] = c;
+      else delete nc[id];
+      await setPref('nameColors', nc);
+      redraw();
+      (body().querySelector(`[data-nc="${CSS.escape(c ? d.nc : id + ':' + CALM[0])}"]`) || body().querySelector(`[data-nc^="${CSS.escape(id)}:"]`))?.focus();
+      dispatchEvent(new Event('chatbox-names'));
+      return after('nameColors');
+    }
     if (d.tog) return change(d.tog, !textPrefs()[d.tog], `[data-tog="${d.tog}"]`);
     if (d.dim != null) return dimSheet({ onChange: () => (redraw(), setTimeout(() => body().querySelector('[data-dim]')?.focus(), 350)) });
     if (d.reset != null) {
-      S.settings.text = { ...DEFAULT_TEXT };
+      S.settings.text = { ...DEFAULT_TEXT, nameColors: S.settings.text?.nameColors }; // your colour per character stays
       applyText();
       await saveSettings();
       redraw();
