@@ -1,7 +1,7 @@
 // ⋯ › World map: "You are here", the places as stations on a line (3-column serpentine grid, so
 // nothing overlaps), a card for the chosen place with Travel here, and an edit mode (rename,
 // scene, remove, add).
-import { S, getChat, saveChat, character, interchange, isInterchangeId, connectionFor, personaFor } from '../store.js';
+import { S, castOf, getChat, saveChat, character, interchange, isInterchangeId, connectionFor, personaFor } from '../store.js';
 import { MAX_PLACES, MAP_SCENES, mapOn, hereOf, loreFor, makeMap, findHere, addPlace, removePlace, travel, normName } from '../worldmap.js';
 import { soundsLikeName } from '../scenepicker.js';
 import { esc, inkOn, agoLong } from '../util.js';
@@ -16,7 +16,7 @@ export async function worldMapView(id) {
   const ix = isInterchangeId(chat.characterId) ? interchange(chat.characterId) : null;
   const ch = ix ? null : character(chat.characterId);
   if (!ix && !ch) return null;
-  const cast = ix ? ix.people : [ch];
+  const cast = ix ? ix.people : castOf(ch);
   const ids = ix ? [...ix.people.map((p) => p.id), ix.id] : [ch.id];
   const room = ix ? { ...ix.people[0], id: ix.id, connectionId: null } : ch;
   const you = personaFor(chat)?.name?.trim() || 'You';

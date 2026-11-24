@@ -4,7 +4,7 @@ import { pngTextChunks, b64utf8 } from './cards.js';
 import { PROVIDERS } from './providers.js';
 import { helperComplete } from './helper.js';
 import { extractJson } from './blueprint.js';
-import { S, blankCharacter, saveCharacter, saveChat, newChat, LINE_COLORS, saveInterchange, saveLore, saveImages } from './store.js';
+import { S, blankCharacter, saveCharacter, saveChat, newChat, LINE_COLORS, saveInterchange, saveLore, saveImages, memberColor } from './store.js';
 import { resizeImage, uid } from './util.js';
 
 // ---------- ZIP (no dependencies: stored or deflate, via the browser's DecompressionStream) ----------
@@ -288,6 +288,8 @@ export async function applyPlan(plan, mode) {
       name: (plan.names.length >= 2 ? plan.title : str(d.name)).slice(0, 60),
       tagline: plan.names.length >= 2 ? `Plays ${plan.names.join(', ')}`.slice(0, 80) : str(plan.blurb).split(/[.!?]/)[0].slice(0, 80),
       narrator: plan.names.length >= 2,
+      // The people it plays, each with a colour and (when the card splits cleanly) their own description.
+      cast: plan.names.length >= 2 ? (plan.cast?.length >= 2 ? plan.cast.map((c) => ({ name: c.name, about: c.text || '' })) : plan.names.map((n) => ({ name: n, about: '' }))) : undefined,
       persona: [str(d.description), d.personality && `Personality: ${d.personality}`, d.system_prompt, d.mes_example && `Example dialogue:\n${d.mes_example}`].filter((x) => str(x).trim()).join('\n\n'),
       scenario: str(d.scenario),
       firstMessage: plan.openings[0] || '',
@@ -299,6 +301,7 @@ export async function applyPlan(plan, mode) {
       creator: plan.creator,
       source: { story: plan.title, creator: plan.creator },
     });
+    if (ch.cast) ch.cast = ch.cast.map((m, i) => ({ id: `${ch.id}-${i + 1}`, color: memberColor(ch, i), ...m }));
     await saveCharacter(ch);
     await saveChat(newChat(ch.id), false);
     target = ch.id;

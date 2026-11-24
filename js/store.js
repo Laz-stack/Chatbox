@@ -512,7 +512,46 @@ export const connection = (id) => S.connections.find((c) => c.id === id);
 export const activeConnection = () => connection(S.settings.activeConnectionId) || S.connections[0] || null;
 export const connectionFor = (ch) => (ch?.connectionId && connection(ch.connectionId)) || activeConnection();
 
+// A One narrator character plays several people. Each gets a place of their own (name, colour,
+// description, look tags) so their names wear their colour, the Helper tracks them, they have
+// their own Bonds and Diary, and pictures can show them. Older narrators get theirs from "Plays …".
+export function castOf(ch) {
+  if (!ch) return [];
+  if (!ch.narrator) return [ch];
+  if (!Array.isArray(ch.cast) || ch.cast.length < 2) {
+    const names = (/^Plays (.+)$/.exec(ch.tagline || '')?.[1] || '').split(/,\s*|\s+and\s+/).map((s) => s.trim().replace(/[.…]+$/, '')).filter((s) => s.length > 1);
+    if (names.length < 2) return [ch];
+    ch.cast = names.map((n, i) => ({ id: `${ch.id}-${i + 1}`, name: n, color: memberColor(ch, i), about: '' }));
+    saveCharacter(ch).catch(() => {});
+  }
+  return ch.cast.map((m) => ({
+    id: m.id,
+    name: m.name,
+    line: { color: m.color, letter: (m.name[0] || 'C').toUpperCase() },
+    preset: 'initial',
+    persona: m.about ? m.about : `${m.name} is one of the people in this story.\n\n${ch.persona || ''}`,
+    description: '',
+    tagline: `In ${ch.name}`,
+    lookTags: m.lookTags || '',
+    connectionId: ch.connectionId,
+    mature: ch.mature,
+    narratorOf: ch.id,
+  }));
+}
+export function memberColor(ch, i) {
+  const free = LINE_COLORS.filter((c) => c !== ch.line?.color && c !== '#ECECEC');
+  return free[i % free.length];
+}
+
 export async function saveCharacter(ch) {
+  // One of a narrator's people: what changed (their look tags) is kept on the narrator.
+  if (ch?.narratorOf) {
+    const n = character(ch.narratorOf);
+    const m = n?.cast?.find((x) => x.id === ch.id);
+    if (!m) return;
+    m.lookTags = ch.lookTags || '';
+    return saveCharacter(n);
+  }
   cleanCharacter(ch);
   ch.updatedAt = Date.now(); // lets Sync tell which edit is newer
   const i = S.characters.findIndex((c) => c.id === ch.id);

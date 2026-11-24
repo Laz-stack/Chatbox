@@ -1,5 +1,5 @@
 import { savePersona } from '../store.js';
-import { S, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, named, resetChat, recordFare, meter, interchange, isInterchangeId, chatsFor, startNewChat, deleteChat, setHidden, blankCharacter, saveInterchange, personaFor, personaById, newChat, branchChat, saveImages } from '../store.js';
+import { S, castOf, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, named, resetChat, recordFare, meter, interchange, isInterchangeId, chatsFor, startNewChat, deleteChat, setHidden, blankCharacter, saveInterchange, personaFor, personaById, newChat, branchChat, saveImages } from '../store.js';
 import { textSheet } from './text.js';
 import { replyStyleSheet } from './settings.js';
 import { textPrefs } from '../textstyle.js';
@@ -238,7 +238,7 @@ export async function chatView(id, focusId = null) {
     const showAi = (t) => (proseOn() ? markProse(t) : t);
     const fillS = (t, who) => named(t, who || (ix ? ix.people[0] : ch), 'you', me());
     // Reading text › Help with reading: names in colour and paragraphs that can be marked (AI text only).
-    const castAll = () => (ix ? [...ix.people, ...(chat.passengers || []).filter((p) => p.line)] : [ch]);
+    const castAll = () => (ix ? [...ix.people, ...(chat.passengers || []).filter((p) => p.line)] : [ch, ...castOf(ch).filter((p) => p !== ch)]); // a narrator's people wear their own colours
     const enhance = (html) => {
       const t = textPrefs();
       let h = html;
@@ -514,7 +514,7 @@ export async function chatView(id, focusId = null) {
     // ---------- Recap: "Previously", when you come back after a while ----------
     const lastSaidAt = () => [...chat.messages].reverse().find((m) => m.at)?.at || chat.updatedAt || 0;
     function recapBody() {
-      const cast = ix ? ix.people : [ch];
+      const cast = ix ? ix.people : castOf(ch);
       const gone = Date.now() - lastSaidAt();
       const meta = [gone >= 3600e3 ? `${awaySpan(gone)} ago` : '', ...recapMeta(chat)].filter(Boolean).join(' · ');
       const facts = recapFacts(chat, cast);
@@ -552,7 +552,7 @@ export async function chatView(id, focusId = null) {
         if (stick || manual) toBottom(true);
       }
       try {
-        await writeRecap({ chat, cast: ix ? ix.people : [ch], persona: me(), conn: connectionFor(ch) });
+        await writeRecap({ chat, cast: ix ? ix.people : castOf(ch), persona: me(), conn: connectionFor(ch) });
       } catch (e) {
         if (!manual || destroyed) return box.remove();
         box.innerHTML = `<h3 class="pv-h">Previously</h3><p class="pv-p">${esc(e.message || 'The recap couldn’t be written.')}</p><div class="pv-acts"><button type="button" class="pv-again press">${icon('refresh', 15)}Try again</button><button type="button" class="pv-ok press">Close</button></div>`;
@@ -1126,7 +1126,7 @@ export async function chatView(id, focusId = null) {
     async function runChronicle(conn) {
       const target = chat.messages[chat.messages.length - 1];
       try {
-        const res = await chronicle({ chat, cast: ix ? ix.people : [ch], persona: me(), conn, settings: S.settings });
+        const res = await chronicle({ chat, cast: ix ? ix.people : castOf(ch), persona: me(), conn, settings: S.settings });
         if (res.changes.length || res.stations.length || res.time || res.ties || res.adv || res.place || res.chapter || res.facts) target.chron = { bonds: res.changes, stations: res.stations.map((s) => s.title), ...(res.chapter ? { chapter: res.chapter } : {}), ...(res.facts ? { facts: res.facts } : {}), ...(res.time ? { time: res.time } : {}), ...(res.ties ? { ties: res.ties } : {}), ...(res.adv ? { adv: res.adv } : {}), ...(res.place ? { place: res.place } : {}) };
         if (res.place) setScene();
         if (res.stations.length && chat.picAuto && picConn() && (!isNm() || nmPrefs().token.trim()) && !destroyed) runPaint(target, chat.picStyle || picPrefs().style, { auto: true });
@@ -1150,7 +1150,7 @@ export async function chatView(id, focusId = null) {
     function chronHTML(m) {
       const c = m.chron;
       if (!c) return '';
-      const cast = ix ? ix.people : [ch];
+      const cast = ix ? ix.people : castOf(ch);
       const rows = (c.bonds || []).map((x) => {
         const p = cast.find((q) => q.id === x.who);
         return p ? `<a class="chr-row press" href="#/bonds/${encodeURIComponent(chat.id)}"><span class="chr-dot" style="background:${p.line?.color || '#2EAA67'}" aria-hidden="true"></span><span>${esc(p.name)} · ${esc(changeText(x.d))}${x.why ? ` · ${esc(x.why)}` : ''}</span></a>` : '';
@@ -1529,7 +1529,7 @@ export async function chatView(id, focusId = null) {
       // A redraw of the reply (another version, an edit) draws the plate again while it's still writing.
       const live = () => log.querySelector(`[data-pcrun="${CSS.escape(m.id)}"]`) || document.createElement('figure');
       try {
-        const q = await perchancePrompt({ chat, cast: ix ? ix.people : [ch], m, persona: me(), conn: connectionFor(ch), style, mood: picPrefs().mood, signal: ctl.signal });
+        const q = await perchancePrompt({ chat, cast: ix ? ix.people : castOf(ch), m, persona: me(), conn: connectionFor(ch), style, mood: picPrefs().mood, signal: ctl.signal });
         if (ctl.signal.aborted || !chat.messages.includes(m)) return;
         // The new prompt replaces any older one only now that it's ready.
         m.pcPending = { ...q, style, step: 'ready', alt, at: Date.now() };
@@ -1659,7 +1659,7 @@ export async function chatView(id, focusId = null) {
     const picOwner = (pid) => chat.messages.find((x) => x.pics?.some((p) => p.id === pid));
     // ---------- Paint with Nightmare (Stable Diffusion on this phone): one sheet, folded extras ----------
     // Who can be in the picture: the cast, then you. chat.picOff holds who's left out.
-    const nmPeople = () => [...(ix ? ix.people : [ch]).map((p) => ({ key: p.id, p, name: p.name, color: lineAccent(p.line?.color), me: false })), { key: 'me', p: me(), name: me()?.name?.trim() ? `${me().name.trim()} (you)` : 'You', color: 'var(--cream)', me: true }];
+    const nmPeople = () => [...(ix ? ix.people : castOf(ch)).map((p) => ({ key: p.id, p, name: p.name, color: lineAccent(p.line?.color), me: false })), { key: 'me', p: me(), name: me()?.name?.trim() ? `${me().name.trim()} (you)` : 'You', color: 'var(--cream)', me: true }];
     const nmIn = () => nmPeople().filter((x) => !(chat.picOff || []).includes(x.key));
     const sizeText = (z) => z.replace('x', '×');
     const finSum = (P) => [P.upscale ? `Upscale ${P.scale}` : 'Upscale off', P.colour || P.adjust ? [P.colour && 'Colour correction', P.adjust && 'Adjusted'].filter(Boolean).join(' · ') : 'Colours as painted'].join(' · ');
@@ -2112,7 +2112,7 @@ export async function chatView(id, focusId = null) {
       try {
         const rec = await paint({
           chat,
-          cast: ix ? ix.people : [ch],
+          cast: ix ? ix.people : castOf(ch),
           m,
           persona: me(),
           textConn: connectionFor(ch),
@@ -2393,7 +2393,7 @@ export async function chatView(id, focusId = null) {
     }
     async function runMoves(conn, target) {
       try {
-        const moves = await suggestMoves({ chat, cast: ix ? ix.people : [ch], persona: me(), conn });
+        const moves = await suggestMoves({ chat, cast: ix ? ix.people : castOf(ch), persona: me(), conn });
         if (!moves.length || destroyed) return;
         target.moves = moves;
         target.movesAlt = target.alt;
@@ -2435,7 +2435,7 @@ export async function chatView(id, focusId = null) {
     function openClock() {
       clockSheet(chat, {
         save: () => saveChat(chat),
-        onRead: () => readTime({ chat, cast: ix ? ix.people : [ch], persona: me(), conn: connectionFor(ch) }),
+        onRead: () => readTime({ chat, cast: ix ? ix.people : castOf(ch), persona: me(), conn: connectionFor(ch) }),
         onChange: updateClock,
         onSkip: async (label, note) => {
           const m = { id: uid(), role: 'user', dir: 'time', time: label, alts: [note], alt: 0, at: Date.now() };
