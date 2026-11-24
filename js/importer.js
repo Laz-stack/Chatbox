@@ -5,7 +5,7 @@ import { PROVIDERS } from './providers.js';
 import { helperComplete } from './helper.js';
 import { extractJson } from './blueprint.js';
 import { S, blankCharacter, saveCharacter, saveChat, newChat, LINE_COLORS, saveInterchange, saveLore, saveImages, memberColor } from './store.js';
-import { resizeImage, uid } from './util.js';
+import { resizeImage, originalImage, uid } from './util.js';
 
 // ---------- ZIP (no dependencies: stored or deflate, via the browser's DecompressionStream) ----------
 async function unzip(buf) {
@@ -138,7 +138,8 @@ function planCard(json, image, sourceName) {
   };
 }
 
-const readImage = (bytes, name) => resizeImage(new File([bytes], name, { type: 'image/png' }), 1536, { area: true, quality: 0.95 });
+// The card's picture exactly as it came (only the character data inside the PNG is left out).
+const readImage = (bytes, name) => originalImage(new File([bytes], name, { type: 'image/png' }));
 
 // Files in -> { cards: [plan], lore: [entries without a card], errors: [] }.
 export async function readFiles(files) {

@@ -3,7 +3,7 @@ import { compileSheet } from './blueprint.js';
 // Reads Tavern-style cards (V1/V2/V3 JSON, or PNG with a "chara"/"ccv3" text chunk)
 // and writes V2 cards as JSON or as a PNG with the card embedded.
 import { blankCharacter, LINE_COLORS, S } from './store.js';
-import { resizeImage, cleanTagline } from './util.js';
+import { resizeImage, originalImage, cleanTagline } from './util.js';
 import { faceDataURL } from './avatar.js';
 import { cleanCharacter } from './safe.js';
 
@@ -135,7 +135,7 @@ export async function readCardFile(file) {
     const raw = chunks.ccv3 || chunks.chara;
     if (!raw) throw new Error('This PNG has no character card inside.');
     const json = JSON.parse(b64utf8(raw));
-    const avatar = await resizeImage(file, 1536, { area: true, quality: 0.95 });
+    const avatar = await originalImage(file);
     return cardToCharacter(json, avatar);
   }
   const json = JSON.parse(await file.text());

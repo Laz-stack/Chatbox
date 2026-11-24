@@ -4,7 +4,6 @@ import { S, textOf, named, hasStarted, departures, logbook, character, lastMessa
 import { esc, ago, agoLong, plain, inkOn, debounce, formatMessage, cleanTagline } from '../util.js';
 import { title2, avatarBullet, tabbar, icon, groupAvatar, emptySign, toast, confirmSheet, openSheet, openMenu } from '../ui.js';
 import { faceSVG } from '../avatar.js';
-import { small } from '../thumbs.js';
 import { startImport } from './import.js';
 
 const FILTERS = [
@@ -23,12 +22,9 @@ const tagsOf = (x) => [...new Set((Array.isArray(x?.tags) ? x.tags : []).map((t)
 const tagMatch = (x) => tagPick.every((t) => tagsOf(x).some((y) => y.toLowerCase() === t.toLowerCase()));
 const lastAt = (id) => latestChat(id)?.updatedAt || 0;
 const whenText = (id, n) => (n ? (ago(lastAt(id)) === 'now' ? 'just now' : `${ago(lastAt(id))} ago`) : 'new');
-// Card pictures are made for this screen's sharpness: a card is ~200px wide (3:4), times the
-// device's pixel ratio, so a 3x phone gets a copy as sharp as Datacat's.
-const DPR = Math.min(3, Math.max(1, globalThis.devicePixelRatio || 1));
-const CARD_PX = Math.min(1600, Math.ceil((200 * DPR * 4) / 3 / 100) * 100);
-const RIDE_PX = Math.min(2000, Math.ceil((420 * DPR) / 100) * 100);
-const artOf = (c) => (c.avatarImage ? `<img src="${esc(small(c.avatarImage, CARD_PX))}" data-small="${CARD_PX}" alt="" loading="lazy">` : faceSVG(c, 300, 'happy', c.line?.color || '#2EAA67').replace('<svg ', '<svg preserveAspectRatio="xMidYMid slice" '));
+// Card pictures are the character's own picture as saved (no smaller copy): the browser scales it
+// down while drawing, so the card is as sharp as the screen allows.
+const artOf = (c) => (c.avatarImage ? `<img src="${esc(c.avatarImage)}" alt="" loading="lazy" decoding="async">` : faceSVG(c, 300, 'happy', c.line?.color || '#2EAA67').replace('<svg ', '<svg preserveAspectRatio="xMidYMid slice" '));
 const tagPills = (x) => {
   const t = tagsOf(x).slice(0, 2);
   return t.length ? `<span class="pst-tags">${t.map((y) => `<span>${esc(y)}</span>`).join('')}</span>` : '';
@@ -42,7 +38,7 @@ function groupPoster(ix) {
   const chat = latestChat(ix.id);
   const n = chat && chat.messages.some((m) => m.role === 'user') ? 1 : 0;
   const img = ix.picture || (ix.useScene ? null : ix.cover);
-  return `<a class="pst press" href="#/chat/${ix.id}" data-card="ix:${esc(ix.id)}" data-name="${esc(ix.title)}" style="--c:#ECECEC" aria-label="${esc(ix.title)}, group" aria-describedby="cardHint"><span class="pst-art">${img ? `<img src="${esc(small(img, CARD_PX))}" data-small="${CARD_PX}" alt="" loading="lazy">` : `<span class="pst-mos">${groupAvatar(ix, 300)}</span>`}<span class="pst-cnt">${ix.mode === 'scene' ? 'Carriage' : 'Interchange'}</span></span><b>${esc(ix.title)}</b><small>${ix.people.map((p) => esc(p.name)).join(', ')}</small>${tagPills(ix)}<span class="pst-meta"><i aria-hidden="true"></i>${n ? whenText(ix.id, 1) : 'not started'}</span></a>`;
+  return `<a class="pst press" href="#/chat/${ix.id}" data-card="ix:${esc(ix.id)}" data-name="${esc(ix.title)}" style="--c:#ECECEC" aria-label="${esc(ix.title)}, group" aria-describedby="cardHint"><span class="pst-art">${img ? `<img src="${esc(img)}" alt="" loading="lazy" decoding="async">` : `<span class="pst-mos">${groupAvatar(ix, 300)}</span>`}<span class="pst-cnt">${ix.mode === 'scene' ? 'Carriage' : 'Interchange'}</span></span><b>${esc(ix.title)}</b><small>${ix.people.map((p) => esc(p.name)).join(', ')}</small>${tagPills(ix)}<span class="pst-meta"><i aria-hidden="true"></i>${n ? whenText(ix.id, 1) : 'not started'}</span></a>`;
 }
 // The chat you were in last, as one big card with Continue.
 function lastRide() {
@@ -52,7 +48,7 @@ function lastRide() {
   const name = d.ix ? d.ix.title : d.c.name;
   const img = d.ix ? d.ix.picture || (d.ix.useScene ? null : d.ix.cover) : d.c.avatarImage;
   const col = d.ix ? '#ECECEC' : d.c.line?.color || '#2EAA67';
-  const art = img ? `<img src="${esc(small(img, RIDE_PX))}" data-small="${RIDE_PX}" alt="">` : d.ix ? `<span class="pst-mos">${groupAvatar(d.ix, 400)}</span>` : faceSVG(d.c, 400, 'happy', col).replace('<svg ', '<svg preserveAspectRatio="xMidYMid slice" ');
+  const art = img ? `<img src="${esc(img)}" alt="" decoding="async">` : d.ix ? `<span class="pst-mos">${groupAvatar(d.ix, 400)}</span>` : faceSVG(d.c, 400, 'happy', col).replace('<svg ', '<svg preserveAspectRatio="xMidYMid slice" ');
   const sub = d.ix ? d.ix.people.map((p) => p.name).join(', ') : cleanTagline(d.c.tagline, d.c.name) || '';
   return `<h2 class="ln-sec">Last ride</h2><a class="ride press" href="#/chat/${encodeURIComponent(d.chat.id)}" style="--c:${col}" aria-label="Continue with ${esc(name)}">${art}<span class="ride-fade" aria-hidden="true"></span><span class="ride-band" aria-hidden="true"></span><span class="ride-tx"><span class="ride-k">${esc(ago(d.chat.updatedAt) === 'now' ? 'just now' : agoLong(d.chat.updatedAt))}</span><b>${esc(name)}</b><small>${esc(sub)}</small></span><span class="ride-go">Continue${icon('chev', 14)}</span></a>`;
 }
