@@ -4,7 +4,7 @@
 // over the chat (the story stays in view above it), and Depot › Reading text shows it as a page with
 // a preview.
 import { S, saveSettings, castOf, storyName, character, interchange, isInterchangeId } from '../store.js';
-import { MARK_STYLES, MARK_COLOURS, PAGES, FONTS, DIALOGUE, NARRATION, BUBBLES, MY_BUBBLES, LAYOUTS, WIDTHS, TRACKS, PARAS, SIDES, TEXTURES, SIZE_STEPS, DEFAULT_TEXT, textPrefs, applyText, CALM, nameColor } from '../textstyle.js';
+import { MARK_STYLES, MARK_COLOURS, PAGES, FONTS, DIALOGUE, NARRATION, BUBBLES, MY_BUBBLES, LAYOUTS, WIDTHS, TRACKS, PARAS, SIDES, TEXTURES, SIZE_STEPS, DEFAULT_TEXT, textPrefs, applyText, CALM, CALM_NAMES, nameColor } from '../textstyle.js';
 import { esc, formatMessage } from '../util.js';
 import { topbar, icon, openSheet } from '../ui.js';
 import { dimSheet, dimSummary } from '../dim.js';
@@ -126,7 +126,7 @@ function nameColours() {
     people
       .map((p) => {
         const cur = nameColor(p);
-        return `<div class="kr-nc"><div class="kr-nc-h"><span>${esc(p.name)}</span>${mine[p.id] ? `<button type="button" class="press" data-nc="${esc(p.id)}:" aria-label="Reset ${esc(p.name)} to their line colour">Reset</button>` : ''}</div><div class="kr-nc-sw" role="radiogroup" aria-label="${esc(p.name)}’s colour">${CALM.map((c) => `<button type="button" class="press" role="radio" aria-checked="${cur === c}" aria-label="${c}" data-nc="${esc(p.id)}:${c}" style="--x:${c}"></button>`).join('')}</div></div>`;
+        return `<div class="kr-nc"><div class="kr-nc-h"><span>${esc(p.name)}</span>${mine[p.id] ? `<button type="button" class="press" data-nc="${esc(p.id)}:" aria-label="Reset ${esc(p.name)} to their line colour">Reset</button>` : ''}</div><div class="kr-nc-sw" role="radiogroup" aria-label="${esc(p.name)}’s colour">${CALM.map((c, i) => `<button type="button" class="press" role="radio" aria-checked="${cur === c}" aria-label="${CALM_NAMES[i]}" data-nc="${esc(p.id)}:${c}" style="--x:${c}"></button>`).join('')}</div></div>`;
       })
       .join('')
   );

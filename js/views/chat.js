@@ -970,8 +970,10 @@ export async function chatView(id, focusId = null) {
       const b = buildPrompt({ char: who, chat, conn: c, settings: S.settings, persona: me(), group });
       root.querySelector('#tokN').textContent = fmtNum(b.total);
     }
+    let namesDue = false; // a Name colours change made mid-reply repaints once the reply ends
     function setBusy(v) {
       busy = v;
+      if (!v && namesDue) (namesDue = false), setTimeout(() => dispatchEvent(new Event('chatbox-names')));
       sendBtn.classList.toggle('stopping', v);
       sendBtn.innerHTML = v ? icon('stop', 20) : arrow(24, 'currentColor');
       sendBtn.setAttribute('aria-label', v ? 'Stop' : 'Send');
@@ -2501,7 +2503,7 @@ export async function chatView(id, focusId = null) {
     // Reading text › Name colours: repaint names and tags in place.
     const onNames = () => {
       if (destroyed) return removeEventListener('chatbox-names', onNames);
-      if (busy) return;
+      if (busy) return void (namesDue = true);
       const y = log.scrollTop;
       renderAll();
       log.scrollTop = y;
