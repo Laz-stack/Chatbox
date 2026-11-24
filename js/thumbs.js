@@ -35,7 +35,8 @@ async function make(src, max) {
   c.width = Math.round(img.naturalWidth * s);
   c.height = Math.round(img.naturalHeight * s);
   c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-  return c.toDataURL('image/webp', 0.86);
+  // Big copies (picture cards) keep more detail than avatar-sized ones.
+  return c.toDataURL('image/webp', max > 400 ? 0.93 : 0.86);
 }
 
 async function run() {
