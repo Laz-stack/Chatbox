@@ -54,6 +54,7 @@ export function editorView(id) {
         <div class="stack" style="flex:1;min-width:0;gap:10px">
           ${field('fName', 'Name', d.name, { ph: 'Their name', attrs: 'maxlength="60" autocomplete="off"' })}
           ${field('fTag', 'Tagline', d.tagline, { ph: 'A few words about them', attrs: 'maxlength="80" autocomplete="off"' })}
+          ${field('fTags', 'Tags', (d.tags || []).join(', '), { ph: 'Female, Magical, Romance', attrs: 'maxlength="200" autocomplete="off"' })}
         </div>
       </div>
       <div class="field"><div class="flabel"><span>Line</span><span class="small">The letter and colour on the bullet</span></div>
@@ -135,6 +136,8 @@ export function editorView(id) {
       paintBullet();
     });
     $('#fTag').addEventListener('input', (e) => (d.tagline = e.target.value));
+    // Tags, comma-separated: shown on the Lines cards and used by Lines › Filters.
+    $('#fTags').addEventListener('input', (e) => (d.tags = [...new Set(e.target.value.split(',').map((t) => t.trim()).filter(Boolean))].slice(0, 12)));
     $('#fPersona').addEventListener('input', (e) => ((d.persona = e.target.value), count()));
     bindBlueprint(root, d, {
       onName(n) {

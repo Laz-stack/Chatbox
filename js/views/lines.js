@@ -2,7 +2,9 @@
 // and a search across names, taglines and every message in every chat.
 import { S, textOf, named, hasStarted, departures, logbook, character, lastMessage, interchange, latestChat, chatsFor, hiddenChats, setHidden, deleteChat, deleteCharacter, deleteInterchange } from '../store.js';
 import { esc, ago, agoLong, plain, inkOn, debounce, formatMessage, cleanTagline } from '../util.js';
-import { title2, avatarBullet, tabbar, icon, groupAvatar, emptySign, toast, confirmSheet } from '../ui.js';
+import { title2, avatarBullet, tabbar, icon, groupAvatar, emptySign, toast, confirmSheet, openSheet, openMenu } from '../ui.js';
+import { faceSVG } from '../avatar.js';
+import { small } from '../thumbs.js';
 import { startImport } from './import.js';
 
 const FILTERS = [
@@ -15,6 +17,44 @@ const FILTERS = [
 
 // A character imported as one narrator for a multi-character card.
 export const isNarrator = (c) => !!(c.narrator || (c.source?.story && c.name === c.source.story));
+// ---------- Picture cards (owner pick v47: poster grid, Last ride, tags and a tag filter) ----------
+let tagPick = []; // tags picked in Filters, kept while the app is open
+const tagsOf = (x) => [...new Set((Array.isArray(x?.tags) ? x.tags : []).map((t) => String(t).replace(/^#/, '').trim()).filter(Boolean))];
+const tagMatch = (x) => tagPick.every((t) => tagsOf(x).some((y) => y.toLowerCase() === t.toLowerCase()));
+const lastAt = (id) => latestChat(id)?.updatedAt || 0;
+const whenText = (id, n) => (n ? (ago(lastAt(id)) === 'now' ? 'just now' : `${ago(lastAt(id))} ago`) : 'new');
+const artOf = (c) => (c.avatarImage ? `<img src="${esc(small(c.avatarImage, 480))}" data-small="480" alt="" loading="lazy">` : faceSVG(c, 300, 'happy', c.line?.color || '#2EAA67').replace('<svg ', '<svg preserveAspectRatio="xMidYMid slice" '));
+const tagPills = (x) => {
+  const t = tagsOf(x).slice(0, 2);
+  return t.length ? `<span class="pst-tags">${t.map((y) => `<span>${esc(y)}</span>`).join('')}</span>` : '';
+};
+function poster(c) {
+  const n = shownChats(c.id).length;
+  const col = c.line?.color || '#2EAA67';
+  return `<a class="pst press" href="#/chat/${c.id}" data-card="char:${esc(c.id)}" data-name="${esc(c.name)}" style="--c:${col}" aria-label="${esc(c.name)}, ${n ? `${n} chat${n === 1 ? '' : 's'}` : 'no chats yet'}${tagsOf(c).length ? `, tags ${esc(tagsOf(c).slice(0, 2).join(', '))}` : ''}" aria-describedby="cardHint"><span class="pst-art" data-av="line:${esc(c.id)}">${artOf(c)}<span class="pst-cnt${n ? '' : ' none'}">${n ? `${n} chat${n === 1 ? '' : 's'}` : 'no chats yet'}</span></span><b>${esc(c.name)}</b><small>${esc(cleanTagline(c.tagline, c.name) || 'No tagline')}</small>${tagPills(c)}<span class="pst-meta"><i aria-hidden="true"></i>${whenText(c.id, n)}</span></a>`;
+}
+function groupPoster(ix) {
+  const chat = latestChat(ix.id);
+  const n = chat && chat.messages.some((m) => m.role === 'user') ? 1 : 0;
+  const img = ix.picture || (ix.useScene ? null : ix.cover);
+  return `<a class="pst press" href="#/chat/${ix.id}" data-card="ix:${esc(ix.id)}" data-name="${esc(ix.title)}" style="--c:#ECECEC" aria-label="${esc(ix.title)}, group" aria-describedby="cardHint"><span class="pst-art">${img ? `<img src="${esc(small(img, 480))}" data-small="480" alt="" loading="lazy">` : `<span class="pst-mos">${groupAvatar(ix, 300)}</span>`}<span class="pst-cnt">${ix.mode === 'scene' ? 'Carriage' : 'Interchange'}</span></span><b>${esc(ix.title)}</b><small>${ix.people.map((p) => esc(p.name)).join(', ')}</small>${tagPills(ix)}<span class="pst-meta"><i aria-hidden="true"></i>${n ? whenText(ix.id, 1) : 'not started'}</span></a>`;
+}
+// The chat you were in last, as one big card with Continue.
+function lastRide() {
+  const d = departures()[0];
+  if (!d) return '';
+  const who = d.ix || d.c;
+  const name = d.ix ? d.ix.title : d.c.name;
+  const img = d.ix ? d.ix.picture || (d.ix.useScene ? null : d.ix.cover) : d.c.avatarImage;
+  const col = d.ix ? '#ECECEC' : d.c.line?.color || '#2EAA67';
+  const art = img ? `<img src="${esc(small(img, 800))}" data-small="800" alt="">` : d.ix ? `<span class="pst-mos">${groupAvatar(d.ix, 400)}</span>` : faceSVG(d.c, 400, 'happy', col).replace('<svg ', '<svg preserveAspectRatio="xMidYMid slice" ');
+  const sub = d.ix ? d.ix.people.map((p) => p.name).join(', ') : cleanTagline(d.c.tagline, d.c.name) || '';
+  return `<h2 class="ln-sec">Last ride</h2><a class="ride press" href="#/chat/${encodeURIComponent(d.chat.id)}" style="--c:${col}" aria-label="Continue with ${esc(name)}">${art}<span class="ride-fade" aria-hidden="true"></span><span class="ride-band" aria-hidden="true"></span><span class="ride-tx"><span class="ride-k">${esc(ago(d.chat.updatedAt) === 'now' ? 'just now' : agoLong(d.chat.updatedAt))}</span><b>${esc(name)}</b><small>${esc(sub)}</small></span><span class="ride-go">Continue${icon('chev', 14)}</span></a>`;
+}
+const posterSec = (title, n, cards, of = 0) => (n ? `<h2 class="ln-sec">${title}<span class="num">${of ? `${n} of ${of}` : n}</span></h2><div class="pst-grid">${cards}</div>` : '');
+const filterRow = () =>
+  `<div class="ln-frow"><button type="button" class="ln-fbtn press" id="lnFilt" aria-haspopup="dialog">Filters${tagPick.length ? `<em>${tagPick.length}</em>` : ''}</button></div>${tagPick.length ? `<div class="ln-picked">${tagPick.map((t) => `<button type="button" class="ln-pk press" data-untag="${esc(t)}" aria-label="Remove tag ${esc(t)}">${esc(t)}<i aria-hidden="true">✕</i></button>`).join('')}<button type="button" class="ln-pk reset press" data-untag="*">Reset</button></div>` : ''}`;
+
 const section = (title, n, rows) => (n ? `<h2 class="ln-sec">${title}<span class="num">${n}</span></h2><div class="index">${rows}</div>` : '');
 
 const colorVars = (c) => {
@@ -177,8 +217,8 @@ function searchResults(q) {
 }
 
 export function linesView(filter) {
-  // Lines opens on Recent; with nothing started yet, on All.
-  if (!FILTERS.some(([k]) => k === filter)) filter = departures().length ? 'recent' : 'all';
+  // Lines opens on All: the picture cards, with Last ride on top (owner's choice).
+  if (!FILTERS.some(([k]) => k === filter)) filter = 'all';
   const sorted = S.characters.filter((c) => !c.hidden).sort((a, b) => a.name.localeCompare(b.name));
   const groupsShown = () => S.interchanges.filter((x) => !x.hidden).map((x) => interchange(x.id)).filter(Boolean);
   const hiddenLines = () => [
@@ -206,10 +246,25 @@ export function linesView(filter) {
       const log = logbook();
       return log.length ? `<div class="roll">${log.map(starRow).join('')}</div>` : emptySign('Nothing starred yet', 'Long-press a message in a chat and tap Star. It lands here.', '', 'Lines · Starred');
     }
-    const groups = groupsShown();
-    const chars = sorted.filter((c) => !isNarrator(c));
-    const narr = sorted.filter(isNarrator);
-    return section('Characters', chars.length, chars.map(lineRow).join('')) + section('One narrator', narr.length, `<p class="ln-note">Cards with several characters, played by one narrator who voices them all.</p>` + narr.map(lineRow).join('')) + section('Interchanges', groups.length, groups.map((ix) => ixRow(ix)).join('')) + `<div class="index" style="margin-top:12px"><a class="ix ix-new press" href="#/edit/new">${`<span class="bullet ix-new-b" style="width:44px;height:44px">${icon('track', 22)}</span>`}<span class="row-tx"><span class="row-t">New line</span><span class="row-s">Create a character</span></span></a></div>` + fold(hiddenLines());
+    // All: picture cards. Picked tags narrow everything; Last ride steps aside while filtering.
+    const groups = groupsShown().filter(tagMatch);
+    const chars = sorted.filter((c) => !isNarrator(c) && tagMatch(c));
+    const narr = sorted.filter((c) => isNarrator(c) && tagMatch(c));
+    const total = chars.length + narr.length + groups.length;
+    const newCard = `<a class="pst-new press" href="#/edit/new"><span><i aria-hidden="true">${icon('plus', 22)}</i><b>New line</b><small>Create a character</small></span></a>`;
+    return (
+      filterRow() +
+      (tagPick.length ? '' : lastRide()) +
+      (tagPick.length
+        ? (total ? '' : `<p class="search-none">No character has all of these tags. Tap Reset to see everyone.</p>`) +
+          posterSec('Characters', chars.length, chars.map(poster).join(''), S.characters.filter((c) => !c.hidden && !isNarrator(c)).length) +
+          posterSec('One narrator', narr.length, narr.map(poster).join(''), S.characters.filter((c) => !c.hidden && isNarrator(c)).length) +
+          posterSec('Groups', groups.length, groups.map(groupPoster).join(''), groupsShown().length)
+        : (chars.length ? posterSec('Characters', chars.length, chars.map(poster).join('') + newCard) : `<h2 class="ln-sec">Characters</h2><div class="pst-grid">${newCard}</div>`) +
+          posterSec('One narrator', narr.length, narr.map(poster).join('')) +
+          posterSec('Groups', groups.length, groups.map(groupPoster).join(''))) +
+      fold(hiddenLines())
+    );
   };
 
   const html = `<div class="screen">
@@ -220,6 +275,7 @@ export function linesView(filter) {
     <label class="search">${icon('search', 20)}<input id="q" type="search" placeholder="Name, line or something they said" aria-label="Search lines and messages" autocomplete="off" enterkeyhint="search"></label>
     <div class="chips-f" role="tablist" aria-label="Show">${FILTERS.map(([k, l]) => `<a class="press${k === filter ? ' on' : ''}" role="tab" aria-selected="${k === filter}" href="#/lines/${k}">${l}</a>`).join('')}</div>
     <p class="vh" id="swHint">Left arrow: Hide and Delete for this row.</p>
+    <p class="vh" id="cardHint">Long-press, or the left arrow: Hide and Delete.</p>
     <div id="results"><div class="blk-tight">${body()}</div></div>
   </div>${tabbar('lines')}`;
 
@@ -238,6 +294,7 @@ export function linesView(filter) {
         results.innerHTML = q ? searchResults(q) : base;
       };
       bindSwipes(results, redraw);
+      bindCards(root, results, redraw);
       const run = debounce(() => {
         const q = input.value.trim();
         chips.hidden = q.length > 0;
@@ -255,6 +312,122 @@ export function linesView(filter) {
       });
     },
   };
+}
+
+// ---------- Picture cards: Filters sheet, picked-tag chips, and Hide / Delete on a long-press ----------
+function bindCards(root, results, redraw) {
+  results.addEventListener('click', (e) => {
+    const un = e.target.closest('[data-untag]');
+    if (un) {
+      tagPick = un.dataset.untag === '*' ? [] : tagPick.filter((t) => t !== un.dataset.untag);
+      redraw();
+      results.querySelector('#lnFilt')?.focus();
+      return;
+    }
+    if (e.target.closest('#lnFilt')) filterSheet(redraw);
+  });
+  // Long-press (or right-click / the menu key) on a card: Hide or Delete, as a swipe does on a row.
+  let t = null;
+  let held = false;
+  // After a card goes: redraw, then focus the card that took its place (or Filters).
+  const after = (card) => {
+    const cards = [...results.querySelectorAll('.pst[data-card]')];
+    const i = cards.indexOf(card);
+    const next = cards[i + 1] || cards[i - 1];
+    const sel = next ? `.pst[data-card="${CSS.escape(next.dataset.card)}"]` : '#lnFilt';
+    return () => {
+      redraw();
+      setTimeout(() => (results.querySelector(sel) || results.querySelector('#lnFilt'))?.focus(), 320);
+    };
+  };
+  const menu = (card) => {
+    const [kind, id] = card.dataset.card.split(':');
+    const name = card.dataset.name;
+    openMenu(card, [
+      { icon: 'eyeoff', label: 'Hide', on: () => act(kind === 'ix' ? 'ix' : 'char', id, name, 'hide', after(card)) },
+      '-',
+      { icon: 'trash', label: 'Delete', danger: true, on: () => act(kind === 'ix' ? 'ix' : 'char', id, name, 'delete', after(card)) },
+    ]);
+  };
+  results.addEventListener('pointerdown', (e) => {
+    const card = e.target.closest('.pst[data-card]');
+    if (!card || e.button > 0) return;
+    held = false;
+    t = setTimeout(() => ((held = true), menu(card)), 520);
+  });
+  const stop = () => clearTimeout(t);
+  results.addEventListener('pointerup', stop);
+  results.addEventListener('pointercancel', stop);
+  results.addEventListener('pointermove', (e) => e.movementX ** 2 + e.movementY ** 2 > 16 && stop());
+  results.addEventListener('click', (e) => held && e.target.closest('.pst') && (e.preventDefault(), (held = false)), true);
+  results.addEventListener('contextmenu', (e) => {
+    const card = e.target.closest('.pst[data-card]');
+    if (!card) return;
+    e.preventDefault();
+    clearTimeout(t);
+    if (held) return; // the long-press already opened it (Android fires both)
+    menu(card);
+  });
+  // Keyboard: the left arrow, Delete or the menu key on a card opens Hide / Delete (as on rows).
+  results.addEventListener('keydown', (e) => {
+    const card = e.target.closest?.('.pst[data-card]');
+    if (!card || !['ArrowLeft', 'Delete', 'ContextMenu'].includes(e.key)) return;
+    e.preventDefault();
+    menu(card);
+  });
+}
+// Hide or Delete from a card's menu (the same words as the row swipe).
+async function act(kind, id, name, what, redraw) {
+  if (what === 'hide') {
+    await setHidden(kind, id, true);
+    redraw();
+    return toast(`${name} hidden · find it under Hidden`, { ms: 6500, action: 'Undo', onAction: async () => (await setHidden(kind, id, false), redraw()) });
+  }
+  const started = kind === 'char' ? chatsFor(id).filter(hasStarted) : [];
+  const n = started.length;
+  const nHidden = started.filter((c) => c.hidden).length;
+  const copy =
+    kind === 'char'
+      ? { title: `Delete ${esc(name)}${n ? ` and ${n === 1 ? 'their chat' : `${n} chats`}${nHidden ? ` (${nHidden} hidden)` : ''}` : ''}?`, body: `The character${n ? ' and every chat with them' : ''} go for good. To keep them but tidy Lines, use Hide instead.`, ok: 'Delete' }
+      : { title: `Delete ${esc(name)}?`, body: 'The group chat goes for good. Its characters stay. This can’t be undone.', ok: 'Delete' };
+  if (!(await confirmSheet({ ...copy, danger: true }))) return;
+  if (kind === 'char') await deleteCharacter(id);
+  else await deleteInterchange(id);
+  redraw();
+  toast(`${name} deleted`);
+}
+function filterSheet(redraw) {
+  const pool = [...S.characters.filter((c) => !c.hidden), ...S.interchanges.filter((x) => !x.hidden).map((x) => interchange(x.id)).filter(Boolean)];
+  const counts = new Map();
+  // Tags that differ only in case count as one.
+  const named = new Map();
+  for (const x of pool) for (const t of new Set(tagsOf(x).map((y) => y.toLowerCase()))) named.has(t) || named.set(t, tagsOf(x).find((y) => y.toLowerCase() === t)), counts.set(named.get(t), (counts.get(named.get(t)) || 0) + 1);
+  const all = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  let pick = [...tagPick];
+  const matches = () => pool.filter((x) => pick.every((t) => tagsOf(x).some((y) => y.toLowerCase() === t.toLowerCase()))).length;
+  const btn = () => (pick.length ? `Show ${matches()}` : 'Show everyone');
+  openSheet({
+    label: 'Filters',
+    html: `<h2 class="sheet-title">Filters</h2><p class="sheet-p">Show characters with every tag you pick. Tags come from imported cards, and you can add your own in a character’s editor.</p>${
+      all.length ? `<div class="ln-cloud" role="group" aria-label="Tags">${all.map(([t, n]) => `<button type="button" class="ln-cl press" aria-pressed="${pick.includes(t)}" data-t="${esc(t)}">${esc(t)} <small>${n}</small></button>`).join('')}</div>` : `<p class="sheet-p">No tags yet. Add some in a character’s editor, or import cards that have them.</p>`
+    }<div style="height:14px"></div><button type="button" class="btn-primary press" id="lnShow"><span>${btn()}</span></button>`,
+    onMount(s, close) {
+      s.querySelector('.ln-cloud')?.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-t]');
+        if (!b) return;
+        const t = b.dataset.t;
+        pick = pick.includes(t) ? pick.filter((x) => x !== t) : [...pick, t];
+        b.setAttribute('aria-pressed', String(pick.includes(t)));
+        s.querySelector('#lnShow span').textContent = btn();
+      });
+      s.querySelector('#lnShow').addEventListener('click', () => {
+        tagPick = pick;
+        close();
+        redraw();
+        setTimeout(() => document.querySelector('#lnFilt')?.focus(), 340); // after the sheet hands focus back
+      });
+    },
+  });
 }
 
 // ---------- Swipe to hide or delete ----------
