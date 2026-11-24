@@ -1,7 +1,7 @@
-import { S, character, blankCharacter, takeDraft, saveCharacter, deleteCharacter, setHidden, getChat, connection, LINE_COLORS, newChat, saveChat } from '../store.js';
+import { S, character, blankCharacter, takeDraft, saveCharacter, deleteCharacter, setHidden, getChat, connection, LINE_COLORS, newChat, saveChat, memberColor } from '../store.js';
 import { ttsSupported, voices } from '../tts.js';
 import { voiceSheet } from './voicesheet.js';
-import { esc, resizeImage, originalImage, download, slug, motion } from '../util.js';
+import { esc, uid, resizeImage, originalImage, download, slug, motion } from '../util.js';
 import { avatarTile, avatarSVG, PRESETS, PRESET_KEYS, EXPRESSIONS } from '../avatar.js';
 import { windowSheet, soundsLikeName } from '../scenepicker.js';
 import { exportCardPng, exportCardJson } from '../cards.js';
@@ -55,6 +55,7 @@ export function editorView(id) {
           ${field('fName', 'Name', d.name, { ph: 'Their name', attrs: 'maxlength="80" autocomplete="off"' })}
           ${d.callAs ? field('fCall', 'Name in the story', d.callAs, { ph: 'What the story calls them', attrs: 'maxlength="60" autocomplete="off"' }) : ''}
           ${field('fTag', 'Tagline', d.tagline, { ph: 'A few words about them', attrs: 'maxlength="80" autocomplete="off"' })}
+          ${field('fCast', 'Characters in this card', (d.cast || []).map((m) => m.name).join(', '), { ph: 'For a card with several people: Sona, Sascha, Lyra', attrs: 'maxlength="400" autocomplete="off"' })}
           ${field('fTags', 'Tags', (d.tags || []).join(', '), { ph: 'Female, Magical, Romance', attrs: 'maxlength="200" autocomplete="off"' })}
         </div>
       </div>
@@ -117,8 +118,8 @@ export function editorView(id) {
     const count = () => {
       const n = $('#fPersona').value.length;
       const c = $('#cPersona');
-      c.textContent = `${n.toLocaleString()} / 6,000`;
-      c.classList.toggle('over', n > 6000);
+      c.textContent = `${n.toLocaleString()} / 50,000`;
+      c.classList.toggle('over', n > 50000);
     };
     count();
 
@@ -138,6 +139,15 @@ export function editorView(id) {
       paintBullet();
     });
     $('#fTag').addEventListener('input', (e) => (d.tagline = e.target.value));
+    // The people a card plays, comma-separated. Two or more make it a narrator that keeps each of
+    // them (own colour, Bonds, Diary, picture face); names already there keep their colour and looks.
+    $('#fCast').addEventListener('input', (e) => {
+      const names = [...new Set(e.target.value.split(',').map((t) => t.trim()).filter((t) => t.length > 1))].slice(0, 12);
+      const old = d.cast || [];
+      d.cast = names.map((n, i) => old.find((m) => m.name.toLowerCase() === n.toLowerCase()) || { id: `${d.id}-${uid().slice(0, 6)}`, name: n, color: memberColor(d, old.length + i), about: '' });
+      d.narrator = d.cast.length >= 2;
+      if (!d.narrator) d.cast = [];
+    });
     // Tags, comma-separated: shown on the Lines cards and used by Lines › Filters.
     $('#fTags').addEventListener('input', (e) => (d.tags = [...new Set(e.target.value.split(',').map((t) => t.trim()).filter(Boolean))].slice(0, 12)));
     $('#fPersona').addEventListener('input', (e) => ((d.persona = e.target.value), count()));
