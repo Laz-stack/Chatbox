@@ -1,5 +1,5 @@
 import { savePersona } from '../store.js';
-import { S, castOf, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, named, resetChat, recordFare, meter, interchange, isInterchangeId, chatsFor, startNewChat, deleteChat, setHidden, blankCharacter, saveInterchange, personaFor, personaById, newChat, branchChat, saveImages } from '../store.js';
+import { S, castOf, storyName, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, named, resetChat, recordFare, meter, interchange, isInterchangeId, chatsFor, startNewChat, deleteChat, setHidden, blankCharacter, saveInterchange, personaFor, personaById, newChat, branchChat, saveImages } from '../store.js';
 import { textSheet } from './text.js';
 import { replyStyleSheet } from './settings.js';
 import { textPrefs } from '../textstyle.js';
@@ -238,7 +238,7 @@ export async function chatView(id, focusId = null) {
     const showAi = (t) => (proseOn() ? markProse(t) : t);
     const fillS = (t, who) => named(t, who || (ix ? ix.people[0] : ch), 'you', me());
     // Reading text › Help with reading: names in colour and paragraphs that can be marked (AI text only).
-    const castAll = () => (ix ? [...ix.people, ...(chat.passengers || []).filter((p) => p.line)] : [ch, ...castOf(ch).filter((p) => p !== ch)]); // a narrator's people wear their own colours
+    const castAll = () => (ix ? [...ix.people, ...(chat.passengers || []).filter((p) => p.line)] : [...(ch.narrator && castOf(ch).length > 1 ? [] : [{ ...ch, name: storyName(ch) }]), ...castOf(ch).filter((p) => p !== ch)]); // a narrator's people wear their own colours; a narrator's title isn't a name
     const enhance = (html) => {
       const t = textPrefs();
       let h = html;

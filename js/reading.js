@@ -57,8 +57,11 @@ export function choicesHTML(items, live) {
 }
 
 // Colour the first mention of each cast name in every paragraph of formatted HTML.
+// A name's first word, unless it's an everyday word ("The Hero's Harem", "My Maid"): those are
+// titles, not names, and would colour every "The".
+const COMMON = new Set(['the', 'a', 'an', 'my', 'your', 'our', 'his', 'her', 'their', 'this', 'that', 'of', 'in', 'on', 'to', 'and', 'you', 'i', 'we', 'it', 'is', 'are', 'be', 'with', 'for', 'at', 'by', 'from', 'one', 'two', 'all', 'no', 'not', 'when', 'what', 'who', 'how', 'why', 'if']);
 export function colourNames(html, people) {
-  const cast = (people || []).filter((p) => p?.name?.trim().length > 1);
+  const cast = (people || []).filter((p) => p?.name?.trim().length > 1 && !COMMON.has(p.name.trim().split(/\s+/)[0].toLowerCase()));
   if (!cast.length) return html;
   const by = new Map(cast.map((p) => [p.name.trim().split(/\s+/)[0].toLowerCase(), p]));
   const re = new RegExp(`\\b(${cast.map((p) => p.name.trim().split(/\s+/)[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`, 'g');

@@ -65,7 +65,7 @@ export function blueprintHTML(d) {
     <div class="bp-result" id="bpResult" role="status" hidden></div>
     <div class="bp-list" id="bpList"></div>
     <section class="acc notes${(d.persona || '').trim() ? ' open' : ''}" data-s="notes">
-      <div class="acc-h"><button type="button" class="acc-t press" data-toggle="notes" aria-expanded="${!!(d.persona || '').trim()}"><span class="acc-tt"><b>Extra notes</b><span class="counter" id="cPersona">0 / 6,000</span></span></button><button type="button" class="acc-c press" data-toggle="notes" aria-label="Open or close Extra notes">${icon('chev', 18)}</button></div>
+      <div class="acc-h"><button type="button" class="acc-t press" data-toggle="notes" aria-expanded="${!!(d.persona || '').trim()}"><span class="acc-tt"><b>Extra notes</b><span class="counter" id="cPersona">0 / 50,000</span></span></button><button type="button" class="acc-c press" data-toggle="notes" aria-label="Open or close Extra notes">${icon('chev', 18)}</button></div>
       <div class="acc-body"><textarea class="input area" id="fPersona" rows="5" placeholder="Anything the sheet doesn't cover. Use {{char}} for their name and {{user}} for yours.">${esc(d.persona || '')}</textarea>
         <p class="fhint">Sent after the sheet. Random and Enhance read it but never change it.</p></div>
     </section>
