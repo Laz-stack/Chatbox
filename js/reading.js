@@ -6,6 +6,7 @@
 //   colour (lighter on dark grounds, darker on light bubbles).
 // - Place marker: paragraphs are wrapped so one can be marked with a tap (see chat.js).
 import { esc, formatMessage, shade, luminance } from './util.js';
+import { nameColor } from './textstyle.js';
 
 // Contrast between two #rrggbb colours.
 const ratio = (a, b) => { const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
@@ -77,7 +78,7 @@ export function colourNames(html, people) {
         const p = by.get(w.toLowerCase());
         if (!p || seen.has(p)) return w;
         seen.add(p);
-        const c = HEX.test(p.line?.color || '') ? p.line.color : '#2EAA67';
+        const c = nameColor(p);
         // Lighter until it reads on the darkest ground, darker until it reads on the lightest bubble.
         let light = c;
         for (let k = 0; ratio(light, '#17233A') < 4.5 && k < 12; k++) light = shade(c, 0.1 * (k + 1));

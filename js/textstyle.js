@@ -2,6 +2,15 @@
 // Stored in S.settings.text and applied as CSS variables, so both layouts follow it:
 // the story layout on black and the cream narrator/character bubbles.
 import { S } from './store.js';
+import { softColor } from './util.js';
+
+// Names in the text and speech tags: your own pick for that character (Reading text › Colours),
+// else their line colour softened.
+export const CALM = ['#C9C0F2', '#E89BC0', '#86C4BF', '#A9C7E8', '#E6C79A', '#B9D4A4', '#D8B0A8', '#C4C4C4', '#B4AECB', '#C7A0B2', '#9DB5B1', '#A8B4C4'];
+export const nameColor = (p) => {
+  const own = S.settings.text?.nameColors?.[p?.id];
+  return /^#[0-9a-f]{6}$/i.test(own || '') ? own.toUpperCase() : softColor(p?.line?.color || p?.color || '#2EAA67');
+};
 
 // Archivo is the app's signage face; the rest are made for reading on screens (big lowercase,
 // open shapes, letters that can't be mixed up, no hairline strokes to shimmer on black).

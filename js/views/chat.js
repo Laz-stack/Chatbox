@@ -2,7 +2,7 @@ import { savePersona } from '../store.js';
 import { S, castOf, storyName, character, getChat, saveChat, saveCharacter, saveSettings, connectionFor, textOf, named, resetChat, recordFare, meter, interchange, isInterchangeId, chatsFor, startNewChat, deleteChat, setHidden, blankCharacter, saveInterchange, personaFor, personaById, newChat, branchChat, saveImages } from '../store.js';
 import { textSheet } from './text.js';
 import { replyStyleSheet } from './settings.js';
-import { textPrefs } from '../textstyle.js';
+import { textPrefs, nameColor } from '../textstyle.js';
 import { STEER, parseScene, splitTurn, hasCastLines, resolveSpeaker, passengersIn, demoScene } from '../scene.js';
 import { complete, PROVIDERS } from '../providers.js';
 import { buildPrompt } from '../prompt.js';
@@ -266,7 +266,7 @@ export async function chatView(id, focusId = null) {
       }
       // The character's own tag name, when set in the editor (Name on speech tags).
       if (who === ch && ch.tagName?.trim()) who = { ...ch, name: ch.tagName.trim() };
-      const col = who.line?.color || '#2EAA67';
+      const col = r.kind === 'you' ? who.line?.color || '#2EAA67' : nameColor(who);
       if (noTag) return `<div class="scn-b notag${r.kind === 'you' ? ' you' : ''}" data-k="${r.kind === 'you' ? 'you' : 'l:' + who.id}" style="--c:${col};--ink:${inkOn(col)}"><div class="scn-t">${r.kind === 'you' || by ? formatMessage(fillS(text, r.who)) : enhance(formatMessage(showAi(fillS(text, r.who))))}</div></div>`;
       return `<div class="scn-b${r.kind === 'you' ? ' you' : ''}" data-k="${r.kind === 'you' ? 'you' : 'l:' + who.id}" style="--c:${col};--ink:${inkOn(col)}"><span class="scn-tag">${avatarBullet(who, 20)}${esc(r.kind === 'you' ? 'You' : who.name)}${by ? '<small>· you wrote</small>' : ''}</span><div class="scn-t">${r.kind === 'you' || by ? formatMessage(fillS(text, r.who)) : enhance(formatMessage(showAi(fillS(text, r.who))))}</div></div>`;
     }
@@ -360,7 +360,7 @@ export async function chatView(id, focusId = null) {
       const star = m.star || m.quotes?.length ? `<span class="star-b" title="In your Logbook">${icon('star', 13)}</span>` : '';
       if (m.role === 'user') return `<div class="${cls}${m.star ? ' starred' : ''}" data-i="${i}" data-id="${m.id}"><div class="bubble" tabindex="0" aria-describedby="msgHint">${ribbon(m)}${formatMessage(named(textOf(m), ch, 'you', me()))}${star}</div></div>${rollHTML(m, enter)}`;
       const sp = speakerOf(m);
-      const tag = ix ? `<span class="spk-tag" style="--c:${sp.line?.color || '#2EAA67'};--ink:${inkOn(sp.line?.color || '#2EAA67')}">${esc(sp.name)}</span>` : '';
+      const tag = ix ? `<span class="spk-tag" style="--c:${nameColor(sp)};--ink:${inkOn(nameColor(sp))}">${esc(sp.name)}</span>` : '';
       return `<div class="${cls}${m.star || m.quotes?.length ? ' starred' : ''}" data-i="${i}" data-id="${m.id}">${avatarTile(sp, 30, { expr: m.mood || 'happy', radius: 10, cls: 'msg-av' })}<div class="msg-col">${thinkHTML(m)}<div class="bubble" tabindex="0" aria-describedby="msgHint">${ribbon(m)}${tag}${(() => {
         const cx = choicesOf(m);
         const nm = (t) => named(t, sp, 'you', me());
@@ -2498,6 +2498,15 @@ export async function chatView(id, focusId = null) {
       if (!busy && e.detail?.chatIds?.includes(chat.id) && !input.value.trim()) renderAll(), toBottom();
     };
     addEventListener('chatbox-synced', onSynced);
+    // Reading text › Name colours: repaint names and tags in place.
+    const onNames = () => {
+      if (destroyed) return removeEventListener('chatbox-names', onNames);
+      if (busy) return;
+      const y = log.scrollTop;
+      renderAll();
+      log.scrollTop = y;
+    };
+    addEventListener('chatbox-names', onNames);
 
     // While you were away: after a long gap, the character sometimes leaves you a message first.
     // Checked once per absence; about three times in five it happens.
