@@ -17,8 +17,11 @@ const SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
 const API = 'https://www.googleapis.com/drive/v3/files';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
 const TOMB_DAYS = 60;
-// Settings that belong to this device, not to you.
-const LOCAL_SETTINGS = ['deviceId', 'sync', 'activeConnectionId', 'helperId', 'lastBackup', 'includeKeysInBackup', 'seenChatTips', 'migrated', 'diaryWho', 'personaId', 'voiceURI', 'readAloud', 'text', 'sound', 'nightmare'];
+// Settings that belong to this device, not to you: its Sync sign-in and name, one-time markers,
+// its own backup reminder and first-chat tip, the voices this browser has, and Nightmare (an app on
+// this phone, with its own address, token and models). Everything else follows you: reading text,
+// sound, which connection and Helper you use, your persona, reply style, 18+ and the rest.
+const LOCAL_SETTINGS = ['deviceId', 'sync', 'migrated', 'lastBackup', 'seenChatTips', 'voiceURI', 'nightmare'];
 
 export const syncPrefs = () => ({ clientId: '', auto: true, keys: true, ...(S.settings.sync || {}) }); // keys on: a new device needs no keys typed again (turn off on the Sync page)
 export const syncOn = () => !!S.settings.sync?.connected;
@@ -268,6 +271,7 @@ async function apply(take, pics) {
     else if (i >= 0) into(arr[i], d);
     else arr.push(d);
   };
+  let prevPicks = null; // this device's picks, kept when the other device's point at something not here
   for (let [k, d] of take) {
     const [kind, ...rest] = k.split(':');
     const id = rest.join(':');
@@ -322,9 +326,16 @@ async function apply(take, pics) {
       dirty.add('fares');
     } else if (kind === 'settings' && d) {
       const keep = Object.fromEntries(LOCAL_SETTINGS.filter((x) => x in S.settings).map((x) => [x, S.settings[x]]));
+      prevPicks ||= { activeConnectionId: S.settings.activeConnectionId, helperId: S.settings.helperId, personaId: S.settings.personaId };
       S.settings = { ...S.settings, ...d, ...keep };
       dirty.add('settings');
     }
+  }
+  // A connection, Helper or persona picked on the other device that isn't on this one (yet): keep this one's.
+  if (prevPicks) {
+    if (S.settings.activeConnectionId && !S.connections.some((c) => c.id === S.settings.activeConnectionId)) S.settings.activeConnectionId = prevPicks.activeConnectionId;
+    if (S.settings.helperId && !S.connections.some((c) => c.id === S.settings.helperId)) S.settings.helperId = prevPicks.helperId;
+    if (S.settings.personaId && !S.personas.some((p) => p.id === S.settings.personaId)) S.settings.personaId = prevPicks.personaId;
   }
   await Promise.all([
     dirty.has('char') && saveCharacters(),
