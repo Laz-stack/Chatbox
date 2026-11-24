@@ -4,6 +4,8 @@
 import { S } from './store.js';
 import { esc } from './util.js';
 import { topbar, icon } from './ui.js';
+import { ttsSupported } from './tts.js';
+import { sttSupported } from './voice.js';
 
 // Where things live, in the words the app uses.
 const DEPOT = 'Depot';
@@ -30,7 +32,7 @@ export const INDEX = [
   { kind: 'set', t: 'While you were away', where: `${DEPOT} › Chat`, ic: 'bell', w: 'away notes gap message', go: { row: 'tAway' } },
   { kind: 'set', t: 'Recap when you come back', where: `${DEPOT} › Chat`, ic: 'restart', w: 'previously recap return', go: { row: 'tRecap' } },
   { kind: 'set', t: 'Token counter', where: `${DEPOT} › Chat`, ic: 'layers', w: 'tokens count context header', go: { row: 'tCounter' } },
-  { kind: 'set', t: 'Read replies aloud', where: `${DEPOT} › Chat`, ic: 'speaker', w: 'tts speech voice read aloud', go: { row: 'tRead' } },
+  { kind: 'set', t: 'Read replies aloud', where: `${DEPOT} › Chat`, ic: 'speaker', w: 'tts speech voice read aloud', go: { row: 'tRead' }, needs: 'tts' },
   { kind: 'set', t: '18+ content', where: `${DEPOT} › Content`, ic: 'shield', w: 'mature explicit adult nsfw', go: { row: 'tAdult' } },
   { kind: 'set', t: 'Scenes', where: `${DEPOT} › Data`, ic: 'layers', w: 'pictures gallery painted images', go: '#/scenes' },
   { kind: 'set', t: 'Sync', where: `${DEPOT} › Data`, ic: 'restart', w: 'google drive devices phone pc api keys sign in', go: '#/sync' },
@@ -54,8 +56,8 @@ export const INDEX = [
   { kind: 'chat', t: 'Chapters', where: CHAT, ic: 'book', w: 'chapter arcs' },
   { kind: 'chat', t: 'Recap so far', where: CHAT, ic: 'restart', w: 'previously summary recap' },
   { kind: 'chat', t: 'Story time', where: CHAT, ic: 'clock', w: 'clock time of day weather' },
-  { kind: 'chat', t: 'Voice mode (hands-free)', where: CHAT, ic: 'mic', w: 'talk speak microphone' },
-  { kind: 'chat', t: 'Character’s voice', where: CHAT, ic: 'speaker', w: 'voice read aloud tts' },
+  { kind: 'chat', t: 'Voice mode (hands-free)', where: CHAT, ic: 'mic', w: 'talk speak microphone', needs: 'both' },
+  { kind: 'chat', t: 'Character’s voice', where: CHAT, ic: 'speaker', w: 'voice read aloud tts', needs: 'tts' },
   { kind: 'chat', t: 'Find in this chat', where: CHAT, ic: 'search', w: 'search messages find' },
   { kind: 'chat', t: 'Bookmarks', where: CHAT, ic: 'bookmark', w: 'saved places marks' },
   { kind: 'chat', t: 'Window (scene picture)', where: CHAT, ic: 'image', w: 'background station sign picture top' },
@@ -68,7 +70,7 @@ export const INDEX = [
   { kind: 'chat', t: 'Star a line', where: PRESS, ic: 'star', w: 'star favourite logbook quote' },
   { kind: 'chat', t: 'Pin to notes', where: PRESS, ic: 'file', w: 'pin note remember' },
   { kind: 'chat', t: 'Branch from here', where: PRESS, ic: 'branch', w: 'branch copy new chat from message' },
-  { kind: 'chat', t: 'Other versions of a reply', where: 'Swipe a reply sideways', ic: 'layers', w: 'swipe alternate regenerate versions compare' },
+  { kind: 'chat', t: 'Other versions of a reply', where: 'Swipe the latest reply sideways, or the ‹ › arrows under a reply', ic: 'layers', w: 'swipe alternate regenerate versions compare' },
 ];
 
 export const GUIDES = [
@@ -81,7 +83,7 @@ export const GUIDES = [
   {
     id: 'chats', t: 'Chats and messages', sub: 'Long-press, versions, rewrite', ic: 'talk', y: 'What you can do in a chat',
     p: 'Most of what you can do to a message is behind a long-press, and most of what you can do to a chat is behind ⋯ at the top.',
-    steps: ['Long-press a reply for its menu: edit, copy, read aloud, star, pin, rewrite, picture this, mark it on the story, branch or delete.', 'Swipe a reply sideways to see other versions; Regenerate under it writes a new one.', 'Continue lets the character keep going; Write for me writes your next line.', 'Tap ⋯ for the story tools, memory, voice, reply style and export.'],
+    steps: ['Long-press a reply for its menu: edit, copy, read aloud, star, pin, rewrite, picture this, mark it on the story, branch or delete.', 'Swipe the latest reply sideways (or use the ‹ › arrows under a reply) to see other versions; Regenerate writes a new one.', 'Continue lets the character keep going; Write for me writes your next line.', 'Tap ⋯ for the story tools, memory, voice, reply style and export.'],
   },
   {
     id: 'pictures', t: 'Pictures', sub: 'Perchance, Nightmare, OpenRouter', ic: 'image', y: 'Painting a scene',
@@ -109,12 +111,14 @@ export const GUIDES = [
   {
     id: 'fixes', t: 'When something goes wrong', sub: 'Fixes for common problems', ic: 'shield', y: 'Quick fixes',
     p: 'The most common problems and what to do.',
-    steps: ['A change doesn’t show: fully reload the page, or open it with ?v=2 at the end of the address.', 'Couldn’t reach Nightmare: open the Nightmare app and check both Advanced switches and the token.', 'A model declined to write a scene: pick a less strict model for the chat or for the Helper (Depot › Connections), or write the prompt yourself with Show the prompt first.', 'Empty replies: some models only think. Pick another model, or give it more room in the connection.', 'Storage full: delete pictures you don’t need in Depot › Scenes, or make a backup first.'],
+    steps: ['A change doesn’t show: fully reload the page, or open it with ?v=2 at the end of the address.', 'Couldn’t reach Nightmare: open the Nightmare app and check both Advanced switches and the token.', 'A model declined to write a scene: pick a less strict model for the chat or for the Helper (Depot › Connections), or write the prompt yourself with Show the prompt first.', 'Empty replies: some models only think. Pick another model, or raise Max reply tokens in the connection.', 'Storage full: delete pictures you don’t need in Depot › Scenes, or make a backup first.'],
   },
 ];
 
 // Every entry a search can show: the index plus the guides.
-const ALL = [...INDEX, ...GUIDES.map((g) => ({ kind: 'guide', t: g.t, where: 'Guide', ic: g.ic, w: `${g.sub} ${g.p} ${g.steps.join(' ')}`, go: `#/help/${g.id}` }))];
+// Things this browser can't do (speech) aren't offered.
+const can = (e) => !e.needs || (e.needs === 'tts' ? ttsSupported : e.needs === 'both' ? ttsSupported && sttSupported : true);
+const ALL = [...INDEX.filter(can), ...GUIDES.map((g) => ({ kind: 'guide', t: g.t, where: 'Guide', ic: g.ic, w: `${g.sub} ${g.p} ${g.steps.join(' ')}`, go: `#/help/${g.id}` }))];
 const norm = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '');
 
 // Settings, chat features and guides matching every word of q, best first.
@@ -136,16 +140,22 @@ export function findHelp(q) {
 // The chat you were in last (for "in a chat" results).
 export const latestChatId = () => [...S.chats.values()].filter((c) => c.messages?.length).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0]?.id || null;
 
-// Highlight what was searched for.
+// Highlight what was searched for: find the spans on the plain text, then escape and wrap in one pass.
 export function mark(text, q) {
-  let h = esc(text);
+  const low = norm(text);
+  const on = new Array(text.length).fill(false);
   for (const w of norm(q).split(/\s+/).filter((x) => x.length > 1)) {
-    const i = norm(text).indexOf(w);
-    if (i < 0) continue;
-    const raw = esc(text.slice(i, i + w.length));
-    h = h.replace(raw, `<mark>${raw}</mark>`);
+    const i = low.indexOf(w);
+    if (i >= 0) for (let k = i; k < i + w.length && k < text.length; k++) on[k] = true;
   }
-  return h;
+  let out = '';
+  for (let i = 0; i < text.length; ) {
+    let j = i;
+    while (j < text.length && on[j] === on[i]) j++;
+    out += on[i] ? `<mark>${esc(text.slice(i, j))}</mark>` : esc(text.slice(i, j));
+    i = j;
+  }
+  return out;
 }
 
 export function helpView(id) {

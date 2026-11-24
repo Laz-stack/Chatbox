@@ -74,30 +74,52 @@ export function replyStyleSheet(onDone) {
 // Depot search (owner pick v46 A): every setting and feature, wherever it lives, with how to get there.
 function findHTML(q) {
   const hits = findHelp(q);
-  if (!hits.length) return `<p class="search-none">Nothing matches “${esc(q)}”. Try another word, or look in Help below.</p>`;
+  if (!hits.length) return `<p class="search-none">Nothing matches “${esc(q)}”. Try another word, or clear the search to see the Help guides.</p>`;
   const chat = latestChatId();
   const one = (e) => {
-    const sub = `<b>${esc(e.where)}</b>`;
+    const now = liveVal(e);
+    const sub = `<b>${esc(e.where)}</b>${now ? ` · ${esc(now)}` : ''}`;
     const k = hits.indexOf(e);
     if (typeof e.go === 'string') return row({ href: e.go, ic: e.ic, title: mark(e.t, q), sub });
-    if (typeof e.go === 'function' && chat) return row({ href: e.go(encodeURIComponent(chat)), ic: e.ic, title: mark(e.t, q), sub: `${sub} · opens your latest chat’s` });
+    if (typeof e.go === 'function' && chat) return row({ href: e.go(encodeURIComponent(chat)), ic: e.ic, title: mark(e.t, q), sub: `${sub} · opens in your latest chat` });
     return `<button type="button" class="row press" data-hit="${k}"><span class="row-ic" style="background:var(--plate2);color:var(--cream)">${icon(e.ic, 19)}</span><span class="row-tx"><span class="row-t">${mark(e.t, q)}</span><span class="row-s">${sub}</span></span><span class="row-chev">${icon('chev', 18)}</span></button>`;
   };
   const part = (name, list) => (list.length ? `<h2 class="sec">${name}</h2>${group(...list.map(one))}` : '');
   return part('Settings', hits.filter((e) => e.kind === 'set')) + part('In a chat', hits.filter((e) => e.kind === 'chat')) + part('Help', hits.filter((e) => e.kind === 'guide'));
 }
+// What a Depot setting is set to now, shown after where it lives (as on its own row).
+const onOff = (v) => (v ? 'On' : 'Off');
+function liveVal(e) {
+  const r = e.go?.row;
+  if (r === 'dimRow') return dimSummary();
+  if (r === 'styleRow') return styleSummary();
+  if (r === 'tAuto') return onOff(S.settings.autoSummary);
+  if (r === 'tAway') return onOff(S.settings.awayNotes !== false);
+  if (r === 'tRecap') return onOff(S.settings.recaps !== false);
+  if (r === 'tCounter') return onOff(S.settings.showCounter);
+  if (r === 'tRead') return onOff(S.settings.readAloud);
+  if (r === 'tAdult') return onOff(S.settings.mature);
+  if (e.go === '#/text') return textSummary();
+  return '';
+}
 function bindFind(root) {
   const input = root.querySelector('#dq');
   const box = root.querySelector('#dFind');
   const body = root.querySelector('#dBody');
+  const count = root.querySelector('#dCount');
+  const clear = root.querySelector('#dClear');
   let hits = [];
   const show = () => {
     const q = input.value.trim();
     box.hidden = !q;
     body.hidden = !!q;
+    clear.hidden = !q;
     hits = q ? findHelp(q) : [];
     box.innerHTML = q ? findHTML(q) : '';
+    // One short line for screen readers instead of the whole list on every keystroke.
+    count.textContent = !q ? '' : hits.length ? `${hits.length} result${hits.length === 1 ? '' : 's'} for ${q}` : `Nothing matches ${q}`;
   };
+  clear.addEventListener('click', () => ((input.value = ''), show(), input.focus()));
   input.addEventListener('input', show);
   input.addEventListener('keydown', (e) => e.key === 'Escape' && input.value && ((input.value = ''), show()));
   box.addEventListener('click', (e) => {
@@ -115,8 +137,9 @@ function bindFind(root) {
       rowEl.scrollIntoView({ block: 'center' });
       rowEl.classList.add('d-here');
       setTimeout(() => rowEl.classList.remove('d-here'), 1600);
+      // Focus first, so a sheet it opens hands focus back here when it closes.
+      el.focus({ preventScroll: true });
       if (el.matches('button.row')) el.click();
-      else el.focus({ preventScroll: true });
       return;
     }
     // In a chat: say where it is (no chat yet, or a menu item with no screen of its own).
@@ -132,8 +155,9 @@ export function settingsView() {
   const v = ttsSupported ? voices().find((x) => x.voiceURI === S.settings.voiceURI) : null;
   const html = `<div class="screen">
     ${title2('Depot', 'Your setup')}
-    <label class="search">${icon('search', 20)}<input id="dq" type="search" placeholder="Find a setting or feature" aria-label="Find a setting or feature" autocomplete="off" enterkeyhint="search"></label>
-    <div id="dFind" class="d-find" hidden aria-live="polite"></div>
+    <label class="search d-search">${icon('search', 20)}<input id="dq" type="search" placeholder="Find a setting or feature" aria-label="Find a setting or feature" autocomplete="off" enterkeyhint="search"><button type="button" class="d-clear press" id="dClear" aria-label="Clear search" hidden>${icon('x', 12)}</button></label>
+    <p class="vh" id="dCount" role="status"></p>
+    <div id="dFind" class="d-find" hidden></div>
     <div id="dBody">
     <a class="rider press" href="#/persona" style="margin-top:16px">${avatarTile(S.persona, 62, { radius: 18, rot: -3 })}<span class="nm">${esc(S.persona.name || 'You')}<small>${S.personas.length > 1 ? `Default · ${S.personas.length} personas` : 'Your persona in every chat'}</small></span>${bullet(arrow(20, '#ECECEC'), '#0A0A0A', '#ECECEC', 44)}</a>
     <h2 class="sec">AI</h2>
