@@ -121,6 +121,7 @@ export function datacatView() {
       const name = nameOf(m);
       const blob = new Blob([d.png], { type: 'image/png' });
       const file = new File([blob], `${name.replace(/[^\p{L}\p{N} _-]+/gu, '').trim().slice(0, 60) || 'character'}.png`, { type: 'image/png' });
+      file.cardTitle = name; // the title as Datacat shows it, kept for the character's name
       tray.push({ id, name, file, url: URL.createObjectURL(blob) });
       paint(true);
       ack(d.requestId, 'ok', `Added to Chatbox. ${tray.length} waiting for review.`);
