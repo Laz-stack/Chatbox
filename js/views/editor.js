@@ -1,7 +1,7 @@
 import { S, character, blankCharacter, takeDraft, saveCharacter, deleteCharacter, setHidden, getChat, connection, LINE_COLORS, newChat, saveChat } from '../store.js';
 import { ttsSupported, voices } from '../tts.js';
 import { voiceSheet } from './voicesheet.js';
-import { esc, resizeImage, download, slug, motion } from '../util.js';
+import { esc, resizeImage, originalImage, download, slug, motion } from '../util.js';
 import { avatarTile, avatarSVG, PRESETS, PRESET_KEYS, EXPRESSIONS } from '../avatar.js';
 import { windowSheet, soundsLikeName } from '../scenepicker.js';
 import { exportCardPng, exportCardJson } from '../cards.js';
@@ -182,7 +182,7 @@ export function editorView(id) {
             const f = e.target.files[0];
             if (!f) return;
             try {
-              d.avatarImage = await resizeImage(f, 1536, { area: true, quality: 0.95 });
+              d.avatarImage = await originalImage(f);
               paintAv();
               close();
             } catch {

@@ -267,6 +267,36 @@ export function rng(seed) {
 }
 
 // Shrink an uploaded image so the browser database stays small.
+// A character picture exactly as it came: no resizing, no re-compression. A PNG card loses only
+// its text chunks (the character data hidden inside), so the pixels are the original's. Only a
+// picture over 12 MB is made smaller (at near-lossless quality).
+export async function originalImage(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const png = bytes.length > 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+  let out = bytes;
+  let type = file.type && /^image\//.test(file.type) ? file.type : 'image/png';
+  if (png) {
+    type = 'image/png';
+    const keep = [bytes.subarray(0, 8)];
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    for (let i = 8; i + 12 <= bytes.length; ) {
+      const len = dv.getUint32(i);
+      const kind = String.fromCharCode(bytes[i + 4], bytes[i + 5], bytes[i + 6], bytes[i + 7]);
+      const end = i + 12 + len;
+      if (end > bytes.length) break;
+      if (!['tEXt', 'zTXt', 'iTXt'].includes(kind)) keep.push(bytes.subarray(i, end));
+      i = end;
+      if (kind === 'IEND') break;
+    }
+    const n = keep.reduce((a, k) => a + k.length, 0);
+    out = new Uint8Array(n);
+    let o = 0;
+    for (const k of keep) out.set(k, o), (o += k.length);
+  }
+  if (out.length > 12e6) return resizeImage(file, 2048, { area: true, quality: 0.96 });
+  return fileToDataURL(new Blob([out], { type }));
+}
+
 // area: cap the picture's size by its area, not its long side, so a tall card (a long strip) keeps
 // enough width to look sharp; the long side is still capped at 4x max.
 export async function resizeImage(file, max = 512, { area = false, quality = 0.88 } = {}) {
