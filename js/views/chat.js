@@ -27,7 +27,7 @@ import { exportCardPng } from '../cards.js';
 import { chatSound, silence, signal, ambienceNow, musicPlaying } from '../sound.js';
 import { soundSheet } from './soundsheet.js';
 import { bindMarkButton } from '../markpicker.js';
-import { helperComplete } from '../helper.js';
+import { helperComplete, helperJson } from '../helper.js';
 import { extractJson } from '../blueprint.js';
 import { ibtn, avatarBullet, icon, arrow, openMenu, openSheet, toast, clearToasts, confirmSheet, autosize, reel, groupAvatar, toggleRow, bindSwitch, fitPics } from '../ui.js';
 
@@ -255,8 +255,19 @@ export async function chatView(id, focusId = null) {
       if (r.kind === 'narr') return `<p class="scn-narr" data-k="narr">${enhance(formatMessage(showAi(fillS(text))))}</p>`;
       if (r.kind === 'passenger')
         return `<div class="scn-b pass" data-k="p:${esc(r.name.toLowerCase())}"><span class="scn-tag">${esc(r.name)}</span><div class="scn-t">${enhance(formatMessage(showAi(fillS(text))))}</div>${save ? `<button type="button" class="scn-save press" data-pass="${esc(r.name)}">${icon('plus', 14)}Save as a line</button>` : ''}</div>`;
-      const who = r.kind === 'you' ? youWho() : r.who;
+      let who = r.kind === 'you' ? youWho() : r.who;
+      // A One narrator card voices several people: tag the line with the one it names ("Circe says"),
+      // never with the card's title; no name found, no tag.
+      let noTag = !textPrefs().tags;
+      if (!ix && r.kind !== 'you' && !r.picked && who === ch && ch.narrator) {
+        const named = castOf(ch).filter((p) => p !== ch).find((p) => new RegExp(`\\b${p.name.split(/\s+/)[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(text));
+        if (named) who = named;
+        else if (!ch.tagName?.trim()) noTag = true;
+      }
+      // The character's own tag name, when set in the editor (Name on speech tags).
+      if (who === ch && ch.tagName?.trim()) who = { ...ch, name: ch.tagName.trim() };
       const col = who.line?.color || '#2EAA67';
+      if (noTag) return `<div class="scn-b notag${r.kind === 'you' ? ' you' : ''}" data-k="${r.kind === 'you' ? 'you' : 'l:' + who.id}" style="--c:${col};--ink:${inkOn(col)}"><div class="scn-t">${r.kind === 'you' || by ? formatMessage(fillS(text, r.who)) : enhance(formatMessage(showAi(fillS(text, r.who))))}</div></div>`;
       return `<div class="scn-b${r.kind === 'you' ? ' you' : ''}" data-k="${r.kind === 'you' ? 'you' : 'l:' + who.id}" style="--c:${col};--ink:${inkOn(col)}"><span class="scn-tag">${avatarBullet(who, 20)}${esc(r.kind === 'you' ? 'You' : who.name)}${by ? '<small>· you wrote</small>' : ''}</span><div class="scn-t">${r.kind === 'you' || by ? formatMessage(fillS(text, r.who)) : enhance(formatMessage(showAi(fillS(text, r.who))))}</div></div>`;
     }
     function sceneParts(text, m, streaming = false) {
@@ -264,10 +275,19 @@ export async function chatView(id, focusId = null) {
       // A Take-turns reply has one known speaker: split it into narration and that speaker's lines.
       // Unless the text itself names the cast ("Sina: …"), e.g. a reply first written in Take turns and regenerated as a scene.
       // One-on-one: everything with speech is the character's; plain prose is narration.
-      const blocks = !ix ? splitTurn(text, ch.name) : m?.speaker && !hasCastLines(text, ix.people) ? splitTurn(text, speakerOf(m).name) : parseScene(text, castNames());
+      const blocks = !ix ? splitTurn(text, ch.name, !!ch.narrator) : m?.speaker && !hasCastLines(text, ix.people) ? splitTurn(text, speakerOf(m).name) : parseScene(text, castNames());
+      // A One narrator card: who says each line, as the Helper read it after the reply (by line order).
+      const said = !ix && ch.narrator ? m?.lineWho?.[m.alt || 0] || null : null;
+      let sayN = 0;
       return blocks.map((b) => {
         if (b.kind === 'narr') return blockHTML({ kind: 'narr' }, b.text);
         const r = ix ? resolveSpeaker(b.name, ix.people, me().name) : { kind: 'line', who: ch };
+        if (said) {
+          const name = String(said[sayN] || '').trim().toLowerCase();
+          const p = name && castOf(ch).find((x) => x !== ch && (x.name.toLowerCase() === name || x.name.split(/\s+/)[0].toLowerCase() === name.split(/\s+/)[0]));
+          if (p) (r.who = p), (r.picked = true);
+        }
+        if (!ix) sayN++;
         let save = false;
         if (r.kind === 'passenger' && m && !streaming) {
           const key = r.name.toLowerCase();
@@ -409,6 +429,26 @@ export async function chatView(id, focusId = null) {
       showMark();
       await saveChat(chat, false);
       toast('Place marker cleared', { action: 'Undo', onAction: async () => ((chat.placeMark = was), showMark(), await saveChat(chat, false)) });
+    }
+    // A One narrator card: the Helper reads a reply and says who speaks each line, so each speech tag
+    // shows that person (own name and colour). Kept on the message per version; nothing changes the text.
+    async function labelSpeakers(i) {
+      const m = chat.messages[i];
+      if (!m || m.role !== 'assistant') return;
+      const lines = splitTurn(textOf(m), ch.name, true).filter((b) => b.kind !== 'narr');
+      if (!lines.length) return;
+      const people = castOf(ch).filter((p) => p !== ch);
+      const ask =
+        `Cast: ${people.map((p) => p.name).join(', ')}. Below is one reply of a story, then its spoken lines, numbered. ` +
+        `For each numbered line, who says the words in quotes? Use a cast name exactly as written above, or "?" when it isn't clear. ` +
+        `Reply {"who":["Name", ...]} with one entry per line, in order.`;
+      const body = `Reply:\n${textOf(m).slice(0, 6000)}\n\nLines:\n${lines.map((b, k) => `${k + 1}. ${b.text.replace(/\s+/g, ' ').slice(0, 300)}`).join('\n')}`;
+      const j = await helperJson(connectionFor(ch), 'speakers', { system: 'You label who speaks each line of a story. Reply with ONE JSON object and nothing else.', messages: [{ role: 'user', content: body + '\n\n' + ask }], stream: false, maxTokens: 600, temperature: 0.1 });
+      const who = Array.isArray(j?.who) ? j.who.map((x) => String(x || '').slice(0, 60)) : null;
+      if (!who || destroyed || chat.messages[i] !== m) return;
+      (m.lineWho ||= {})[m.alt || 0] = who;
+      await saveChat(chat, false);
+      rerenderMsg(i);
     }
     function rerenderMsg(i) {
       const el = log.querySelector(`.msg[data-i="${i}"]`);
@@ -1104,6 +1144,7 @@ export async function chatView(id, focusId = null) {
       else if (text.trim()) showTip();
       await save();
       toBottom(true);
+      if (!error && text.trim() && !ix && ch.narrator && castOf(ch).length > 1) labelSpeakers(idx).catch(() => {});
 
       // Long chats: condense older messages in the background.
       if (!error && S.settings.autoSummary && shouldSummarize(chat, conn)) {

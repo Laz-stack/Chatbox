@@ -6,7 +6,7 @@ import { S, connection, recordJob, meter } from './store.js';
 import { estimateTokens } from './util.js';
 import { extractJson } from './blueprint.js';
 
-export const JOBS = { track: 'Story tracking', summary: 'Summaries', diary: 'Diaries', enhance: 'Lorebook Enhance', builder: 'Character builder', import: 'Card import', moves: 'Suggested moves', scene: 'Scene prompts', map: 'World map', picread: 'Character from a picture', recap: 'Recaps', next: 'Who speaks next' };
+export const JOBS = { track: 'Story tracking', summary: 'Summaries', diary: 'Diaries', enhance: 'Lorebook Enhance', builder: 'Character builder', import: 'Card import', moves: 'Suggested moves', scene: 'Scene prompts', map: 'World map', picread: 'Character from a picture', recap: 'Recaps', next: 'Who speaks next', speakers: 'Who says each line' };
 // Creative writing the user reads directly; can stay on the main model (Helper › "Diaries and character builder too").
 const CREATIVE = new Set(['diary', 'builder']);
 

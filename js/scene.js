@@ -97,14 +97,15 @@ function attribute(blocks, cast) {
 
 // A reply written for one known speaker (Take turns, or older messages): paragraphs of plain prose
 // are narration; paragraphs with speech ("…") or *actions* are that speaker's. Same block shape as parseScene.
-export function splitTurn(text, name) {
+// each: every spoken paragraph is its own block (a One narrator card, where each may be someone else).
+export function splitTurn(text, name, each = false) {
   const blocks = [];
   for (const para of (text || '').split(/\n\s*\n/)) {
     const t = para.trim();
     if (!t) continue;
     const said = /["“”]|`[^`\n]+`/.test(t);
     const prev = blocks[blocks.length - 1];
-    if (said && prev?.kind === 'say') prev.text += '\n\n' + t;
+    if (said && !each && prev?.kind === 'say') prev.text += '\n\n' + t;
     else blocks.push(said ? { kind: 'say', name, text: t } : { kind: 'narr', text: t });
   }
   return blocks;

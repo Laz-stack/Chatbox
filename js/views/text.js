@@ -120,6 +120,7 @@ function coloursTab(t) {
 function helpTab(t) {
   return (
     tog('choices', 'Choices as cards', 'Numbered options at the end of a reply become cards. Tap one to pick it, then Send.', t.choices) +
+    tog('tags', 'Name tag on speech', 'A tag with the speaker’s name over each line they say. For One narrator cards it shows who the Helper says is talking (or whoever the line names).', t.tags) +
     tog('names', 'Names in colour', 'The first time a character is named in a paragraph, the name wears their line colour.', t.names) +
     tog('marker', 'Place marker', 'Tap a paragraph of a reply to mark your place. Long-press it to clear it.', t.marker) +
     (t.marker
