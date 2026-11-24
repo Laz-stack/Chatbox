@@ -60,6 +60,7 @@ function fontTab(t) {
   return (
     range(t, 'size', ['<span style="font-size:13px">A</span>', '<span style="font-size:21px">A</span>'], [1, 7, 14]) +
     range(t, 'bold', ['−', '+'], [0, 5]) +
+    tog('upright', 'Upright narration', 'Narration in normal letters instead of italics; its colour still tells it apart', t.upright) +
     lbl('Font', esc(FONTS[t.font]?.short || FONTS[t.font]?.name || '')) +
     groups
       .map(
@@ -137,8 +138,6 @@ function coloursTab(t) {
     swatchRow('dialogue', 'Speech colour', DIALOGUE, t.dialogue, (c) => c.dark) +
     lbl('Narration colour', 'on dark pages') +
     swatchRow('narration', 'Narration colour', NARRATION, t.narration, (c) => c.dark) +
-    lbl('Narration') +
-    tog('upright', 'Upright narration', 'Normal letters instead of italics; its colour still tells it apart', t.upright) +
     lbl('Character’s bubble', 'Bubbles layout') +
     swatchRow('bubble', 'Character’s bubble', BUBBLES, t.bubble, (c) => c.bg) +
     lbl('Your bubble') +
