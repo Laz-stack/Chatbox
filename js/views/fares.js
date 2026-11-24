@@ -3,7 +3,7 @@
 // Swipe the top receipt away (or tap a chip) to bring the next one up.
 // Tokens are estimates (about four characters each); dollars use the prices set on each connection,
 // or what OpenRouter reported for a picture.
-import { S, saveSettings, monthKey, costOf, character, connection, interchange } from '../store.js';
+import { S, saveSettings, monthKey, faresMonth, costOf, character, connection, interchange } from '../store.js';
 import { picPrefs } from '../pictures.js';
 import { JOBS } from '../helper.js';
 import { esc, fmtNum, inkOn, reducedMotion, EASE_OUT, flyFrames, takeOver, snapBack } from '../util.js';
@@ -19,7 +19,8 @@ let lastTop = 0; // the paper on top, kept while you move around the app
 
 export function faresView() {
   const now = new Date();
-  const mo = S.fares.months[monthKey(now)] || { conns: {}, lines: {} };
+  // This month from every device you sync (each sends its own; they're added up here).
+  const mo = faresMonth(monthKey(now)) || { conns: {}, lines: {} };
   const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
   const daysLeft = Math.max(1, Math.ceil((lastDay - now) / 864e5) + 1);
   const monthName = now.toLocaleDateString([], { month: 'short' });

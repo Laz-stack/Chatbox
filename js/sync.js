@@ -9,7 +9,7 @@
 // "tombstones" so a deleted chat doesn't come back. Pictures are their own small files next to the
 // main one (named by their content), uploaded once and downloaded only when this device lacks them.
 import * as db from './db.js';
-import { S, loadedOk, saveSettings, saveCharacters, saveConnections, savePersona, saveInterchanges, saveLore, saveImages } from './store.js';
+import { S, loadedOk, deviceId, saveFares, saveSettings, saveCharacters, saveConnections, savePersona, saveInterchanges, saveLore, saveImages } from './store.js';
 import { okId, cleanImg, cleanCharacter, cleanPersona, cleanInterchange, cleanLore, cleanChat } from './safe.js';
 
 const FILE = 'chatbox-sync.json';
@@ -18,9 +18,9 @@ const API = 'https://www.googleapis.com/drive/v3/files';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
 const TOMB_DAYS = 60;
 // Settings that belong to this device, not to you.
-const LOCAL_SETTINGS = ['sync', 'activeConnectionId', 'helperId', 'lastBackup', 'includeKeysInBackup', 'seenChatTips', 'migrated', 'diaryWho', 'personaId', 'voiceURI', 'readAloud', 'text', 'sound', 'nightmare'];
+const LOCAL_SETTINGS = ['deviceId', 'sync', 'activeConnectionId', 'helperId', 'lastBackup', 'includeKeysInBackup', 'seenChatTips', 'migrated', 'diaryWho', 'personaId', 'voiceURI', 'readAloud', 'text', 'sound', 'nightmare'];
 
-export const syncPrefs = () => ({ clientId: '', auto: true, keys: false, ...(S.settings.sync || {}) });
+export const syncPrefs = () => ({ clientId: '', auto: true, keys: true, ...(S.settings.sync || {}) }); // keys on: a new device needs no keys typed again (turn off on the Sync page)
 export const syncOn = () => !!S.settings.sync?.connected;
 
 // ---------- sign-in ----------
@@ -164,6 +164,10 @@ function collect(keys) {
   S.connections.forEach((c) => out.set('conn:' + c.id, keys ? c : { ...c, apiKey: '' }));
   // A picture's record is only its content's name; the picture itself is its own file.
   Object.entries(S.images || {}).forEach(([k, v]) => out.set('img:' + k, { ref: picRef(k, v) }));
+  // Fares: each device's months under its own name, so no device overwrites another's counts.
+  // Other devices' records are kept as they came (unchanged here, so never taken as deleted).
+  if (Object.keys(S.fares?.months || {}).length) out.set('fares:' + deviceId(), S.fares.months);
+  for (const [id, m] of Object.entries(S.fares?.others || {})) if (id !== deviceId() && m) out.set('fares:' + id, m);
   out.set('settings:main', settingsPart());
   return out;
 }
@@ -269,7 +273,7 @@ async function apply(take, pics) {
     const id = rest.join(':');
     // Records from Drive are checked like a card or a backup: a usable id, safe colours and pictures.
     if (kind !== 'settings' && !okId(id)) continue;
-    if (d && typeof d === 'object' && kind !== 'img' && kind !== 'settings') d.id = id;
+    if (d && typeof d === 'object' && kind !== 'img' && kind !== 'settings' && kind !== 'fares') d.id = id;
     if (d && kind === 'char') cleanCharacter(d);
     else if (d && kind === 'persona') cleanPersona(d);
     else if (d && kind === 'ix') cleanInterchange(d);
@@ -310,6 +314,12 @@ async function apply(take, pics) {
         await db.set('chat:' + id, S.chats.get(id));
         (count.chatIds ||= []).push(id);
       }
+    } else if (kind === 'fares') {
+      if (id === deviceId()) continue; // this device's own: it already has them
+      S.fares.others ||= {};
+      if (d === null) delete S.fares.others[id];
+      else if (typeof d === 'object') S.fares.others[id] = d;
+      dirty.add('fares');
     } else if (kind === 'settings' && d) {
       const keep = Object.fromEntries(LOCAL_SETTINGS.filter((x) => x in S.settings).map((x) => [x, S.settings[x]]));
       S.settings = { ...S.settings, ...d, ...keep };
@@ -324,6 +334,7 @@ async function apply(take, pics) {
     dirty.has('conn') && saveConnections(),
     dirty.has('img') && saveImages(),
     dirty.has('settings') && saveSettings(),
+    dirty.has('fares') && saveFares(),
   ]);
   return count;
 }
@@ -391,7 +402,7 @@ export async function noteError(e) {
 export async function disconnect() {
   signOut();
   await db.del('syncmeta');
-  S.settings.sync = { clientId: syncPrefs().clientId, auto: true, keys: false };
+  S.settings.sync = { clientId: syncPrefs().clientId, auto: true, keys: true };
   await saveSettings();
 }
 
