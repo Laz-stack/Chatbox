@@ -59,6 +59,7 @@ const routes = [
   [/^#\/backup$/, () => backupView()],
   [/^#\/scenes$/, () => scenesView()],
   [/^#\/datacat$/, async () => (await view('datacat')).datacatView()],
+  [/^#\/help\/([a-z]+)$/, async (id) => (await import('./help.js')).helpView(id)],
 ];
 
 let current = null;
