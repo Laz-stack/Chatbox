@@ -8,13 +8,13 @@ import { clockLayer } from './clock.js';
 import { tiesLayer } from './ties.js';
 import { advLayer, rollNote, rollShort } from './adventure.js';
 import { mapLayer } from './worldmap.js';
-import { textOf, matchLore } from './store.js';
+import { textOf, matchLore, storyName } from './store.js';
 import { PROVIDERS } from './providers.js';
 import { compileSheet } from './blueprint.js';
 import { sceneSystem, STEER, turnAsScene, hasCastLines } from './scene.js';
 
 export const macro = (t, ch, persona) =>
-  (t || '').replace(/\{\{?\s*char\s*\}?\}|<\s*bot\s*>/gi, ch?.name || 'Character').replace(/\{\{?\s*user\s*\}?\}|<\s*user\s*>/gi, persona?.name?.trim() || 'the user');
+  (t || '').replace(/\{\{?\s*char\s*\}?\}|<\s*bot\s*>/gi, storyName(ch)).replace(/\{\{?\s*user\s*\}?\}|<\s*user\s*>/gi, persona?.name?.trim() || 'the user');
 
 // group: { people: [characters], scene: '', mode: 'turns' | 'scene', passengers } inside an Interchange.
 // In 'scene' mode (a Carriage) one reply narrates the whole scene and voices every character.
@@ -30,7 +30,7 @@ export function buildPrompt({ char, chat, conn, settings, persona, upto = null, 
   if (world.trim()) layers.push({ key: 'world', name: 'World', text: m(world) });
 
   // The Blueprint sheet (if filled) plus Extra notes; older characters are just their prompt text.
-  const personaText = [m(compileSheet(char)) || `You are ${char.name}.`, char.tagline ? `${char.name} in a few words: ${char.tagline}.` : '']
+  const personaText = [m(compileSheet(char)) || `You are ${storyName(char)}.`, char.tagline ? `${storyName(char)} in a few words: ${char.tagline}.` : '']
     .filter(Boolean)
     .join('\n');
   const isScene = group?.mode === 'scene';
@@ -43,7 +43,7 @@ export function buildPrompt({ char, chat, conn, settings, persona, upto = null, 
     groupText =
       `\n\nThis is a group scene (an Interchange). Also present: ${others.map((p) => p.name + (p.tagline ? ` (${p.tagline})` : '')).join('; ')}.` +
       (group.scene?.trim() ? `\nScene: ${m(group.scene)}` : '') +
-      `\nOther characters' lines arrive prefixed with their names. Write only ${char.name}'s next message. Never write dialogue or actions for ${others.map((p) => p.name).join(' or ')}, or for ${persona?.name?.trim() || 'the user'}.`;
+      `\nOther characters' lines arrive prefixed with their names. Write only ${storyName(char)}'s next message. Never write dialogue or actions for ${others.map((p) => p.name).join(' or ')}, or for ${persona?.name?.trim() || 'the user'}.`;
   }
   if (!isScene) layers.push({ key: 'persona', name: 'Character persona', text: personaText + groupText });
 
@@ -71,8 +71,8 @@ export function buildPrompt({ char, chat, conn, settings, persona, upto = null, 
     style.push('Formatting: wrap every action, thought and line of narration in *asterisks*, and put spoken words in "double quotes". Never leave narration or actions unmarked. Put shouted or forceful statements in `backticks`.'), remind.push('narration, actions and thoughts in *asterisks*, speech in "quotes"');
   if (rs.length === 'short') style.push('Keep each reply short: two to four sentences, under 60 words. This overrides any other length guidance above.'), remind.push('short, under 60 words');
   if (rs.length === 'long') style.push('Write long, rich replies: three to five paragraphs with sensory detail, body language and inner thoughts, about 250 to 400 words. This overrides any shorter length limit above.'), remind.push('long, 250 to 400 words');
-  if (rs.person === 'first' && !isScene) style.push(`Write ${char.name}'s actions and narration in first person ("I smile"), even if earlier messages use third person. This overrides other guidance above.`), remind.push('first person');
-  if (rs.person === 'third' && !isScene) style.push(`Write ${char.name}'s actions and narration in third person ("${char.name} smiles"), even if earlier messages use first person. This overrides other guidance above.`), remind.push('third person');
+  if (rs.person === 'first' && !isScene) style.push(`Write ${storyName(char)}'s actions and narration in first person ("I smile"), even if earlier messages use third person. This overrides other guidance above.`), remind.push('first person');
+  if (rs.person === 'third' && !isScene) style.push(`Write ${storyName(char)}'s actions and narration in third person ("${storyName(char)} smiles"), even if earlier messages use first person. This overrides other guidance above.`), remind.push('third person');
   if (style.length) layers.push({ key: 'style', name: 'Reply style', text: style.join('\n') });
 
   // Content rules (Depot › Content › 18+ content).

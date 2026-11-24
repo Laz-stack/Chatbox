@@ -593,8 +593,11 @@ export const textOf = (m) => (m ? m.alts[m.alt] ?? '' : '');
 // Fill {{char}} and {{user}} (any case, spaces allowed) with real names, for showing a message.
 // Messages keep the placeholders, so renaming yourself later still shows the new name.
 // {{char}} and {{user}}, and the spellings older cards use: {char}, {user}, <BOT>, <USER>.
+// The name a character goes by inside the story ({{char}}, "You are …"). A card keeps its original
+// title as its name on Lines; when the character inside is called something else, that's callAs.
+export const storyName = (c) => String(c?.callAs || '').trim() || c?.name || 'Character';
 export const named = (text, ch, userFallback = 'you', persona = S.persona) => {
-  const c = ch?.name || 'Character';
+  const c = storyName(ch);
   const u = persona?.name?.trim() || userFallback;
   return (text || '').replace(/\{\{?\s*char\s*\}?\}|<\s*bot\s*>/gi, c).replace(/\{\{?\s*user\s*\}?\}|<\s*user\s*>/gi, u);
 };

@@ -52,7 +52,8 @@ export function editorView(id) {
           <span id="heroBullet" style="position:absolute;left:-8px;top:-8px;pointer-events:none">${bullet(esc(d.line.letter || '?'), d.line.color, null, 40, 'box-shadow:0 0 0 4px var(--bg)')}</span>
         </div>
         <div class="stack" style="flex:1;min-width:0;gap:10px">
-          ${field('fName', 'Name', d.name, { ph: 'Their name', attrs: 'maxlength="60" autocomplete="off"' })}
+          ${field('fName', 'Name', d.name, { ph: 'Their name', attrs: 'maxlength="80" autocomplete="off"' })}
+          ${d.callAs ? field('fCall', 'Name in the story', d.callAs, { ph: 'What the story calls them', attrs: 'maxlength="60" autocomplete="off"' }) : ''}
           ${field('fTag', 'Tagline', d.tagline, { ph: 'A few words about them', attrs: 'maxlength="80" autocomplete="off"' })}
           ${field('fTags', 'Tags', (d.tags || []).join(', '), { ph: 'Female, Magical, Romance', attrs: 'maxlength="200" autocomplete="off"' })}
         </div>
@@ -121,6 +122,7 @@ export function editorView(id) {
     };
     count();
 
+    $('#fCall')?.addEventListener('input', (e) => (d.callAs = e.target.value));
     $('#fName').addEventListener('input', (e) => {
       d.name = e.target.value;
       if (autoLetter) {

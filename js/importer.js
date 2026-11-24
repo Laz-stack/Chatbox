@@ -109,7 +109,7 @@ async function splitByAI(conn, d, names) {
 }
 
 // Build the plan for one card. kind: 'single' | 'multi' (rules found sections) | 'unsure' (names, no sections).
-function planCard(json, image, sourceName) {
+function planCard(json, image, sourceName, cardTitle = '') {
   const d = cardData(json);
   const meta = json.metadata || {};
   const names = castNames(d, meta);
@@ -118,11 +118,12 @@ function planCard(json, image, sourceName) {
   const tags = [].concat(d.tags || []).map(str).filter(Boolean);
   const nsfw = !!meta.janitor_is_nsfw || tags.some((t) => /nsfw|18\+|explicit|smut|dead dove/i.test(t));
   const openings = [str(d.first_mes), ...[].concat(d.alternate_greetings || []).map(str)].filter((t) => t.trim());
-  const title = str(meta.janitor_character_name || '').trim() || str(d.name).trim();
+  // The card's own title: the one Datacat shows when it came from there, else the card's name.
+  const title = str(cardTitle).trim() || str(meta.janitor_character_name || '').trim() || str(d.name).trim();
   return {
     id: uid(),
     sourceName,
-    title: title.slice(0, 60) || 'Imported story',
+    title: title.slice(0, 80) || 'Imported story',
     names,
     kind,
     cast: split.chars,
@@ -147,7 +148,7 @@ export async function readFiles(files) {
   for (const f of files) {
     const buf = await f.arrayBuffer();
     if (/\.zip$/i.test(f.name) || new DataView(buf).getUint32(0, true) === 0x04034b50) items.push(...(await unzip(buf)));
-    else items.push({ name: f.name, path: f.name, data: new Uint8Array(buf) });
+    else items.push({ name: f.name, path: f.name, data: new Uint8Array(buf), cardTitle: f.cardTitle });
   }
   const cards = [];
   const loose = [];
@@ -159,7 +160,7 @@ export async function readFiles(files) {
       const chunks = pngTextChunks(it.data.buffer.slice(it.data.byteOffset, it.data.byteOffset + it.data.byteLength));
       const raw = chunks.ccv3 || chunks.chara;
       const image = await readImage(it.data, it.name);
-      if (raw) pngs.set(it.name.replace(/\.png$/i, ''), { json: JSON.parse(b64utf8(raw)), image });
+      if (raw) pngs.set(it.name.replace(/\.png$/i, ''), { json: JSON.parse(b64utf8(raw)), image, cardTitle: it.cardTitle });
       else pngs.set(it.name.replace(/\.png$/i, ''), { image });
     } catch (e) {
       errors.push(`${it.name}: ${e.message}`);
@@ -181,13 +182,13 @@ export async function readFiles(files) {
     const base = it.name.replace(/\.json$/i, '');
     if (isCard(j)) {
       const png = pngs.get(base);
-      cards.push(planCard(j, png?.image || null, it.name));
+      cards.push(planCard(j, png?.image || null, it.name, it.cardTitle || png?.cardTitle));
       if (png) png.used = true;
     } else if (isLorebook(j)) loose.push(...loreFrom(j, j.name || base.replace(/_?sillytavern_?lorebook/i, '').replace(/[_-]+/g, ' ').trim() || 'Lorebook'));
     else errors.push(`${it.name}: not a card or a lorebook`);
   }
   // PNG cards with no JSON twin.
-  for (const [base, png] of pngs) if (png.json && !png.used && !cards.some((c) => c.card.name === cardData(png.json).name)) cards.push(planCard(png.json, png.image, base + '.png'));
+  for (const [base, png] of pngs) if (png.json && !png.used && !cards.some((c) => c.card.name === cardData(png.json).name)) cards.push(planCard(png.json, png.image, base + '.png', png.cardTitle));
   // A lone image beside a single card is its picture.
   if (cards.length === 1 && !cards[0].image) cards[0].image = [...pngs.values()].find((x) => x.image)?.image || null;
   // Loose lorebooks belong to the card when there is exactly one.
@@ -286,7 +287,10 @@ export async function applyPlan(plan, mode) {
   } else {
     const ch = blankCharacter();
     Object.assign(ch, {
-      name: (plan.names.length >= 2 ? plan.title : str(d.name)).slice(0, 60),
+      // Always the card's original title, for one character as for a narrator…
+      name: (plan.title || str(d.name)).slice(0, 80),
+      // …and inside the story a single character keeps the name the card gives them.
+      callAs: plan.names.length < 2 && str(d.name).trim() && str(d.name).trim() !== plan.title ? str(d.name).trim().slice(0, 60) : '',
       tagline: plan.names.length >= 2 ? `Plays ${plan.names.join(', ')}`.slice(0, 80) : str(plan.blurb).split(/[.!?]/)[0].slice(0, 80),
       narrator: plan.names.length >= 2,
       // The people it plays, each with a colour and (when the card splits cleanly) their own description.
