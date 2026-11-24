@@ -295,7 +295,8 @@ function bindPanel(box, after = () => {}) {
 }
 
 // ---------- Depot › Reading text ----------
-export function textView() {
+export function textView(tab) {
+  if (tab && BODY[tab]) lastTab = tab; // #/text/colours opens on that tab (from Depot search)
   const t = textPrefs();
   const html = `<div class="screen no-tab kr-screen">
     ${topbar({ back: '#/settings', title: 'Reading text' })}
