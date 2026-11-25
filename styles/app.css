@@ -2464,6 +2464,7 @@ button.nm-tag { border: 0; cursor: pointer; text-align: left; }
 /* On a light page or a light bubble the pastel ink darkens so the name stays readable. */
 :root.page-light .scn-b:not(.you):not(.pass) .scn-tag,
 :root:not(.bub-dark) :is(.msg.ai:not(.scene), .tx-prev-bubble) .bubble .spk-tag { background: color-mix(in srgb, var(--c) 30%, transparent); color: color-mix(in srgb, var(--c) 45%, #1A1A1A); }
+.kr-ncnote { margin: 0 4px 14px; font: 500 14px/1.45 var(--font); color: var(--soft); }
 .kr-nc { margin: 4px 0 14px; }
 .kr-nc-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; font: 800 14px/1.2 var(--font); color: var(--white); }
 .kr-nc-h button { font: 700 12.5px/1 var(--font); color: var(--soft); text-decoration: underline; text-underline-offset: 3px; min-height: 32px; }

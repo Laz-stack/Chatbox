@@ -105,22 +105,21 @@ function pageTab(t) {
   );
 }
 // Owner pick v48: your own calm colour per character, for names in the text and speech tags.
-// In a chat it lists that chat's people; on the Reading text page, everyone with a line.
+// Only the people of the card you're reading (or of the group chat), never other cards'.
+// The chat link is a character id, a group id or a chat id. Outside a chat there's no card to list.
 function peopleHere() {
   const m = /^#\/chat\/([^/?]+)/.exec(location.hash);
-  const id = m ? decodeURIComponent(m[1]) : '';
-  const chat = id && S.chats.get(id);
+  if (!m) return [];
+  const id = decodeURIComponent(m[1]);
+  const owner = isInterchangeId(id) || character(id) ? id : S.chats.get(id)?.characterId || id;
   const own = (ch) => (!ch ? [] : ch.narrator && castOf(ch).length > 1 ? castOf(ch) : [{ ...ch, name: storyName(ch) }]);
-  let list;
-  if (chat && isInterchangeId(chat.characterId)) list = interchange(chat.characterId)?.people || [];
-  else if (chat) list = own(character(chat.characterId));
-  else list = S.characters.filter((c) => !c.hidden).flatMap(own);
+  const list = isInterchangeId(owner) ? interchange(owner)?.people || [] : own(character(owner));
   const seen = new Set();
   return list.filter((p) => p?.id && !seen.has(p.id) && seen.add(p.id)).slice(0, 40);
 }
 function nameColours() {
   const people = peopleHere();
-  if (!people.length) return '';
+  if (!people.length) return lbl('Name colours') + '<p class="kr-ncnote">Open a chat, then Reading text, to pick colours for that card’s characters.</p>';
   const mine = S.settings.text?.nameColors || {};
   return (
     lbl('Name colours', 'names in the text and speech tags') +
