@@ -557,7 +557,7 @@ html.vt-tap::view-transition-new(root) { animation: vtReveal .5s cubic-bezier(.2
 .bd-row .t { width: 46px; flex: none; font: 900 15px/1 var(--font); }
 .bd-row .bullet { box-shadow: 0 0 0 3px var(--cream); }
 .bd-tx { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-.bd-tx b { font: 800 15px/1 var(--font); }
+.bd-tx b { font: 800 15px/1.1 var(--font); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bd-tx span { font: 500 13px/1.25 var(--font); color: #3A3A3A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bd-foot { display: flex; align-items: center; justify-content: center; gap: 4px; height: 46px; border-top: 2px solid rgba(10, 10, 10, .12); font: 800 13px/1 var(--font); color: inherit; text-decoration: none; }
 .bd-empty { display: flex; align-items: center; gap: 6px; padding: 16px; font: 700 14px/1.35 var(--font); color: inherit; text-decoration: none; }
@@ -1937,7 +1937,7 @@ button.bopt { width: 100%; text-align: left; }
 .win.has-pic.framed:not(.fold) .sign { margin: 8px 0 0; }
 .hero-win.contain { background: color-mix(in srgb, var(--line, #2EAA67) 70%, #0A0A0A); }
 .hero-win.contain img { filter: drop-shadow(0 6px 14px rgba(0, 0, 0, .35)); }
-.hero.has-win .hero-name.long { white-space: normal; font-size: 38px; line-height: 1; text-wrap: balance; }
+.hero.has-win .hero-name.long { font-size: 30px; line-height: 1.05; }
 .hero.has-win .hero-name.long .hero-sub { margin-top: 10px; }
 .win-pic .pane.contain, .hero-win.contain { position: relative; }
 .win-pic .pane.contain img, .hero-win.contain img { position: absolute; inset: 0; margin: auto; object-fit: cover; object-position: 50% 0; border-radius: 8px; }
@@ -1945,7 +1945,10 @@ button.bopt { width: 100%; text-align: left; }
 /* The hero's window or its usual arrow and tile: only one shows */
 .hero.has-win .hero-av, .hero.has-win .hero-kicker .bullet-av { display: none; }
 .hero:not(.has-win) .hero-win { display: none; }
-.hero:not(.has-win) .hero-name.long { white-space: normal; font-size: 38px; line-height: 1; text-wrap: balance; }
+.hero:not(.has-win) .hero-name.long { font-size: 30px; line-height: 1.05; }
+/* A long name is cut to one line with "…" (the full name is on the chat and Lines) */
+.hero-nm { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-bottom: .08em; }
+.hero:not(.has-win) .hero-av + .hero-foot .hero-nm { padding-right: 0; }
 /* A tall card picture: avatars show its top, where the face or cover usually is */
 .bullet-av img, .av img, .gav img { object-position: 50% 0; }
 .av img { object-fit: cover; }
