@@ -31,7 +31,7 @@ export function homeView() {
       <span class="hero-av" data-av="hero:${esc(featured.id)}">${avatarTile(featured, 92, { radius: 26, rot: -4 })}</span>
       <span class="hero-foot">
         <span class="hero-kicker">${avatarBullet(featured, 34)}${started[0] ? (when ? `Continue · ${agoLong(when)}` : 'Continue the chat') : 'Start a chat'}</span>
-        <span class="hero-name${featured.name.length > 11 ? ' long' : ''}">${esc(featured.name)}<span class="hero-sub">${esc(started[0] ? where : featured.tagline || preview)}</span>${started[0] && quote ? `<span class="hero-q">“${esc(quote.slice(0, 140))}”</span>` : ''}</span>
+        <span class="hero-name${featured.name.length > 11 ? ' long' : ''}"><span class="hero-nm">${esc(featured.name)}</span><span class="hero-sub">${esc(started[0] ? where : featured.tagline || preview)}</span>${started[0] && quote ? `<span class="hero-q">“${esc(quote.slice(0, 140))}”</span>` : ''}</span>
         <span class="hero-line" aria-hidden="true">${Array.from({ length: dots }, (_, i) => `<i${i === dots - 1 ? ' class="now"' : ''} style="animation-delay:${0.4 + i * 0.06}s"></i>`).join('')}</span>
       </span></a>`;
   } else {

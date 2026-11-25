@@ -29,7 +29,10 @@ async function make(src, max) {
   const img = new Image();
   img.src = src;
   await img.decode();
-  const s = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+  const long = Math.max(img.naturalWidth, img.naturalHeight), short = Math.min(img.naturalWidth, img.naturalHeight);
+  // Avatars show a square crop of a (often tall) picture, so size the copy by its short side,
+  // keeping the long side to 3x so it stays small. Picture cards size by the long side.
+  const s = max > 400 ? Math.min(1, max / long) : Math.min(1, max / short, (max * 3) / long);
   // A card-sized copy that would be only a little smaller isn't worth a second compression:
   // the card uses the picture itself.
   if (s >= 1 || (max > 400 && s >= 0.7)) return src;
