@@ -29,9 +29,15 @@ export const syncOn = () => !!S.settings.sync?.connected;
 // ---------- sign-in ----------
 let token = null; // { value, exp }
 try {
-  const t = JSON.parse(sessionStorage.getItem('chatbox-sync-token') || 'null');
+  // Kept on this device (not just this tab) so closing and reopening the app within the hour stays signed in.
+  const t = JSON.parse(localStorage.getItem('chatbox-sync-token') || sessionStorage.getItem('chatbox-sync-token') || 'null');
   if (t?.exp > Date.now()) token = t;
 } catch {}
+const keepToken = () => {
+  try {
+    localStorage.setItem('chatbox-sync-token', JSON.stringify(token));
+  } catch {}
+};
 const tokenOk = () => token && token.exp > Date.now() + 60e3;
 export const signedIn = tokenOk;
 
@@ -60,9 +66,7 @@ export async function signIn(clientId = syncPrefs().clientId) {
       callback: (r) => {
         if (r?.error || !r?.access_token) return rej(new Error(r?.error_description || r?.error || 'Sign-in was cancelled.'));
         token = { value: r.access_token, exp: Date.now() + (Number(r.expires_in) || 3600) * 1000 };
-        try {
-          sessionStorage.setItem('chatbox-sync-token', JSON.stringify(token));
-        } catch {}
+        keepToken();
         res(token);
       },
       error_callback: (e) => rej(new Error(e?.type === 'popup_closed' ? 'Sign-in was closed before it finished.' : e?.message || 'Sign-in failed.')),
@@ -75,7 +79,44 @@ export function signOut() {
   token = null;
   try {
     sessionStorage.removeItem('chatbox-sync-token');
+    localStorage.removeItem('chatbox-sync-token');
   } catch {}
+}
+
+// Google gives sign-ins that last an hour and a web page can't hold a longer-lived key, so the app
+// renews quietly instead: while you're still signed in to Google in this browser and have allowed
+// Chatbox before, Google hands back a fresh hour with no window. If Google needs you, it stays put.
+let renewing = null;
+export function renewQuietly() {
+  const clientId = syncPrefs().clientId;
+  if (!clientId || !syncOn() || !navigator.onLine) return Promise.resolve(false);
+  if (renewing) return renewing;
+  renewing = (async () => {
+    try {
+      await loadGis();
+      return await new Promise((res) => {
+        const timeout = setTimeout(() => res(false), 10000);
+        const done = (v) => (clearTimeout(timeout), res(v));
+        const client = window.google.accounts.oauth2.initTokenClient({
+          client_id: clientId,
+          scope: SCOPE,
+          callback: (r) => {
+            if (r?.error || !r?.access_token) return done(false);
+            token = { value: r.access_token, exp: Date.now() + (Number(r.expires_in) || 3600) * 1000 };
+            keepToken();
+            done(true);
+          },
+          error_callback: () => done(false),
+        });
+        client.requestAccessToken({ prompt: 'none' });
+      });
+    } catch {
+      return false;
+    } finally {
+      setTimeout(() => (renewing = null), 3000);
+    }
+  })();
+  return renewing;
 }
 
 class SyncError extends Error {
@@ -424,7 +465,8 @@ let timer = 0;
 let started = false;
 async function autoSync() {
   if (!syncOn() || !syncPrefs().auto || running || !navigator.onLine) return;
-  if (!tokenOk()) return;
+  if (!tokenOk() && !(await renewQuietly())) return;
+  if (S.settings.sync?.error?.kind === 'auth') (S.settings.sync = { ...syncPrefs(), error: null }), await saveSettings();
   // After a failure, wait for a manual Sync now (offline retries when the connection returns).
   const err = syncPrefs().error;
   if (err && err.kind !== 'offline') return;
@@ -444,4 +486,10 @@ export function startAutoSync() {
   });
   addEventListener('online', () => setTimeout(autoSync, 2000));
   setTimeout(autoSync, 3000);
+  // Renew a few minutes before the hour ends, and when you come back to the app after a while.
+  const keepFresh = async () => {
+    if (syncOn() && (!token || token.exp - Date.now() < 5 * 60e3)) await renewQuietly();
+  };
+  setInterval(keepFresh, 60e3);
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && keepFresh());
 }
